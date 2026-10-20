@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Build and Packaging
+build/
+dist/
+*.exe
+*.zip
+
+# Logs and databases
+*.log
+retrieval_history.json.zst
+DevToolsActivePort
+
+# Temporary caches
+*.tmp

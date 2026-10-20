@@ -1,0 +1,117 @@
+{#
+  COMPONENT: stub_panel(t)
+  Khung giao diện dùng chung cho các chức năng Auto mới (đang phát triển).
+  Khi triển khai logic thật, tách thành file riêng: templates/components/tabs/<ten>.html
+  và static/js/components/<ten>.js rồi bỏ khỏi danh sách STUB_TABS trong index.html.
+
+  Tham số t: {key, panel_id, title, icon, color, short, desc, steps}
+  Mọi id trong panel đều có tiền tố "stub-<key>-" để không trùng giữa các tab.
+#}
+{% macro stub_panel(t) %}
+<section class="tab-panel stub-tab-panel" id="{{ t.panel_id }}" data-key="{{ t.key }}">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between flex-wrap gap-3 bg-white p-3 rounded-2xl border border-slate-200/80 shadow-sm">
+    <div class="px-4 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-{{ t.color }}-600 to-{{ t.color }}-500 text-white shadow-sm flex items-center gap-2">
+      <span>{{ t.icon }} {{ t.title }}</span>
+      <span class="px-2 py-0.5 text-[10px] bg-white/20 rounded-md font-bold" id="stub-{{ t.key }}-badge">0 chờ xử lý</span>
+    </div>
+    <span class="px-2.5 py-1 text-[11px] font-bold rounded-full bg-amber-50 text-amber-700 border border-amber-200">🚧 Đang phát triển</span>
+  </div>
+
+  <!-- KPI -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    {% for k in [
+      ('Tổng Bản Ghi', 'total', 'text-slate-900', 'bg-slate-100 text-slate-600', '📑'),
+      ('Chờ Xử Lý', 'pending', 'text-amber-600', 'bg-amber-50 text-amber-600', '⏳'),
+      ('Thành Công', 'done', 'text-emerald-600', 'bg-emerald-50 text-emerald-600', '✅'),
+      ('Lỗi', 'error', 'text-rose-600', 'bg-rose-50 text-rose-600', '⚠️')
+    ] %}
+    <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+      <div>
+        <div class="text-xs font-semibold uppercase text-slate-400">{{ k[0] }}</div>
+        <div class="text-2xl font-bold {{ k[2] }} mt-1" id="stub-{{ t.key }}-stat-{{ k[1] }}">0</div>
+      </div>
+      <div class="w-11 h-11 rounded-xl {{ k[3] }} flex items-center justify-center text-xl">{{ k[4] }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Action bar -->
+  <div class="mui-card flex flex-wrap items-center justify-between gap-4 p-4 bg-gradient-to-r from-{{ t.color }}-50/50 via-white to-slate-50 border border-{{ t.color }}-100">
+    <div class="flex items-center gap-3">
+      <span class="text-2xl p-2 bg-{{ t.color }}-100 text-{{ t.color }}-600 rounded-xl">{{ t.icon }}</span>
+      <div>
+        <h2 class="text-base font-bold text-slate-900 leading-tight">{{ t.title }}</h2>
+        <p class="text-xs text-slate-600 mt-0.5">{{ t.desc }}</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3 flex-wrap">
+      <label class="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700 bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-sm hover:bg-slate-50">
+        <input type="checkbox" id="stub-{{ t.key }}-visible" class="rounded text-{{ t.color }}-600" checked>
+        <span>👁️ Mở Chrome xem trực tiếp</span>
+      </label>
+      <button type="button" id="stub-{{ t.key }}-auto-toggle"
+        class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border-2 border-slate-200 bg-white text-slate-600 transition-all shadow-sm cursor-pointer">
+        <span>🤖</span>
+        <span id="stub-{{ t.key }}-auto-text">Tự Động: TẮT</span>
+        <span class="w-2 h-2 rounded-full bg-slate-300 transition-all" id="stub-{{ t.key }}-auto-dot"></span>
+      </button>
+      <button type="button" id="stub-{{ t.key }}-run"
+        class="mui-btn bg-{{ t.color }}-600 hover:bg-{{ t.color }}-700 text-white flex items-center gap-2 px-5 py-2.5 text-xs font-semibold rounded-xl shadow-md transition-all">
+        <span>🚀</span><span>Bắt Đầu {{ t.title }}</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Quy trình dự kiến -->
+  <div class="mui-card p-5 space-y-3">
+    <h3 class="text-sm font-bold text-slate-800">Quy trình dự kiến</h3>
+    <ol class="flex flex-wrap items-center gap-2 text-xs">
+      {% for s in t.steps %}
+      <li class="flex items-center gap-2">
+        <span class="px-2.5 py-1 rounded-lg bg-{{ t.color }}-50 text-{{ t.color }}-700 border border-{{ t.color }}-100 font-medium">{{ loop.index }}. {{ s }}</span>
+        {% if not loop.last %}<span class="text-slate-300">➜</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+  </div>
+
+  <!-- Data table -->
+  <div class="mui-card p-5 space-y-4">
+    <div class="flex items-center justify-between flex-wrap gap-3">
+      <h3 class="text-sm font-bold text-slate-800">Danh Sách Cần Xử Lý</h3>
+      <input type="text" id="stub-{{ t.key }}-search" placeholder="Tìm theo SHD, NVKT..."
+        class="w-60 px-3 py-1.5 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-{{ t.color }}-500">
+    </div>
+    <div class="table-responsive rounded-xl border border-slate-200/80 overflow-x-auto">
+      <table class="mui-table w-full text-left border-collapse text-xs">
+        <thead>
+          <tr class="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+            <th class="p-3 w-12 text-center">STT</th>
+            <th class="p-3">Số Hợp Đồng</th>
+            <th class="p-3">Nội Dung</th>
+            <th class="p-3 text-center">Kết Quả</th>
+            <th class="p-3">Thao Tác</th>
+          </tr>
+        </thead>
+        <tbody id="stub-{{ t.key }}-tbody" class="divide-y divide-slate-100">
+          <tr><td colspan="5" class="text-center py-8 text-slate-400">Chưa có dữ liệu — chức năng đang được xây dựng.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Log terminal -->
+  <div class="mui-card p-4 space-y-2">
+    <div class="flex items-center justify-between">
+      <span class="text-xs font-bold text-slate-800">📟 Nhật ký</span>
+      <button type="button" id="stub-{{ t.key }}-clear-log" class="text-[11px] text-slate-500 hover:text-slate-800">Xóa log</button>
+    </div>
+    <div id="stub-{{ t.key }}-log" class="bg-slate-900 text-emerald-400 font-mono text-[11px] p-3 rounded-xl h-40 overflow-y-auto leading-relaxed">
+      <div class="text-slate-500 italic">Sẵn sàng. Chức năng "{{ t.short }}" chưa được kết nối backend.</div>
+    </div>
+  </div>
+
+</section>
+{% endmacro %}

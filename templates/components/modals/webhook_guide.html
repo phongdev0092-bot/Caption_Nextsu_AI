@@ -1,0 +1,123 @@
+  <!-- Webhook Guide Modal (Centered Popup with Dimmed Blurred Backdrop) -->
+  <div class="mui-modal-backdrop" id="webhookGuideModalBackdrop">
+    <div class="mui-modal-box max-w-2xl" style="max-width: 680px;">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="modal-icon text-2xl">📊</span>
+          <div>
+            <h2 class="modal-title font-bold text-slate-900">Cập Nhật Trực Tiếp Lên Google Sheet Bằng Apps Script</h2>
+            <p class="modal-sub">Chỉ cần 3 bước đơn giản để cột 'Thao Tác' tự đổi thành 'Đã xử lý' trên Google Sheet</p>
+          </div>
+        </div>
+        <button type="button" class="modal-close-btn" id="btnCloseWebhookGuide">✕</button>
+      </div>
+
+      <div class="modal-body space-y-4 text-xs text-slate-700 max-h-[70vh] overflow-y-auto">
+        <div class="p-3 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
+          <div class="font-bold text-blue-900 text-sm">📌 3 Bước Triển Khai Trong 1 Phút:</div>
+          <ol class="list-decimal list-inside space-y-1.5 leading-relaxed text-blue-950">
+            <li>Mở file Google Sheet của bạn ➜ Trên thanh menu chọn <strong>Tiện ích mở rộng (Extensions)</strong> ➜ <strong>Apps Script</strong>.</li>
+            <li>Xóa hết nội dung cũ, <strong>dán toàn bộ đoạn mã bên dưới</strong> vào và bấm biểu tượng <strong>Lưu (Ctrl + S)</strong>.</li>
+            <li>Bấm nút <strong>Triển khai (Deploy)</strong> ở góc trên bên phải ➜ <strong>Triển khai mới (New deployment)</strong>:
+              <ul class="list-disc list-inside ml-4 mt-1 text-[11px] text-blue-900">
+                <li>Chọn loại (bấm bánh răng): <strong>Ứng dụng web (Web app)</strong></li>
+                <li>Thực thi dưới dạng: <strong>Tôi (Tài khoản Google của bạn)</strong></li>
+                <li>Ai có quyền truy cập: <strong>Bất kỳ ai (Anyone)</strong></li>
+              </ul>
+            </li>
+            <li>Sao chép <strong>URL Ứng dụng web</strong> (có đuôi <code>/exec</code>) ➜ Dán vào ô <strong>Google Sheet Webhook</strong> trên Tool và bấm <strong>Lưu</strong>!</li>
+          </ol>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="font-bold text-slate-800">📄 Đoạn Mã Google Apps Script:</span>
+            <button type="button" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold text-xs shadow-sm flex items-center gap-1" id="btnCopyScriptCode">
+              <span>📋</span> Sao Chép Mã
+            </button>
+          </div>
+          <pre class="bg-slate-900 text-emerald-400 p-3.5 rounded-xl text-[11px] font-mono overflow-x-auto leading-relaxed border border-slate-800 max-h-60" id="appsScriptCodeBlock">function removeVietnameseTones(str) {
+  if (!str) return "";
+  return str.toString()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[đĐ]/g, "d")
+    .toLowerCase()
+    .trim();
+}
+
+function doPost(e) {
+  try {
+    var data = JSON.parse(e.postData.contents);
+    var sheetId = data.sheet_id;
+    var gid = data.gid || 0;
+    var targetShd = (data.shd || "").toString().trim().toLowerCase();
+    var status = data.status || data.thao_tac || "Đã xử lý";
+    var ketQua = data.ket_qua || "Đã xử lý";
+    var timestamp = data.timestamp || Utilities.formatDate(new Date(), "GMT+7", "dd/MM/yyyy HH:mm:ss");
+
+    var ss = SpreadsheetApp.openById(sheetId);
+    var sheets = ss.getSheets();
+    var sheet = sheets[0];
+    for (var i = 0; i < sheets.length; i++) {
+      if (sheets[i].getSheetId().toString() == gid.toString()) {
+        sheet = sheets[i];
+        break;
+      }
+    }
+
+    var values = sheet.getDataRange().getValues();
+    if (values.length <= 1) return ContentService.createTextOutput(JSON.stringify({status: "empty"}));
+
+    var headers = values[0];
+    var colShd = -1;
+    var colThaoTac = -1;
+    var colKetQua = -1;
+    var colNgayCapNhat = -1;
+
+    for (var j = 0; j < headers.length; j++) {
+      var norm = removeVietnameseTones(headers[j]);
+      if (norm === "shd" || norm.indexOf("hop dong") !== -1) colShd = j;
+      if (norm.indexOf("thao tac") !== -1 || norm.indexOf("ghi chu") !== -1 || norm.indexOf("noi dung") !== -1) colThaoTac = j;
+      if (norm.indexOf("ket qua") !== -1 || norm.indexOf("tinh trang") !== -1 || norm.indexOf("trang thai") !== -1) colKetQua = j;
+      if (norm.indexOf("ngay") !== -1 || norm.indexOf("thoi gian") !== -1) colNgayCapNhat = j;
+    }
+
+    // Tự động nhận diện theo index truyền từ Tool nếu không khớp theo tên
+    if (colShd === -1 && typeof data.col_shd === "number") colShd = data.col_shd;
+    if (colThaoTac === -1 && typeof data.col_thao_tac === "number") colThaoTac = data.col_thao_tac;
+    if (colKetQua === -1 && typeof data.col_ket_qua === "number") colKetQua = data.col_ket_qua;
+    if (colNgayCapNhat === -1 && typeof data.col_ngay === "number") colNgayCapNhat = data.col_ngay;
+
+    if (colShd === -1) return ContentService.createTextOutput(JSON.stringify({status: "no_shd_column"}));
+
+    var updated = 0;
+    for (var r = 1; r < values.length; r++) {
+      var rowShd = values[r][colShd].toString().trim().toLowerCase();
+      if (rowShd === targetShd) {
+        if (colThaoTac !== -1) sheet.getRange(r + 1, colThaoTac + 1).setValue(status);
+        if (colKetQua !== -1) sheet.getRange(r + 1, colKetQua + 1).setValue(ketQua);
+        if (colNgayCapNhat !== -1) sheet.getRange(r + 1, colNgayCapNhat + 1).setValue(timestamp);
+        updated++;
+      }
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "ok", 
+      updated: updated,
+      matchedCols: { colShd: colShd, colThaoTac: colThaoTac, colKetQua: colKetQua, colNgayCapNhat: colNgayCapNhat }
+    })).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({status: "error", error: err.toString()}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}</pre>
+        </div>
+      </div>
+
+      <div class="modal-footer flex items-center justify-between">
+        <span class="text-[11px] text-slate-500">💡 Sau khi Deploy Apps Script, dán URL vào ô Webhook và bấm Lưu.</span>
+        <button type="button" class="mui-btn mui-btn-primary px-5" id="btnOkWebhookGuide">Đã Hiểu</button>
+      </div>
+    </div>
+  </div>

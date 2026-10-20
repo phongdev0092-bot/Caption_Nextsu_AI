@@ -1,0 +1,128 @@
+  <!-- ================= SETTINGS & DUAL ACCOUNT MODAL ================= -->
+  <div class="mui-modal-backdrop" id="settingsModalBackdrop">
+    <div class="mui-modal-box" style="max-width: 580px;">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="modal-icon">⚙️</span>
+          <div>
+            <h2 class="modal-title">Cấu hình Tài Khoản Inside FPT</h2>
+            <p class="modal-sub">Chọn tài khoản Mặc định hoặc thiết lập Tài khoản Tùy chỉnh</p>
+          </div>
+        </div>
+        <button type="button" class="modal-close-btn" id="btnCloseSettings">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Account Switcher Navigation -->
+        <div class="account-selector-nav">
+          <button type="button" class="acc-tab-btn active" id="btnTabAccDefault">
+            <span class="acc-tab-radio">●</span>
+            <div class="acc-tab-text">
+              <strong>Tài khoản Mặc định</strong>
+              <small>Đã cấu hình sẵn ngầm (Bảo mật)</small>
+            </div>
+          </button>
+          <button type="button" class="acc-tab-btn" id="btnTabAccCustom">
+            <span class="acc-tab-radio">○</span>
+            <div class="acc-tab-text">
+              <strong>Tài khoản Tùy chỉnh</strong>
+              <small>Nhập thông tin riêng (OTP tùy chọn)</small>
+            </div>
+          </button>
+        </div>
+
+        <!-- ============ TAB 1: DEFAULT ACCOUNT ============ -->
+        <div class="account-tab-content" id="accContentDefault">
+          <div class="acc-stealth-card">
+            <div class="stealth-shield-icon">🛡️</div>
+            <div class="stealth-info">
+              <h3 class="stealth-title">Tài Khoản Mặc Định Hệ Thống</h3>
+              <p class="stealth-desc">Toàn bộ thông tin đăng nhập và cơ chế Google Authenticator đã được bảo vệ ngầm trong hệ thống. Ứng dụng sẽ tự động xác thực và điền ngầm khi tra cứu mà không làm lộ dữ liệu cá nhân.</p>
+              <div class="stealth-status-row">
+                <span class="stealth-badge">✓ Đăng nhập tự động ngầm</span>
+                <span class="stealth-badge">✓ Tự động xử lý OTP</span>
+                <span class="stealth-badge">✓ Bảo mật tuyệt đối</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="active-acc-toggle-wrap">
+            <label class="mui-checkbox-label">
+              <input type="radio" name="radioActiveAccount" value="default" id="radioChooseDefault" checked>
+              <span class="radio-custom"></span>
+              <strong>Sử dụng tài khoản Mặc định này khi đăng nhập & trích xuất</strong>
+            </label>
+          </div>
+        </div>
+
+        <!-- ============ TAB 2: CUSTOM ACCOUNT ============ -->
+        <div class="account-tab-content" id="accContentCustom" style="display:none;">
+          <form id="customConfigForm" class="modal-form">
+            <div class="mui-field">
+              <label for="customUsername">Tên đăng nhập tùy chỉnh</label>
+              <input type="text" id="customUsername" placeholder="Ví dụ: phuongnam.custom">
+            </div>
+
+            <div class="mui-field">
+              <label for="customPassword">Mật khẩu tùy chỉnh</label>
+              <div class="password-wrap">
+                <input type="password" id="customPassword" placeholder="Nhập mật khẩu...">
+                <button type="button" class="toggle-pwd-btn" id="btnToggleCustomPwd">👁</button>
+              </div>
+            </div>
+
+            <!-- OTP Option Checkbox -->
+            <div class="mui-field" style="margin-top: 14px; margin-bottom: 10px;">
+              <label class="mui-checkbox-label">
+                <input type="checkbox" id="customUseOtp">
+                <span class="chk-box"></span>
+                <span>Tài khoản này có sử dụng OTP (Google Authenticator)</span>
+              </label>
+            </div>
+
+            <!-- Custom OTP Settings Box -->
+            <div class="custom-otp-box" id="customOtpBox" style="display:none;">
+              <div class="mui-field">
+                <label for="customSecret">Khóa bí mật TOTP Secret (Base32)</label>
+                <input type="text" id="customSecret" class="font-mono" placeholder="Nhập mã bí mật hoặc tải ảnh QR">
+              </div>
+
+              <div class="mui-field">
+                <label>Quét mã QR từ file ảnh</label>
+                <input type="file" id="customQrFile" accept="image/*" class="file-styled">
+              </div>
+
+              <!-- Live OTP preview for Custom -->
+              <div class="modal-otp-card" style="margin-top: 10px;">
+                <div class="modal-otp-header">
+                  <span class="otp-tag">MÃ XÁC THỰC TÙY CHỈNH</span>
+                  <span class="otp-timer-tag" id="customOtpTimer">Đổi sau 30s</span>
+                </div>
+                <div class="modal-otp-digits-row">
+                  <span class="modal-otp-code" id="customOtpCode">------</span>
+                  <button type="button" class="mui-btn mui-btn-small" id="btnCopyCustomOtp">Sao chép</button>
+                </div>
+                <div class="modal-otp-bar">
+                  <div class="modal-otp-fill" id="customOtpFill" style="width: 100%;"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="active-acc-toggle-wrap">
+              <label class="mui-checkbox-label">
+                <input type="radio" name="radioActiveAccount" value="custom" id="radioChooseCustom">
+                <span class="radio-custom"></span>
+                <strong>Sử dụng tài khoản Tùy chỉnh này khi đăng nhập</strong>
+              </label>
+            </div>
+          </form>
+        </div>
+
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="mui-btn mui-btn-text" id="btnCancelSettings">Đóng</button>
+        <button type="button" class="mui-btn mui-btn-primary" id="btnSaveSettings">Lưu Cấu Hình</button>
+      </div>
+    </div>
+  </div>

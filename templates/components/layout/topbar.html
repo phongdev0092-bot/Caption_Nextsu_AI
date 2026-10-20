@@ -1,0 +1,56 @@
+      <!-- TOP NAVIGATION BAR (MUI LIGHT & TAILWIND) -->
+      <header class="app-topbar sticky top-0 z-30 h-16 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-6 flex items-center justify-between shadow-sm">
+        
+        <!-- Left: Sidebar Toggle & Page Title Breadcrumb -->
+        <div class="flex items-center gap-3">
+          <button type="button" class="topbar-menu-btn text-slate-500 hover:text-slate-800 p-2 rounded-lg hover:bg-slate-100 transition-colors" id="btnToggleSidebarMobile">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+
+          <div class="topbar-title-wrap">
+            <h1 class="text-base font-semibold text-slate-900 leading-none" id="topbarCurrentTitle">Auto Lấy Thông Tin</h1>
+            <span class="text-[11.5px] text-slate-400 font-normal">Caption Nextsu AI - Hệ thống tự động hóa tác vụ Inside FPT</span>
+          </div>
+        </div>
+
+        <!-- Right: Actions, Session Check, Single Login & Settings -->
+        <div class="flex items-center gap-3">
+          
+          <!-- Session Check Button -->
+          <button type="button" class="mui-session-btn flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border border-slate-200 hover:border-slate-300 bg-white transition-all shadow-sm" id="btnCheckSession" title="Bấm để kiểm tra tính khả dụng của phiên Inside FPT">
+            <span class="session-dot unknown w-2.5 h-2.5 rounded-full inline-block" id="sessionDot"></span>
+            <span id="sessionLabel" class="text-slate-700">Kiểm Tra Phiên</span>
+          </button>
+
+          <!-- Active Account Tag -->
+          <div class="header-acc-pill flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 cursor-pointer hover:bg-slate-200 transition-all" id="headerAccPill" title="Bấm để chuyển đổi tài khoản">
+            <span class="acc-pill-dot text-sm">👤</span>
+            <span id="headerAccName" class="font-semibold">Mặc định</span>
+          </div>
+
+          <!-- MAIN SINGLE LOGIN BUTTON -->
+          <button type="button" class="mui-login-btn idle inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold shadow-sm transition-all" id="btnSingleLogin" title="Đăng nhập tự động ngầm vào Inside FPT">
+            <span class="btn-spinner" id="loginSpinner"></span>
+            <svg class="btn-icon" id="loginIconKey" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path>
+            </svg>
+            <svg class="btn-icon-check" id="loginIconCheck" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="display:none;">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            <span class="btn-label" id="loginLabel">Đăng Nhập</span>
+          </button>
+
+          <!-- Settings Icon Button -->
+          <button type="button" class="mui-icon-btn w-9 h-9 rounded-full flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors" id="btnOpenSettings" title="Cài đặt tài khoản & Xem mã OTP">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+          </button>
+        </div>
+
+      </header>

@@ -1,0 +1,72 @@
+        <!-- ======================================================== -->
+        <!-- TAB 2: AUTO IMPORT -->
+        <!-- ======================================================== -->
+        <section class="tab-panel" id="tab-import">
+          <div class="import-layout">
+            
+            <!-- Left: Upload Card -->
+            <div class="mui-card import-upload-card">
+              <div class="card-title-row">
+                <h2 class="card-section-title">Nhập dữ liệu tự động (Auto Import)</h2>
+                <span class="chip-badge">Excel / CSV</span>
+              </div>
+              <p class="section-desc">Hệ thống sẽ tự động đối soát, kiểm tra trùng lặp và đồng bộ danh sách dữ liệu lên hệ thống Inside FPT theo tài khoản của bạn.</p>
+
+              <!-- Upload Dropzone -->
+              <div class="mui-dropzone" id="importDropzone">
+                <input type="file" id="importFileInput" accept=".xlsx, .xls, .csv" class="dropzone-file-input">
+                <div class="dropzone-inner">
+                  <div class="upload-cloud-icon">
+                    <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#1a73e8" stroke-width="1.8">
+                      <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path>
+                      <polyline points="12 12 12 16 12 12"></polyline>
+                      <polyline points="9 13 12 10 15 13"></polyline>
+                    </svg>
+                  </div>
+                  <div class="dropzone-primary-text">Kéo thả file Excel vào đây hoặc <span class="link-btn">Duyệt file từ máy</span></div>
+                  <div class="dropzone-sub-text">Hỗ trợ định dạng: .xlsx, .xls, .csv (Tối đa 25MB)</div>
+                </div>
+              </div>
+
+              <!-- Configuration for import -->
+              <div class="import-options-row">
+                <label class="mui-checkbox-label">
+                  <input type="checkbox" id="chkOverwrite" checked>
+                  <span class="chk-box"></span>
+                  <span>Tự động cập nhật nếu bản ghi đã tồn tại</span>
+                </label>
+
+                <label class="mui-checkbox-label">
+                  <input type="checkbox" id="chkAutoValidate" checked>
+                  <span class="chk-box"></span>
+                  <span>Xác thực tính hợp lệ trước khi đẩy</span>
+                </label>
+              </div>
+
+              <div class="import-action-bar">
+                <button type="button" class="mui-btn mui-btn-primary" id="btnExecuteImport" disabled>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                  </svg>
+                  <span>Tiến hành Auto Import</span>
+                </button>
+                <button type="button" class="mui-btn mui-btn-text" id="btnDownloadTemplate">
+                  📥 Tải file Excel mẫu
+                </button>
+              </div>
+            </div>
+
+            <!-- Right: Import History & Live Status -->
+            <div class="mui-card import-history-card">
+              <div class="card-title-row">
+                <h2 class="card-section-title">Lịch sử Import gần nhất</h2>
+                <button type="button" class="mui-btn-icon-small" id="btnRefreshHistory" title="Làm mới">🔄</button>
+              </div>
+
+              <div class="history-list" id="importHistoryList">
+                <!-- Rendered via JS -->
+              </div>
+            </div>
+
+          </div>
+        </section>

@@ -1,0 +1,30 @@
+{
+  "SGAFQ0981": {
+    "status": "Lỗi: HTTPConnectionPool(host='localhost', port=54881): Max retrie",
+    "time": "20/10/2026 15:20:52"
+  },
+  "SGAFB8147": {
+    "status": "Đã xử lý (Thành công)",
+    "time": "20/10/2026 16:47:32"
+  },
+  "SGH660071": {
+    "status": "Đã xử lý (Thành công)",
+    "time": "20/10/2026 16:47:56"
+  },
+  "SGH455480": {
+    "status": "Đã xử lý (Thành công)",
+    "time": "20/10/2026 16:48:20"
+  },
+  "SGH569979": {
+    "status": "Đã xử lý (Thành công)",
+    "time": "20/10/2026 16:48:44"
+  },
+  "SGJ025248": {
+    "status": "Đã xử lý (Thành công)",
+    "time": "20/10/2026 16:49:08"
+  },
+  "SGH263406": {
+    "status": "Đã xử lý (Thành công)",
+    "time": "20/10/2026 16:47:03"
+  }
+}

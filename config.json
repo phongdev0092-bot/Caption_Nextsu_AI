@@ -1,0 +1,31 @@
+{
+  "username": "phuongnam.phongnh5",
+  "password": "Benngo@@2026",
+  "totp_secret": "J5MBXLD2IZJSJWADQU",
+  "account_name": "Phuongnam.phongnh5@inside.fpt.net",
+  "login_url": "http://login.fpt.net/?urlreturn=inside.fpt.net",
+  "headless": true,
+  "keep_browser_open": true,
+  "use_custom_profile": true,
+  "default_account": {
+    "username": "phuongnam.phongnh5",
+    "password": "Benngo@@2026",
+    "totp_secret": "J5MBXLD2IZJSJWADQU",
+    "use_otp": true,
+    "account_name": "Phuongnam.phongnh5@inside.fpt.net"
+  },
+  "custom_account": {
+    "username": "",
+    "password": "",
+    "totp_secret": "",
+    "use_otp": false,
+    "account_name": ""
+  },
+  "active_account": "default",
+  "use_otp": true,
+  "google_sheet_webhook_url": "https://script.google.com/macros/s/AKfycbz66OgDwskEuYIn_FDlwSEMrkzJRy3V_s4pJzMu-bKrzs3iNkSN9yNycIZe3TF6UxL2pw/exec",
+  "cls_webhook_url": "https://script.google.com/macros/s/AKfycbyX7gEztw78VM71U8HDFh1iUJAvkqV2fzlpUe5kAgrV9Io-R-kZuEeDYXwntlHkdr-M/exec",
+  "clear_signal_webhook_url": "https://script.google.com/macros/s/AKfycbyX7gEztw78VM71U8HDFh1iUJAvkqV2fzlpUe5kAgrV9Io-R-kZuEeDYXwntlHkdr-M/exec",
+  "reset_signal_webhook_url": "https://script.google.com/macros/s/AKfycbyX7gEztw78VM71U8HDFh1iUJAvkqV2fzlpUe5kAgrV9Io-R-kZuEeDYXwntlHkdr-M/exec",
+  "assign_webhook_url": "https://script.google.com/macros/s/AKfycbyX7gEztw78VM71U8HDFh1iUJAvkqV2fzlpUe5kAgrV9Io-R-kZuEeDYXwntlHkdr-M/exec"
+}

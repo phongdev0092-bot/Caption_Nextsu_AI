@@ -1,0 +1,127 @@
+{#
+  ============================================================
+  INDEX = NƠI GẮN COMPONENT. Không viết markup chức năng ở đây.
+  - Layout:  templates/components/layout/*.html
+  - Tab:     templates/components/tabs/*.html      (JS: static/js/components/*.js)
+  - Modal:   templates/components/modals/*.html
+  Thêm chức năng mới: xem README mục "Cấu trúc component".
+  ============================================================
+#}
+{% set STUB_TABS = [
+  {"key": "bypass-mybae", "panel_id": "tab-bypass-mybae", "btn_id": "tabBtn6", "title": "Auto Bypass MyBAE", "short": "Bypass MyBAE", "icon": "⚡", "color": "orange",
+   "desc": "Tự động bypass các bước kiểm tra trên MyBAE cho hợp đồng đủ điều kiện.",
+   "steps": ["Đọc danh sách SHD", "Đăng nhập MyBAE", "Tra cứu hợp đồng", "Thực hiện bypass", "Ghi kết quả"]},
+  {"key": "ipv6", "panel_id": "tab-ipv6", "btn_id": "tabBtn7", "title": "Auto Pool/ Deactive IPv6", "short": "Pool/Deactive IPv6", "icon": "🌐", "color": "teal",
+   "desc": "Tự động Pool hoặc Deactive IPv6 cho thuê bao theo danh sách hợp đồng.",
+   "steps": ["Đọc danh sách SHD", "Tra cứu thuê bao", "Chọn Pool / Deactive", "Xác nhận thao tác", "Ghi kết quả"]},
+  {"key": "finish-ptc", "panel_id": "tab-finish-ptc", "btn_id": "tabBtn8", "title": "Auto Hoàn Tất PTC/PBT", "short": "Hoàn Tất PTC/PBT", "icon": "✅", "color": "emerald",
+   "desc": "Tự động hoàn tất Phiếu Thi Công (PTC) và Phiếu Bảo Trì (PBT) đủ điều kiện.",
+   "steps": ["Đọc danh sách phiếu", "Mở phiếu trên Inside", "Kiểm tra điều kiện", "Hoàn tất phiếu", "Ghi kết quả"]},
+  {"key": "ccdc", "panel_id": "tab-ccdc", "btn_id": "tabBtn9", "title": "Auto Cấp/Thu Hồi CCDC", "short": "Cấp/Thu Hồi CCDC", "icon": "🧰", "color": "rose",
+   "desc": "Tự động cấp hoặc thu hồi công cụ dụng cụ (CCDC) cho NVKT theo danh sách.",
+   "steps": ["Đọc danh sách CCDC", "Mở màn hình CCDC", "Chọn Cấp / Thu hồi", "Xác nhận", "Ghi kết quả"]}
+] %}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Caption Nextsu AI - Hệ Thống Tự Động Hóa Inside FPT</title>
+  <meta name="description" content="Caption Nextsu AI - Hệ thống tự động hóa khai thác dữ liệu, auto công việc và import hệ thống Inside FPT">
+  <link rel="icon" type="image/png" href="/static/logo.png">
+  
+  <!-- Google Fonts: Roboto & Google Sans & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&family=Roboto:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#e8f0fe',
+              100: '#d2e3fc',
+              500: '#1a73e8',
+              600: '#1557b0',
+              700: '#174ea6'
+            },
+            googleGreen: '#1e8e3e',
+            googleAmber: '#e37400',
+            googleRed: '#d93025'
+          },
+          fontFamily: {
+            sans: ['Google Sans', 'Roboto', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Local Custom CSS (Sidebar layout, MUI styles, animations) -->
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="mui-light-theme text-slate-800 antialiased bg-[#f8fafd]">
+
+
+  <div class="app-layout flex min-h-screen">
+    {% include "components/layout/sidebar.html" %}
+
+    <!-- ======================================================== -->
+    <!-- MAIN CONTENT AREA -->
+    <!-- ======================================================== -->
+    <div class="app-main-wrapper flex-1 flex flex-col min-w-0 transition-all duration-300">
+      
+
+      {% include "components/layout/topbar.html" %}
+
+
+      <!-- ================= MAIN CONTAINER ================= -->
+      <main class="mui-main-container flex-1 p-6 space-y-5 max-w-7xl w-full mx-auto">
+        
+
+        {% include "components/layout/banner.html" %}
+
+        {% include "components/tabs/retrieval.html" %}
+        {% include "components/tabs/import.html" %}
+        {% include "components/tabs/bypass.html" %}
+        {% include "components/tabs/clear_cls.html" %}
+        {% include "components/tabs/assign.html" %}
+        {% include "components/tabs/clear_signal.html" %}
+        {% include "components/tabs/reset_signal.html" %}
+        {% include "components/tabs/stub_tabs.html" %}
+
+      </main>
+
+    </div>
+
+  </div>
+
+  {% include "components/modals/detail.html" %}
+  {% include "components/modals/create_task.html" %}
+  {% include "components/modals/settings.html" %}
+  {% include "components/modals/webhook_guide.html" %}
+  {% include "components/modals/snackbar.html" %}
+
+  <!-- JS: thứ tự quan trọng (dùng chung scope toàn cục) -->
+  <script src="/static/js/core/dom.js?v=3.1"></script>
+  <script src="/static/js/core/shell.js?v=3.1"></script>
+  <script src="/static/js/core/tabs.js?v=3.1"></script>
+  <script src="/static/js/components/retrieval.js?v=3.1"></script>
+  <script src="/static/js/components/login.js?v=3.1"></script>
+  <script src="/static/js/components/import.js?v=3.1"></script>
+  <script src="/static/js/components/settings.js?v=3.1"></script>
+  <script src="/static/js/components/bypass.js?v=3.1"></script>
+  <script src="/static/js/components/clear_cls.js?v=3.1"></script>
+  <script src="/static/js/components/assign.js?v=3.1"></script>
+  <script src="/static/js/components/clear_signal.js?v=3.1"></script>
+  <script src="/static/js/components/reset_signal.js?v=3.1"></script>
+  <script src="/static/js/components/stub_tabs.js?v=3.1"></script>
+  <script src="/static/js/main.js?v=3.1"></script>
+</body>
+</html>

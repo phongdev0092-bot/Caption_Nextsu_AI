@@ -1,0 +1,228 @@
+        <!-- ======================================================== -->
+        <!-- TAB: AUTO CLEAR TÍN HIỆU -->
+        <!-- SHEET: 1dXsWnon9myjDlcWM6BRLqDt_pxWBmTYFgb17k7R24vc  GID: 0 -->
+        <!-- ======================================================== -->
+        <section class="tab-panel" id="tab-clear-signal">
+
+          <!-- Header -->
+          <div class="flex items-center justify-between flex-wrap gap-3 bg-white p-3 rounded-2xl border border-slate-200/80 shadow-sm">
+            <div class="flex items-center gap-2">
+              <div class="px-4 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-teal-600 to-emerald-500 text-white shadow-sm flex items-center gap-2">
+                <span>📡 Quản Lý Clear Tín Hiệu (Google Sheet GID: 0)</span>
+                <span class="px-2 py-0.5 text-[10px] bg-white/20 rounded-md font-bold" id="badgeClearSignalPending">0 chờ xử lý</span>
+              </div>
+            </div>
+
+            <!-- Sheet Link & Sync -->
+            <div class="flex items-center gap-2 flex-wrap text-xs">
+              <a href="https://docs.google.com/spreadsheets/d/1dXsWnon9myjDlcWM6BRLqDt_pxWBmTYFgb17k7R24vc/edit#gid=0"
+                 target="_blank"
+                 class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100 font-medium transition-all"
+                 title="Mở trực tiếp tab Clear Tín Hiệu trên Google Sheet">
+                <span class="text-sm">📊</span>
+                <span>Mở Google Sheet</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+              </a>
+
+              <button type="button"
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 font-medium transition-all cursor-pointer"
+                id="btnRefreshClearSignalSheetData" title="Tải lại dữ liệu mới nhất từ Google Sheet GID 0">
+                <span>🔄 Tải Lại Sheet</span>
+              </button>
+
+              <button type="button"
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 font-medium transition-all cursor-pointer"
+                id="btnExportClearSignalData" title="Xuất dữ liệu Clear Tín Hiệu ra file Excel">
+                <span class="text-sm">📥</span>
+                <span>Xuất Data Xử Lý</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Webhook Sync Bar -->
+          <div class="mui-card p-3.5 bg-gradient-to-r from-teal-50/60 via-white to-slate-50 border border-teal-200/80 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs mb-4 shadow-sm">
+            <div class="flex items-center gap-2.5 flex-1 min-w-[320px]">
+              <span class="p-2 bg-teal-100 text-teal-700 rounded-xl text-lg flex items-center justify-center">📡</span>
+              <div class="flex-1">
+                <div class="font-bold text-slate-800 text-[12px] flex items-center gap-2">
+                  <span>Google Sheet Webhook Clear Tín Hiệu (Tự động cập nhật Kết quả &amp; Ngày cập nhật)</span>
+                  <span class="text-[10px] px-2 py-0.5 rounded-full font-medium bg-slate-100 text-slate-600 border border-slate-200" id="clearSignalWebhookStatusBadge">⚠ Chưa cấu hình Webhook</span>
+                </div>
+                <div class="flex items-center gap-2 mt-1.5">
+                  <input type="text" id="inputClearSignalWebhookUrl" placeholder="Dán URL Webhook Google Apps Script vào đây..."
+                    class="flex-1 px-3 py-1.5 bg-white border border-teal-300 rounded-lg text-xs outline-none focus:border-teal-500 font-mono text-slate-800 shadow-inner">
+                  <button type="button" class="px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-semibold transition-all shadow-sm flex items-center gap-1 hover:shadow cursor-pointer" id="btnSaveClearSignalWebhook">
+                    <span>💾</span> Lưu
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- KPI Cards -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+              <div>
+                <div class="text-xs font-semibold uppercase text-slate-400">Tổng Dòng Trên Sheet</div>
+                <div class="text-2xl font-bold text-slate-900 mt-1" id="clearSignalStatTotal">0</div>
+                <div class="text-[11px] text-slate-500 mt-0.5">Bản ghi GID 0</div>
+              </div>
+              <div class="w-11 h-11 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center text-xl">📑</div>
+            </div>
+
+            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+              <div>
+                <div class="text-xs font-semibold uppercase text-amber-500">Chờ Xử Lý</div>
+                <div class="text-2xl font-bold text-amber-600 mt-1" id="clearSignalStatPending">0</div>
+                <div class="text-[11px] text-amber-600 font-medium mt-0.5">● Cần Clear Tín Hiệu</div>
+              </div>
+              <div class="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl">⏳</div>
+            </div>
+
+            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+              <div>
+                <div class="text-xs font-semibold uppercase text-emerald-600">Đã Clear Thành Công</div>
+                <div class="text-2xl font-bold text-emerald-600 mt-1" id="clearSignalStatDone">0</div>
+                <div class="text-[11px] text-emerald-600 font-medium mt-0.5">✓ Đã hoàn tất</div>
+              </div>
+              <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">✅</div>
+            </div>
+
+            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+              <div>
+                <div class="text-xs font-semibold uppercase text-rose-500">Thất Bại / Lỗi</div>
+                <div class="text-2xl font-bold text-rose-600 mt-1" id="clearSignalStatError">0</div>
+                <div class="text-[11px] text-rose-500 mt-0.5">✕ Cần kiểm tra lại MAC / SHD</div>
+              </div>
+              <div class="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center text-xl">⚠️</div>
+            </div>
+          </div>
+
+          <!-- Action Bar -->
+          <div class="mui-card flex flex-wrap items-center justify-between gap-4 p-4 bg-gradient-to-r from-teal-50/50 via-white to-slate-50 border border-teal-100">
+            <div class="flex items-center gap-3">
+              <span class="text-2xl p-2 bg-teal-100 text-teal-600 rounded-xl">📡</span>
+              <div>
+                <h2 class="text-base font-bold text-slate-900 leading-tight">Quy Trình Tự Động Hóa Clear Tín Hiệu (Reset MAC + Kill Session)</h2>
+                <p class="text-xs text-slate-600 mt-0.5">Quản lý Hợp đồng ➜ DSL &amp; LLine ➜ Reset Mac ➜ Nhập SHD ➜ Popup Reset MAC ➜ Cập nhật MAC ➜ Xác nhận OK ➜ Kill Session ➜ Xóa session</p>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-3 flex-wrap">
+              <label class="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700 bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-sm hover:bg-slate-50">
+                <input type="checkbox" id="chkClearSignalVisible" class="rounded text-teal-600">
+                <span>👁️ Mở Chrome xem trực tiếp</span>
+              </label>
+
+              <button type="button"
+                id="btnAutoClearSignalModeToggle"
+                class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border-2 border-teal-500 bg-teal-50 text-teal-700 transition-all shadow-sm animate-pulse cursor-pointer"
+                title="Bật/Tắt chế độ tự động Clear Tín Hiệu">
+                <span id="autoClearSignalModeIcon">🤖</span>
+                <span id="autoClearSignalModeText">Tự Động: BẬT</span>
+                <span id="autoClearSignalModeDot" class="w-2 h-2 rounded-full bg-teal-600 transition-all animate-bounce"></span>
+              </button>
+
+              <button type="button" class="mui-btn bg-teal-600 hover:bg-teal-700 text-white flex items-center gap-2 px-5 py-2.5 text-xs font-semibold rounded-xl shadow-md transition-all cursor-pointer" id="btnRunAutoClearSignal">
+                <span class="btn-spinner" id="clearSignalSpinner" style="display:none;"></span>
+                <span id="clearSignalRunIcon">🚀</span>
+                <span id="clearSignalRunText">Bắt Đầu Clear Tín Hiệu</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Progress Tracker -->
+          <div class="process-tracker" id="clearSignalProgressTracker" style="display:none;">
+            <div class="tracker-header">
+              <span class="tracker-status" id="clearSignalTrackerStatus">Đang chuẩn bị lệnh Clear Tín Hiệu...</span>
+              <span class="tracker-percent" id="clearSignalTrackerPercent">0%</span>
+            </div>
+            <div class="tracker-bar-bg">
+              <div class="tracker-bar-fill bg-teal-600" id="clearSignalProgressBar" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <!-- 2 Columns: Data Table (Left) & Realtime Terminal Log (Right) -->
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            
+            <!-- Left 2 Cols: Table Card -->
+            <div class="lg:col-span-2 mui-card p-4 space-y-4">
+              <div class="flex items-center justify-between flex-wrap gap-3">
+                <div class="flex items-center gap-2">
+                  <h3 class="text-sm font-bold text-slate-800">Danh Sách Hợp Đồng Cần Clear Tín Hiệu</h3>
+                  <span class="text-xs px-2.5 py-0.5 bg-teal-50 text-teal-700 rounded-full font-semibold border border-teal-100">GID: 0</span>
+                  <span class="text-xs text-slate-500 font-medium" id="clearSignalSelectedCountText">(0 HĐ đã chọn)</span>
+                </div>
+
+                <!-- Search & Filter -->
+                <div class="flex items-center gap-2 flex-wrap">
+                  <div class="relative">
+                    <input type="text" id="inputSearchClearSignal" placeholder="Tìm theo SHD, Tên, MAC..."
+                      class="w-48 pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-teal-500">
+                    <span class="absolute left-2.5 top-2 text-slate-400 text-xs">🔍</span>
+                  </div>
+
+                  <select id="selectClearSignalFilterStatus" class="px-2.5 py-1.5 text-xs rounded-xl border border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-teal-500">
+                    <option value="all" selected>Tất Cả Trạng Thái</option>
+                    <option value="pending">Chưa Xử Lý</option>
+                    <option value="done">Thành Công</option>
+                    <option value="error">Thất Bại / Lỗi</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Table Container (ID column hidden!) -->
+              <div class="table-responsive rounded-xl border border-slate-200/80 overflow-x-auto max-h-[520px]">
+                <table class="mui-table w-full text-left border-collapse text-xs" id="tableClearSignalData">
+                  <thead>
+                    <tr class="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                      <th class="p-3 w-10 text-center">
+                        <input type="checkbox" id="chkClearSignalSelectAll" class="rounded text-teal-600" checked>
+                      </th>
+                      <th class="p-3 w-12 text-center">STT</th>
+                      <th class="p-3 font-semibold text-slate-800">Họ và Tên</th>
+                      <th class="p-3 text-slate-600">Email NVKT</th>
+                      <th class="p-3 font-semibold text-slate-800">Số Hợp Đồng (SHD)</th>
+                      <th class="p-3 text-slate-700 font-mono">Địa Chỉ MAC</th>
+                      <th class="p-3 text-slate-600">Ngày Cập Nhật</th>
+                      <th class="p-3 text-center">Kết Quả</th>
+                      <th class="p-3 text-center w-20">Hành Động</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbodyClearSignalList" class="divide-y divide-slate-100">
+                    <tr>
+                      <td colspan="9" class="text-center py-8 text-slate-400">
+                        <div class="flex flex-col items-center justify-center gap-2">
+                          <span class="text-2xl animate-spin">⏳</span>
+                          <span>Đang tải danh sách từ Google Sheet (GID: 0)...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="flex items-center justify-between text-xs text-slate-500 pt-1">
+                <div id="clearSignalTableFooterText">Hiển thị 0 bản ghi</div>
+                <div class="text-[11px] text-slate-400">Tự động đồng bộ và lưu kết quả vĩnh viễn trên hệ thống</div>
+              </div>
+            </div>
+
+            <!-- Right 1 Col: Live Realtime Console Logs -->
+            <div class="mui-card p-4 flex flex-col">
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2">
+                  <span class="w-2.5 h-2.5 rounded-full bg-teal-500 animate-pulse"></span>
+                  <span class="font-semibold text-sm text-slate-900">Nhật Ký Auto Clear Tín Hiệu</span>
+                </div>
+                <button type="button" class="text-xs text-slate-400 hover:text-slate-600 cursor-pointer" id="btnClearClearSignalLogs">Xóa</button>
+              </div>
+
+              <div class="task-log-terminal flex-1 bg-slate-900 text-slate-200 rounded-xl p-3 font-mono text-[11px] overflow-y-auto max-h-[520px] min-h-[300px] space-y-1.5" id="clearSignalLogTerminal">
+                <div class="text-slate-500 italic">Sẵn sàng thực thi. Nhấp "Bắt Đầu Clear Tín Hiệu" để chạy...</div>
+              </div>
+            </div>
+
+          </div>
+
+        </section>

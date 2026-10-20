@@ -1,0 +1,200 @@
+    <!-- ======================================================== -->
+    <!-- LEFT SIDEBAR (MUI & TAILWIND DESIGN) -->
+    <!-- ======================================================== -->
+    <aside class="app-sidebar fixed inset-y-0 left-0 z-40 flex flex-col transition-all duration-300 ease-in-out" id="appSidebar">
+      
+      <!-- Sidebar Brand Header -->
+      <div class="sidebar-header flex items-center justify-between px-5 h-16 border-b border-slate-200/80 bg-white">
+        <div class="flex items-center gap-3 overflow-hidden">
+          <div class="app-logo-wrapper shrink-0">
+            <img src="/static/logo.png" alt="Caption Nextsu AI Logo" class="w-8 h-8 rounded-lg object-contain shadow-sm border border-slate-100">
+          </div>
+          <div class="sidebar-brand-text flex flex-col">
+            <span class="font-semibold text-[15px] leading-tight text-slate-900 tracking-tight">Caption Nextsu AI</span>
+            <span class="text-[11px] font-medium text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full inline-block w-fit mt-0.5">inside.fpt.net</span>
+          </div>
+        </div>
+
+        <button type="button" class="sidebar-toggle-btn text-slate-400 hover:text-slate-700 p-1 rounded-md" id="btnCollapseSidebar" title="Thu gọn Sidebar">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Account / Session Mini Status in Sidebar -->
+      <div class="sidebar-account-box p-3 mx-3 my-3 rounded-xl bg-slate-50 border border-slate-200/70">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2 overflow-hidden">
+            <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm shrink-0">
+              👤
+            </div>
+            <div class="overflow-hidden">
+              <div class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Tài Khoản</div>
+              <div class="text-xs font-semibold text-slate-800 truncate" id="sidebarAccName">Mặc định</div>
+            </div>
+          </div>
+          <button type="button" class="text-xs text-blue-600 hover:text-blue-800 font-medium px-1.5 py-0.5 rounded hover:bg-blue-50" id="btnSidebarSwitchAcc" title="Đổi tài khoản">
+            ⚙️
+          </button>
+        </div>
+
+        <div class="mt-2.5 pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
+          <span class="text-slate-500">Phiên Inside:</span>
+          <div class="flex items-center gap-1.5 cursor-pointer" id="sidebarSessionBtn" title="Bấm để kiểm tra phiên">
+            <span class="session-dot unknown inline-block w-2 h-2 rounded-full" id="sidebarSessionDot"></span>
+            <span class="font-medium text-slate-700" id="sidebarSessionLabel">Chưa kiểm tra</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation Menu -->
+      <nav class="sidebar-nav flex-1 px-3 py-2 space-y-1.5 overflow-y-auto" role="tablist">
+        
+        <div class="nav-section-title px-3 pt-2 pb-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+          CHỨC NĂNG HỆ THỐNG
+        </div>
+
+        <!-- TAB 1: AUTO LẤY THÔNG TIN -->
+        <button type="button" class="sidebar-nav-item active w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-[13.5px] transition-all text-slate-600 hover:bg-slate-100" id="tabBtn1" role="tab" aria-selected="true" data-tab="tab-retrieval">
+          <svg class="nav-icon shrink-0" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <span class="nav-label flex-1 text-left">Auto Lấy thông tin</span>
+        </button>
+
+        <!-- TAB 2: AUTO IMPORT -->
+        <button type="button" class="sidebar-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-[13.5px] transition-all text-slate-600 hover:bg-slate-100" id="tabBtn2" role="tab" aria-selected="false" data-tab="tab-import">
+          <svg class="nav-icon shrink-0" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          <span class="nav-label flex-1 text-left">Auto Import</span>
+        </button>
+
+        <!-- TAB 3: AUTO BYPASS -->
+        <button type="button" class="sidebar-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-[13.5px] transition-all text-slate-600 hover:bg-slate-100 group relative" id="tabBtn3" role="tab" aria-selected="false" data-tab="tab-tasks">
+          <svg class="nav-icon shrink-0 text-amber-500" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+          <span class="nav-label flex-1 text-left font-medium">Auto Bypass</span>
+          <span id="sidebarAutoBypassBadge" class="hidden px-1.5 py-0.5 text-[9.5px] font-bold text-amber-700 bg-amber-100 rounded-md border border-amber-300 animate-pulse">
+            🤖 AUTO
+          </span>
+          <span class="nav-badge-hot px-1.5 py-0.5 text-[10px] font-bold text-amber-700 bg-amber-100 rounded-md border border-amber-200">
+            HOT
+          </span>
+        </button>
+
+        <!-- TAB 4: AUTO CLEAR CLS CÓ SR -->
+        <button type="button" class="sidebar-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-[13.5px] transition-all text-slate-600 hover:bg-slate-100 group relative" id="tabBtn4" role="tab" aria-selected="false" data-tab="tab-clear-cls">
+          <svg class="nav-icon shrink-0 text-indigo-500" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+          </svg>
+          <span class="nav-label flex-1 text-left font-medium">Auto Clear Cls có SR</span>
+          <span id="sidebarAutoClsBadge" class="hidden px-1.5 py-0.5 text-[9.5px] font-bold text-indigo-700 bg-indigo-100 rounded-md border border-indigo-300 animate-pulse">
+            🤖 AUTO
+          </span>
+          <span class="px-1.5 py-0.5 text-[10px] font-bold text-indigo-700 bg-indigo-50 rounded-md border border-indigo-200">
+            DEV
+          </span>
+        </button>
+
+        <!-- TAB 5: AUTO PHÂN CÔNG TAY -->
+        <button type="button" class="sidebar-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-[13.5px] transition-all text-slate-600 hover:bg-slate-100 group relative" id="tabBtn5" role="tab" aria-selected="false" data-tab="tab-manual-assign">
+          <svg class="nav-icon shrink-0 text-sky-500" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="8" r="4"></circle>
+            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"></path>
+            <line x1="18" y1="2" x2="22" y2="6"></line>
+            <line x1="22" y1="2" x2="18" y2="6"></line>
+          </svg>
+          <span class="nav-label flex-1 text-left font-medium">Auto Phân Công Tay</span>
+          <span id="sidebarAutoAssignBadge" class="hidden px-1.5 py-0.5 text-[9.5px] font-bold text-sky-700 bg-sky-100 rounded-md border border-sky-300 animate-pulse">
+            🤖 AUTO
+          </span>
+          <span class="px-1.5 py-0.5 text-[10px] font-bold text-sky-700 bg-sky-50 rounded-md border border-sky-200">
+            NEW
+          </span>
+        </button>
+
+        <!-- TAB 6: AUTO CLEAR TÍN HIỆU -->
+        <button type="button" class="sidebar-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-[13.5px] transition-all text-slate-600 hover:bg-slate-100 group relative" id="tabBtnClearSignal" role="tab" aria-selected="false" data-tab="tab-clear-signal" data-title="Auto Clear Tín Hiệu">
+          <svg class="nav-icon shrink-0 text-teal-500" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4.93 4.93a10 10 0 0 1 14.14 0"></path>
+            <path d="M7.76 7.76a6 6 0 0 1 8.48 0"></path>
+            <circle cx="12" cy="12" r="2"></circle>
+            <line x1="12" y1="14" x2="12" y2="22"></line>
+          </svg>
+          <span class="nav-label flex-1 text-left font-medium">Clear Tín Hiệu</span>
+          <span id="sidebarAutoClearSignalBadge" class="hidden px-1.5 py-0.5 text-[9.5px] font-bold text-teal-700 bg-teal-100 rounded-md border border-teal-300 animate-pulse">
+            🤖 AUTO
+          </span>
+          <span class="px-1.5 py-0.5 text-[10px] font-bold text-teal-700 bg-teal-50 rounded-md border border-teal-200">
+            GID 0
+          </span>
+        </button>
+
+        <!-- TAB 7: AUTO CẤP LẠI TÍN HIỆU -->
+        <button type="button" class="sidebar-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-[13.5px] transition-all text-slate-600 hover:bg-slate-100 group relative" id="tabBtnResetSignal" role="tab" aria-selected="false" data-tab="tab-reset-signal" data-title="Auto Cấp Lại Tín Hiệu">
+          <svg class="nav-icon shrink-0 text-purple-500" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+          <span class="nav-label flex-1 text-left font-medium">Cấp Lại Tín Hiệu</span>
+          <span id="sidebarAutoResetSignalBadge" class="hidden px-1.5 py-0.5 text-[9.5px] font-bold text-purple-700 bg-purple-100 rounded-md border border-purple-300 animate-pulse">
+            🤖 AUTO
+          </span>
+          <span class="px-1.5 py-0.5 text-[10px] font-bold text-purple-700 bg-purple-50 rounded-md border border-purple-200">
+            NEW
+          </span>
+        </button>
+
+        {% include "components/layout/nav_stub_items.html" %}
+
+
+        <div class="nav-section-title px-3 pt-4 pb-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+          TIỆN ÍCH & CẤU HÌNH
+        </div>
+
+        <!-- Cài Đặt Hệ Thống -->
+        <button type="button" class="sidebar-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-[13.5px] transition-all text-slate-600 hover:bg-slate-100" id="btnSidebarSettings">
+          <svg class="nav-icon shrink-0" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          <span class="nav-label flex-1 text-left">Cài Đặt & OTP</span>
+        </button>
+
+        <!-- Tải Template Excel -->
+        <a href="/api/retrieval/template" class="sidebar-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-[13.5px] transition-all text-slate-600 hover:bg-slate-100" download="Template_Danh_Sach_Hop_Dong.xlsx">
+          <svg class="nav-icon shrink-0 text-emerald-600" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="12" y1="18" x2="12" y2="12"></line>
+            <line x1="9" y1="15" x2="15" y2="15"></line>
+          </svg>
+          <span class="nav-label flex-1 text-left">Tải File Mẫu Excel</span>
+        </a>
+
+      </nav>
+
+      <!-- Sidebar Footer -->
+      <div class="sidebar-footer p-3 border-t border-slate-200/80 bg-white space-y-2">
+        <!-- Zstandard Storage Pill -->
+        <div class="zstd-storage-pill-sidebar p-2 rounded-lg bg-blue-50/70 border border-blue-100 flex items-center gap-2 text-xs text-slate-600" title="Kho dữ liệu nén Zstandard (.json.zst)">
+          <span class="text-base">🗜️</span>
+          <div class="overflow-hidden">
+            <div class="font-semibold text-slate-700 truncate">Kho Zstandard</div>
+            <div class="text-[11px] text-blue-600 font-mono"><strong id="sidebarZstdCount">0</strong> HĐ (<span id="sidebarZstdSize">0 B</span>)</div>
+          </div>
+        </div>
+
+        <div class="text-[11px] text-slate-400 text-center">
+          Caption Nextsu AI &copy; 2026
+        </div>
+      </div>
+
+    </aside>

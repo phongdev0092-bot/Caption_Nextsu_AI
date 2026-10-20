@@ -1,0 +1,63 @@
+  <!-- ================= CREATE NEW TASK MODAL ================= -->
+  <div class="mui-modal-backdrop" id="createTaskModalBackdrop">
+    <div class="mui-modal-box" style="max-width: 520px;">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="modal-icon">⚡</span>
+          <div>
+            <h2 class="modal-title">Thêm Kịch Bản Công Việc Mới</h2>
+            <p class="modal-sub">Thiết lập kịch bản tự động hóa thực thi theo chu kỳ</p>
+          </div>
+        </div>
+        <button type="button" class="modal-close-btn" id="btnCloseCreateTask">✕</button>
+      </div>
+
+      <form id="createTaskForm">
+        <div class="modal-body space-y-3.5">
+          <div class="mui-field">
+            <label for="taskNameInput">Tên kịch bản công việc <span class="text-red-500">*</span></label>
+            <input type="text" id="taskNameInput" placeholder="Ví dụ: Tự động trích xuất danh sách HĐ mới" required>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div class="mui-field">
+              <label for="taskTypeSelect">Loại hành động</label>
+              <select id="taskTypeSelect">
+                <option value="sync_ptc">Quét & Cập nhật PTC</option>
+                <option value="auto_import">Auto Import Dữ Liệu</option>
+                <option value="alert_overdue">Cảnh báo chậm trễ</option>
+                <option value="backup_zstd">Sao lưu Kho Zstd</option>
+              </select>
+            </div>
+
+            <div class="mui-field">
+              <label for="taskIntervalSelect">Tần suất chu kỳ</label>
+              <select id="taskIntervalSelect">
+                <option value="5">Mỗi 5 phút</option>
+                <option value="15" selected>Mỗi 15 phút</option>
+                <option value="30">Mỗi 30 phút</option>
+                <option value="60">Mỗi 1 giờ</option>
+                <option value="360">Mỗi 6 giờ</option>
+                <option value="1440">Hàng ngày (24h)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="mui-field">
+            <label for="taskDescInput">Mô tả tác vụ</label>
+            <textarea id="taskDescInput" rows="2" class="w-full px-3 py-2 border rounded-lg text-xs" placeholder="Ghi chú chi tiết mục đích của kịch bản này..."></textarea>
+          </div>
+
+          <div class="p-3 bg-blue-50/70 rounded-xl border border-blue-100 text-xs text-blue-700 flex items-start gap-2">
+            <span>💡</span>
+            <span>Hệ thống sẽ chạy ngầm bằng tài khoản Inside FPT đang kích hoạt mà không làm gián đoạn công việc của bạn.</span>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="mui-btn mui-btn-text" id="btnCancelCreateTask">Hủy bỏ</button>
+          <button type="submit" class="mui-btn mui-btn-primary">Kích Hoạt Kịch Bản</button>
+        </div>
+      </form>
+    </div>
+  </div>
