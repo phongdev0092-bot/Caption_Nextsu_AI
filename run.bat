@@ -12,7 +12,11 @@ echo.
 echo [Luu y] De ngat may chu, hay dong cua so Command Prompt nay hoac bam Ctrl+C.
 echo ======================================================================
 echo.
-python server.py
+if exist ".venv\Scripts\python.exe" (
+    ".venv\Scripts\python.exe" server.py
+) else (
+    python server.py
+)
 if errorlevel 1 (
     echo.
     echo [LOI] Khong the khoi dong server. Vui long kiem tra Python.

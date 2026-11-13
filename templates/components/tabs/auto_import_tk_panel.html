@@ -1,0 +1,265 @@
+<!-- Auto Import TK (Inside FPT -> Supabase) Panel -->
+<div class="mui-card mt-5" id="autoImportTkPanel">
+  <div class="card-title-row flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h2 class="card-section-title">Auto Import TK (Inside FPT &rarr; Supabase)</h2>
+      <p class="section-desc mb-0">
+        Lấy báo cáo Triển Khai (Báo cáo đúng hẹn - đúng hạn) từ Inside FPT và nạp vào Supabase theo rule <code>MERGE_NO_OVERWRITE</code>.
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="aiFlagBadge" class="chip-badge">Đang kiểm tra...</span>
+      <button type="button" class="mui-btn mui-btn-text" id="btnAiToggleFlag">Bật / Tắt</button>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mt-4">
+    <div>
+      <label class="block text-xs font-semibold text-slate-600 mb-1" for="aiFromDate">Từ ngày (dd/mm/YYYY)</label>
+      <input type="text" id="aiFromDate" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg" placeholder="01/11/2026">
+    </div>
+    <div>
+      <label class="block text-xs font-semibold text-slate-600 mb-1" for="aiToDate">Đến ngày (dd/mm/YYYY)</label>
+      <input type="text" id="aiToDate" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg" placeholder="12/11/2026">
+    </div>
+    <div>
+      <label class="block text-xs font-semibold text-slate-600 mb-1" for="aiPartners">Đối tác (cách nhau dấu phẩy)</label>
+      <input type="text" id="aiPartners" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg" value="Phương Nam-01">
+    </div>
+    <div>
+      <label class="block text-xs font-semibold text-slate-600 mb-1" for="aiTargetTable">Bảng đích Supabase</label>
+      <input type="text" id="aiTargetTable" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg" value="tk_auto_test">
+    </div>
+  </div>
+
+  <div class="flex flex-wrap items-center justify-between gap-3 mt-3 pt-3 border-t border-slate-200/70">
+    <div class="flex flex-wrap items-center gap-4">
+      <label class="mui-checkbox-label">
+        <input type="checkbox" id="aiHeadless">
+        <span class="chk-box"></span>
+        <span>Chạy ẩn Chrome (Headless)</span>
+      </label>
+      <div class="flex items-center gap-2 text-xs text-slate-600">
+        <label for="aiInputFile" class="font-semibold">File .xlsx test (tuỳ chọn):</label>
+        <input type="file" id="aiInputFile" accept=".xlsx" class="text-xs">
+      </div>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-2">
+      <button type="button" class="mui-btn mui-btn-text" id="btnAiSeedTest" title="Copy read-only từ tk sang bảng test">
+        Seed bảng test
+      </button>
+      <button type="button" class="mui-btn mui-btn-text" id="btnAiDryRun">
+        Chạy Dry-run
+      </button>
+      <button type="button" class="mui-btn mui-btn-primary" id="btnAiRunImport">
+        Chạy Auto Import
+      </button>
+      <button type="button" class="mui-btn mui-btn-icon-small" id="btnAiRefresh" title="Làm mới">🔄</button>
+    </div>
+  </div>
+
+  <div id="aiStatusBanner" class="mt-3 px-3 py-2 rounded-lg text-xs bg-slate-50 border border-slate-200 text-slate-700 hidden"></div>
+
+  <div class="mt-4 overflow-x-auto">
+    <table class="w-full text-xs text-left border-collapse">
+      <thead>
+        <tr class="border-b border-slate-200 text-slate-500 uppercase">
+          <th class="py-2 pr-3">Thời điểm</th>
+          <th class="py-2 pr-3">Chế độ</th>
+          <th class="py-2 pr-3">Bảng đích</th>
+          <th class="py-2 pr-3">Đọc / Mới / Trùng</th>
+          <th class="py-2 pr-3">Trạng thái</th>
+          <th class="py-2">Chi tiết</th>
+        </tr>
+      </thead>
+      <tbody id="aiAuditLogBody">
+        <tr><td colspan="6" class="py-3 text-slate-400">Chưa có lịch sử chạy.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+(function () {
+  let aiEnabled = false;
+  let aiPollTimer = null;
+
+  function setBanner(msg, isErr) {
+    const el = document.getElementById("aiStatusBanner");
+    if (!el) return;
+    if (!msg) {
+      el.classList.add("hidden");
+      return;
+    }
+    el.textContent = msg;
+    el.className = "mt-3 px-3 py-2 rounded-lg text-xs border " +
+      (isErr ? "bg-red-50 border-red-200 text-red-700" : "bg-blue-50 border-blue-200 text-blue-700");
+  }
+
+  function renderStatus(data) {
+    if (!data || !data.ok) return;
+    aiEnabled = !!data.enabled;
+
+    const badge = document.getElementById("aiFlagBadge");
+    const btnToggle = document.getElementById("btnAiToggleFlag");
+    if (badge) {
+      badge.textContent = aiEnabled ? "AUTO_IMPORT_ENABLED: BẬT" : "AUTO_IMPORT_ENABLED: TẮT";
+      badge.style.background = aiEnabled ? "#dcfce7" : "#f1f5f9";
+      badge.style.color = aiEnabled ? "#166534" : "#475569";
+    }
+    if (btnToggle) {
+      btnToggle.textContent = aiEnabled ? "Tắt Feature Flag" : "Bật Feature Flag";
+    }
+
+    const cfg = data.config || {};
+    const fromEl = document.getElementById("aiFromDate");
+    const toEl = document.getElementById("aiToDate");
+    const partnersEl = document.getElementById("aiPartners");
+    const tableEl = document.getElementById("aiTargetTable");
+    if (fromEl && !fromEl.value) fromEl.value = cfg.default_from_date || "";
+    if (toEl && !toEl.value) toEl.value = cfg.default_to_date || "";
+    if (partnersEl && !partnersEl.value && Array.isArray(cfg.allowed_partners)) {
+      partnersEl.value = cfg.allowed_partners.join(", ");
+    }
+    if (tableEl && !tableEl.value) tableEl.value = cfg.target_table || "tk_auto_test";
+
+    const disableRun = !!data.is_running;
+    ["btnAiDryRun", "btnAiRunImport", "btnAiSeedTest"].forEach(id => {
+      const b = document.getElementById(id);
+      if (b) b.disabled = disableRun;
+    });
+
+    if (data.is_running) {
+      setBanner("Đang chạy Auto Import TK... Vui lòng chờ hoàn tất.", false);
+      if (!aiPollTimer) {
+        aiPollTimer = setInterval(loadStatus, 2500);
+      }
+    } else {
+      if (aiPollTimer) {
+        clearInterval(aiPollTimer);
+        aiPollTimer = null;
+      }
+      if (data.last_result && data.last_result.message) {
+        const st = data.last_result.status || "";
+        setBanner(`[${st}] ${data.last_result.message}`, st === "FAILED" || st === "LOCKED");
+      }
+    }
+
+    const tbody = document.getElementById("aiAuditLogBody");
+    if (tbody) {
+      const logs = data.logs || [];
+      if (!logs.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="py-3 text-slate-400">Chưa có lịch sử chạy.</td></tr>';
+      } else {
+        tbody.innerHTML = logs.map(r => {
+          const mode = r.dry_run ? "Dry-run" : "Import";
+          const counts = `${r.rows_read ?? 0} / ${r.rows_new ?? 0} / ${r.rows_duplicate ?? 0}`;
+          const esc = (s) => String(s ?? "").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+          return `<tr class="border-b border-slate-100">
+            <td class="py-2 pr-3 whitespace-nowrap">${esc((r.timestamp || "").slice(0, 19).replace("T", " "))}</td>
+            <td class="py-2 pr-3">${esc(mode)}</td>
+            <td class="py-2 pr-3 font-mono">${esc(r.target_table)}</td>
+            <td class="py-2 pr-3 whitespace-nowrap">${esc(counts)}</td>
+            <td class="py-2 pr-3 font-semibold">${esc(r.status)}</td>
+            <td class="py-2">${esc(r.message)}</td>
+          </tr>`;
+        }).join("");
+      }
+    }
+  }
+
+  async function parseJsonSafe(resp) {
+    const text = await resp.text();
+    try {
+      return JSON.parse(text);
+    } catch (_) {
+      if (resp.status === 404) {
+        throw new Error("HTTP 404 — Server cũ chưa nạp API Auto Import. Hãy tắt cửa sổ server đang chạy và mở lại bằng run.bat.");
+      }
+      throw new Error(`HTTP ${resp.status} — Server trả về dữ liệu không phải JSON.`);
+    }
+  }
+
+  async function loadStatus() {
+    try {
+      const resp = await fetch("/api/auto-import/status");
+      const data = await parseJsonSafe(resp);
+      renderStatus(data);
+    } catch (e) {
+      setBanner("Không tải được trạng thái Auto Import: " + e.message, true);
+    }
+  }
+
+  async function toggleFlag() {
+    try {
+      const resp = await fetch("/api/auto-import/toggle", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({enabled: !aiEnabled})
+      });
+      const data = await parseJsonSafe(resp);
+      if (!data.ok) throw new Error(data.error || "Lỗi");
+      await loadStatus();
+    } catch (e) {
+      setBanner("Lỗi bật/tắt flag: " + e.message, true);
+    }
+  }
+
+  async function runJob(dryRun) {
+    try {
+      const fileInput = document.getElementById("aiInputFile");
+      const fd = new FormData();
+      fd.append("dry_run", dryRun ? "true" : "false");
+      fd.append("from_date", document.getElementById("aiFromDate").value.trim());
+      fd.append("to_date", document.getElementById("aiToDate").value.trim());
+      fd.append("partners", document.getElementById("aiPartners").value.trim());
+      fd.append("target_table", document.getElementById("aiTargetTable").value.trim());
+      fd.append("headless", document.getElementById("aiHeadless").checked ? "true" : "false");
+      if (fileInput && fileInput.files && fileInput.files[0]) {
+        fd.append("file", fileInput.files[0]);
+      }
+
+      const resp = await fetch("/api/auto-import/run", {method: "POST", body: fd});
+      const data = await parseJsonSafe(resp);
+      if (!resp.ok || !data.ok) throw new Error(data.error || "Không khởi chạy được");
+      await loadStatus();
+    } catch (e) {
+      setBanner("Lỗi chạy Auto Import: " + e.message, true);
+    }
+  }
+
+  async function seedTest() {
+    const tbl = document.getElementById("aiTargetTable").value.trim() || "tk_auto_test";
+    if (!confirm(`Xác nhận đã backup Supabase và muốn seed dữ liệu từ 'tk' sang '${tbl}'?`)) return;
+    try {
+      setBanner(`Đang seed dữ liệu sang '${tbl}'...`, false);
+      const resp = await fetch("/api/auto-import/seed", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({target_table: tbl})
+      });
+      const data = await parseJsonSafe(resp);
+      if (!resp.ok || !data.ok) throw new Error(data.error || "Seed thất bại");
+      setBanner(`Đã seed ${data.rows_seeded} dòng từ '${data.source_table}' sang '${data.target_table}'.`, false);
+    } catch (e) {
+      setBanner("Lỗi seed bảng test: " + e.message, true);
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    const map = [
+      ["btnAiToggleFlag", toggleFlag],
+      ["btnAiDryRun", () => runJob(true)],
+      ["btnAiRunImport", () => runJob(false)],
+      ["btnAiSeedTest", seedTest],
+      ["btnAiRefresh", loadStatus]
+    ];
+    map.forEach(([id, fn]) => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener("click", fn);
+    });
+    loadStatus();
+  });
+})();
+</script>

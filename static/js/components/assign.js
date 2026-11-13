@@ -33,6 +33,9 @@ const btnAutoAssignModeToggle = document.getElementById('btnAutoAssignModeToggle
 const autoAssignModeIcon      = document.getElementById('autoAssignModeIcon');
 const autoAssignModeText      = document.getElementById('autoAssignModeText');
 const autoAssignModeDot       = document.getElementById('autoAssignModeDot');
+// assignLogTerminal, btnClearAssignLogs, btnExportAssignData được khai báo trong core/dom.js
+const selectDateFilterAssign  = document.getElementById('selectDateFilterAssign');
+const btnClearAssignCache     = document.getElementById('btnClearAssignCache');
 
 let currentAssignRecords  = [];
 let selectedAssignShds    = new Set();
@@ -127,12 +130,20 @@ if (btnAutoAssignModeToggle) {
 
 function _isAssignFinalDone(r) {
   const tt = String(r['Thao Tác'] || '').trim().toLowerCase();
-  return tt.includes('thành công') || tt.includes('không thành công') || tt.includes('lỗi');
+  if (!tt || tt.includes('không thành công') || tt.includes('thất bại') || tt.includes('chưa') || tt.includes('lỗi') || tt.includes('error')) {
+    return false;
+  }
+  return tt.includes('cập nhật thành công') || tt.includes('thành công!') || tt.includes('đã xử lý');
+}
+
+// Auto chỉ chạy HĐ CHƯA từng xử lý (Thao Tác trống). HĐ đã có kết quả (kể cả lỗi) phải chạy lại thủ công.
+function _isAssignAutoPending(r) {
+  return !String(r['Thao Tác'] || '').trim();
 }
 
 function checkAndAutoTriggerAssign() {
   if (!autoAssignMode || isAssignRunning) return;
-  const pending = currentAssignRecords.filter(r => !_isAssignFinalDone(r));
+  const pending = currentAssignRecords.filter(_isAssignAutoPending);
   if (pending.length === 0) return;
   if (autoAssignCountdownTimer) return;
 
@@ -149,7 +160,7 @@ function checkAndAutoTriggerAssign() {
       autoAssignCountdownTimer = null;
       if (autoAssignModeText) autoAssignModeText.textContent = 'Tự Động: BẬT';
       if (!autoAssignMode || isAssignRunning) return;
-      const stillPending = currentAssignRecords.filter(r => !_isAssignFinalDone(r));
+      const stillPending = currentAssignRecords.filter(_isAssignAutoPending);
       if (stillPending.length > 0) {
         showSnackbar(`🚀 Tự động khởi động Phân Công Tay cho ${stillPending.length} hợp đồng...`);
         runAssignProcess(stillPending);
@@ -188,8 +199,8 @@ function updateAssignStats(records) {
   let pending = 0, done = 0, error = 0;
   records.forEach(r => {
     const tt = String(r['Thao Tác'] || '').trim().toLowerCase();
-    if (tt.includes('không thành công') || tt.includes('lỗi')) error++;
-    else if (tt.includes('thành công')) done++;
+    if (tt.includes('không thành công') || tt.includes('lỗi') || tt.includes('thất bại')) error++;
+    else if (tt.includes('cập nhật thành công') || (tt.includes('thành công') && !tt.includes('không'))) done++;
     else pending++;
   });
   if (assignStatTotal) assignStatTotal.textContent = records.length;
@@ -199,14 +210,23 @@ function updateAssignStats(records) {
   if (badgeAssignPending) badgeAssignPending.textContent = `${pending} chờ xử lý`;
 }
 
+let currentAssignPage = 1;
+
 // ===================== TABLE RENDER =====================
 function renderAssignTable(records) {
   if (!tbodyAssignList) return;
-  const query = inputSearchAssign ? inputSearchAssign.value.trim().toLowerCase() : '';
+  const dateFilter   = selectDateFilterAssign ? selectDateFilterAssign.value : 'today';
+  const query        = inputSearchAssign ? inputSearchAssign.value.trim().toLowerCase() : '';
   const statusFilter = selectAssignFilterStatus ? selectAssignFilterStatus.value : 'all';
   const typeFilter   = selectAssignFilterType   ? selectAssignFilterType.value   : 'all';
 
-  let filtered = records.filter(r => {
+  // Apply unified date filtering first
+  let dateFiltered = records;
+  if (window.UnifiedWorkTabs && typeof window.UnifiedWorkTabs.filterRecords === 'function') {
+    dateFiltered = window.UnifiedWorkTabs.filterRecords(records, dateFilter);
+  }
+
+  let filtered = dateFiltered.filter(r => {
     const shd      = String(r['SHD'] || '').toLowerCase();
     const email    = String(r['Email'] || '').toLowerCase();
     const block    = String(r['Block Đến'] || '').toLowerCase();
@@ -219,21 +239,42 @@ function renderAssignTable(records) {
     }
     if (typeFilter !== 'all' && !loai.includes(typeFilter.toLowerCase())) return false;
 
-    const isDone = tt.includes('thành công') || tt.includes('không thành công') || tt.includes('lỗi');
-    if (statusFilter === 'pending') return !isDone;
-    if (statusFilter === 'done')    return tt.includes('thành công') && !tt.includes('không');
-    if (statusFilter === 'error')   return tt.includes('không thành công') || tt.includes('lỗi');
+    const isSuccess = tt.includes('cập nhật thành công') || (tt.includes('thành công') && !tt.includes('không'));
+    const isError   = tt.includes('không thành công') || tt.includes('lỗi') || tt.includes('thất bại');
+    const isPending = !isSuccess;
+
+    if (statusFilter === 'pending') return isPending;
+    if (statusFilter === 'done')    return isSuccess;
+    if (statusFilter === 'error')   return isError;
     return true;
   });
 
+  // Đảm bảo luôn sắp xếp từ gần nhất đến xa nhất (mới nhất lên đầu)
+  if (window.UnifiedWorkTabs && typeof window.UnifiedWorkTabs.sortRecordsNewestFirst === 'function') {
+    filtered = window.UnifiedWorkTabs.sortRecordsNewestFirst(filtered);
+  }
+
+  if (assignTableFooterText) {
+    assignTableFooterText.textContent = `Hiển thị ${filtered.length} bản ghi`;
+  }
+
   if (filtered.length === 0) {
     tbodyAssignList.innerHTML = '<tr><td colspan="11" class="text-center py-8 text-slate-400">Không có bản ghi nào phù hợp với bộ lọc</td></tr>';
-    if (assignTableFooterText) assignTableFooterText.textContent = 'Hiển thị 0 bản ghi';
+    if (window.UnifiedWorkTabs) {
+      window.UnifiedWorkTabs.renderPagination('assignPagination', { total: 0 });
+    }
     return;
   }
 
+  // Phân trang 10 dòng 1 trang
+  const pageState = window.UnifiedWorkTabs
+    ? window.UnifiedWorkTabs.paginate(filtered, currentAssignPage, 10)
+    : { items: filtered.slice(0, 10), currentPage: 1, totalPages: Math.ceil(filtered.length / 10), total: filtered.length, startIdx: 0, endIdx: Math.min(10, filtered.length) };
+  currentAssignPage = pageState.currentPage;
+
   tbodyAssignList.innerHTML = '';
-  filtered.forEach((r, idx) => {
+  pageState.items.forEach((r, idx) => {
+    const globalIdx = pageState.startIdx + idx;
     const tr = document.createElement('tr');
     tr.className = 'hover:bg-slate-50 transition-colors';
 
@@ -270,7 +311,7 @@ function renderAssignTable(records) {
       <td class="p-3 text-center">
         <input type="checkbox" class="assign-row-checkbox rounded text-sky-600" data-shd="${escapeHtml(shd)}" ${isChecked ? 'checked' : ''}>
       </td>
-      <td class="p-3 text-center text-slate-500 font-mono">${idx + 1}</td>
+      <td class="p-3 text-center text-slate-500 font-mono">${globalIdx + 1}</td>
       <td class="p-3 font-medium text-slate-700">${escapeHtml(tacVu)}</td>
       <td class="p-3"><strong class="font-mono text-sky-700 text-xs">${escapeHtml(shd)}</strong></td>
       <td class="p-3 font-mono text-[11px] text-slate-600">${escapeHtml(email)}</td>
@@ -288,9 +329,14 @@ function renderAssignTable(records) {
     tbodyAssignList.appendChild(tr);
   });
 
-  if (assignTableFooterText) {
-    assignTableFooterText.textContent = `Hiển thị ${filtered.length}/${records.length} bản ghi`;
+  // Render pagination controls
+  if (window.UnifiedWorkTabs) {
+    window.UnifiedWorkTabs.renderPagination('assignPagination', pageState, (newPage) => {
+      currentAssignPage = newPage;
+      renderAssignTable(currentAssignRecords);
+    });
   }
+
   updateAssignSelectedCount();
 
   // Single-run click
@@ -311,6 +357,18 @@ function renderAssignTable(records) {
       updateAssignSelectedCount();
     });
   });
+
+  // Safe Chart & Top Staff update after table has successfully rendered
+  try {
+    if (window.UnifiedWorkTabs) {
+      if (typeof window.UnifiedWorkTabs.updateDailyChart === 'function') {
+        window.UnifiedWorkTabs.updateDailyChart('assignDailyChart', records, dateFilter);
+      }
+      if (typeof window.UnifiedWorkTabs.updateTopStaff === 'function') {
+        window.UnifiedWorkTabs.updateTopStaff('assignTopStaffContainer', records, dateFilter);
+      }
+    }
+  } catch (err) {}
 }
 
 function updateAssignSelectedCount() {
@@ -332,13 +390,25 @@ if (chkAssignSelectAll) {
   });
 }
 
-if (inputSearchAssign)        inputSearchAssign.addEventListener('input',  () => renderAssignTable(currentAssignRecords));
-if (selectAssignFilterStatus) selectAssignFilterStatus.addEventListener('change', () => renderAssignTable(currentAssignRecords));
-if (selectAssignFilterType)   selectAssignFilterType.addEventListener('change',   () => renderAssignTable(currentAssignRecords));
+if (inputSearchAssign)        inputSearchAssign.addEventListener('input',  () => { currentAssignPage = 1; renderAssignTable(currentAssignRecords); });
+if (selectAssignFilterStatus) selectAssignFilterStatus.addEventListener('change', () => { currentAssignPage = 1; renderAssignTable(currentAssignRecords); });
+if (selectAssignFilterType)   selectAssignFilterType.addEventListener('change',   () => { currentAssignPage = 1; renderAssignTable(currentAssignRecords); });
+if (selectDateFilterAssign)   selectDateFilterAssign.addEventListener('change',   () => { currentAssignPage = 1; renderAssignTable(currentAssignRecords); });
 if (btnRefreshAssignSheetData) {
   btnRefreshAssignSheetData.addEventListener('click', () => {
     showSnackbar('Đang làm mới dữ liệu từ Google Sheet (GID: 909147347)...');
     loadAssignSheetData();
+  });
+}
+if (btnClearAssignCache) {
+  btnClearAssignCache.addEventListener('click', async () => {
+    try {
+      await fetch('/api/assign/clear-cache', { method: 'POST' });
+      showSnackbar('🧹 Đã xóa bộ nhớ đệm Phân Công Tay!');
+      loadAssignSheetData();
+    } catch (e) {
+      showSnackbar('Không thể xóa cache Phân Công Tay');
+    }
   });
 }
 

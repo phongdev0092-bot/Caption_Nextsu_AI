@@ -53,7 +53,7 @@ Hệ thống sẽ tự động bật web server trên localhost (cổng `5001` n
 
 ### 3. Quản lý 2 Chế Độ Tài Khoản (Mặc định & Tùy chỉnh)
 * Bấm vào biểu tượng **⚙️ Cài đặt** (hoặc ô trạng thái tài khoản trên thanh tiêu đề):
-  * **Tài khoản Mặc định**: Cố định `phuongnam.phongnh5` / `Benngo@@2026`, tự động sinh mã OTP từ ảnh QR Google Authenticator.
+  * **Tài khoản Mặc định**: Cố định `phuongnam.phongnh5` / `Benngo@@20262027`, tự động sinh mã OTP từ ảnh QR Google Authenticator.
   * **Tài khoản Tùy chỉnh**: Nhập tên đăng nhập & mật khẩu riêng. Có checkbox tùy chọn bật/tắt OTP (nếu bật có thể tải ảnh QR để quét tự động).
 * Bấm **Lưu Cấu Hình** để chọn tài khoản bạn muốn sử dụng khi đăng nhập và tra cứu.
 

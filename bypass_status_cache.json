@@ -1,7 +1,7 @@
 {
   "SGh263406": {
     "status": "Đã xử lý",
-    "time": "17/10/2026 07:26:16"
+    "time": "22/10/2026 23:29:42"
   },
   "SGh404302": {
     "status": "Đã xử lý",
@@ -30,10 +30,6 @@
   "SGAES6432": {
     "status": "Đã xử lý",
     "time": "15/10/2026 16:17:03"
-  },
-  "SGH123123": {
-    "status": "Đã xử lý",
-    "time": "15/10/2026 16:59:35"
   },
   "SGAFL5065": {
     "status": "Đã xử lý",
@@ -106,5 +102,932 @@
   "SGABM1867": {
     "status": "Đã xử lý",
     "time": "20/10/2026 16:35:58"
+  },
+  "SGAFW2611": {
+    "status": "Đã xử lý",
+    "time": "21/10/2026 08:55:23"
+  },
+  "SGAFW3719": {
+    "status": "Đã xử lý",
+    "time": "21/10/2026 13:40:29"
+  },
+  "SGAFJ1616": {
+    "status": "Đã xử lý",
+    "time": "21/10/2026 14:50:22"
+  },
+  "SGJ009068": {
+    "status": "Đã xử lý",
+    "time": "22/10/2026 10:43:12"
+  },
+  "SGJ082073": {
+    "status": "Đã xử lý",
+    "time": "22/10/2026 11:31:15"
+  },
+  "SGAFW3301": {
+    "status": "Đã xử lý",
+    "time": "22/10/2026 11:40:15"
+  },
+  "SGABK4258": {
+    "status": "Đã xử lý",
+    "time": "22/10/2026 15:42:43"
+  },
+  "SGACG4458": {
+    "status": "Đã xử lý",
+    "time": "22/10/2026 15:59:12"
+  },
+  "SGH322043": {
+    "status": "Đã xử lý",
+    "time": "22/10/2026 16:44:38"
+  },
+  "SGAFS7343": {
+    "status": "Đã xử lý",
+    "time": "22/10/2026 16:45:06"
+  },
+  "SGAFW3482": {
+    "status": "Đã xử lý",
+    "time": "22/10/2026 16:45:32"
+  },
+  "SGH768044": {
+    "status": "Đã xử lý",
+    "time": "22/10/2026 17:35:50"
+  },
+  "SGH263406": {
+    "status": "Không thành công : Trong 14N vi phạm 5 Hợp đồng ( cụ thể: SGAFT0337, SGH429017, SGAFX0794, SGAEE1948, SGAFW7743 ) Nhân sự thực hiện xử lý lại Suy Hao để được mở quyền Bypass",
+    "time": "06/11/2026 12:04:17",
+    "timestamp_epoch": 1793941457.6201088,
+    "force_override": true,
+    "ghi_chu": ""
+  },
+  "SGH840498": {
+    "status": "Đã xử lý",
+    "time": "23/10/2026 10:58:38"
+  },
+  "SGAFW4257": {
+    "status": "Đã xử lý",
+    "time": "23/10/2026 11:06:25"
+  },
+  "SGH249155": {
+    "status": "Đã xử lý",
+    "time": "23/10/2026 11:47:11"
+  },
+  "SGH277969": {
+    "status": "Đã xử lý",
+    "time": "23/10/2026 12:20:38"
+  },
+  "SGABM0087": {
+    "status": "Đã xử lý",
+    "time": "23/10/2026 15:49:43"
+  },
+  "SGACE5631": {
+    "status": "Đã xử lý",
+    "time": "23/10/2026 17:15:29"
+  },
+  "SGAFW3622": {
+    "status": "Đã xử lý",
+    "time": "23/10/2026 18:05:05"
+  },
+  "SGH705505": {
+    "status": "Đã xử lý",
+    "time": "24/10/2026 14:57:14"
+  },
+  "SGAFP1532": {
+    "status": "Đã xử lý",
+    "time": "24/10/2026 14:57:41"
+  },
+  "SGH653051": {
+    "status": "Đã xử lý",
+    "time": "24/10/2026 14:58:08"
+  },
+  "SGAAS1251": {
+    "status": "Đã xử lý",
+    "time": "25/10/2026 11:22:13"
+  },
+  "SGAFW5344": {
+    "status": "Đã xử lý",
+    "time": "25/10/2026 15:33:16"
+  },
+  "SGACY3236": {
+    "status": "Đã xử lý",
+    "time": "25/10/2026 15:50:52"
+  },
+  "SGJ003531": {
+    "status": "Đã xử lý",
+    "time": "26/10/2026 07:36:37"
+  },
+  "SGAFW5201": {
+    "status": "Đã xử lý",
+    "time": "26/10/2026 09:58:02"
+  },
+  "SGAAE5666": {
+    "status": "Đã xử lý",
+    "time": "26/10/2026 10:29:53"
+  },
+  "SGABJ4085": {
+    "status": "Đã xử lý",
+    "time": "26/10/2026 11:32:03"
+  },
+  "SGD753734": {
+    "status": "Đã xử lý",
+    "time": "26/10/2026 16:12:11"
+  },
+  "SGAFW6770": {
+    "status": "Đã xử lý",
+    "time": "26/10/2026 17:08:17"
+  },
+  "SGAFW6178": {
+    "status": "Đã xử lý",
+    "time": "27/10/2026 09:07:10"
+  },
+  "SGH615366": {
+    "status": "Đã xử lý",
+    "time": "27/10/2026 09:16:41"
+  },
+  "SGAFW7743": {
+    "status": "Đã xử lý",
+    "time": "27/10/2026 09:55:21"
+  },
+  "SGD370426": {
+    "status": "Đã xử lý",
+    "time": "27/10/2026 10:26:11"
+  },
+  "SGAAY7070": {
+    "status": "Đã xử lý",
+    "time": "27/10/2026 11:46:35"
+  },
+  "SGAFV4926": {
+    "status": "Đã xử lý",
+    "time": "27/10/2026 16:43:51"
+  },
+  "SGAAZ1999": {
+    "status": "Đã xử lý",
+    "time": "27/10/2026 17:00:46"
+  },
+  "SGAEE1948": {
+    "status": "Đã xử lý",
+    "time": "27/10/2026 23:25:01"
+  },
+  "SGACU1104": {
+    "status": "Đã xử lý",
+    "time": "28/10/2026 10:58:04"
+  },
+  "SGAFW7190": {
+    "status": "Đã xử lý",
+    "time": "28/10/2026 10:59:43"
+  },
+  "SGAFW8529": {
+    "status": "Đã xử lý",
+    "time": "28/10/2026 11:07:00"
+  },
+  "SGAAW1389": {
+    "status": "Đã xử lý",
+    "time": "28/10/2026 12:39:59"
+  },
+  "SGABZ4420": {
+    "status": "Đã xử lý",
+    "time": "28/10/2026 12:40:28"
+  },
+  "SGH912166": {
+    "status": "Đã xử lý",
+    "time": "28/10/2026 17:13:22"
+  },
+  "SGAFW7770": {
+    "status": "Đã xử lý",
+    "time": "29/10/2026 08:36:11"
+  },
+  "SGAFW8775": {
+    "status": "Đã xử lý",
+    "time": "29/10/2026 11:13:25"
+  },
+  "SGAFH8693": {
+    "status": "Đã xử lý",
+    "time": "29/10/2026 12:48:53"
+  },
+  "SGJ110956": {
+    "status": "Đã xử lý",
+    "time": "29/10/2026 14:37:37"
+  },
+  "SGAAL9370": {
+    "status": "Đã xử lý",
+    "time": "29/10/2026 17:34:08"
+  },
+  "SGACL2792": {
+    "status": "Đã xử lý",
+    "time": "30/10/2026 08:08:02"
+  },
+  "TEST9999": {
+    "status": "Đã xử lý",
+    "time": "30/10/2026 13:51:18"
+  },
+  "TEST12312": {
+    "status": "Đã xử lý",
+    "time": "30/10/2026 13:55:51"
+  },
+  "SGAFX1874": {
+    "status": "Đã xử lý",
+    "time": "31/10/2026 12:42:54"
+  },
+  "SGAFX0737": {
+    "status": "Đã xử lý",
+    "time": "31/10/2026 12:43:20"
+  },
+  "SGAFX0456": {
+    "status": "Đã xử lý",
+    "time": "31/10/2026 15:00:49"
+  },
+  "SGAFX1849": {
+    "status": "Đã xử lý",
+    "time": "31/10/2026 15:12:59"
+  },
+  "SGAFX0794": {
+    "status": "Đã xử lý",
+    "time": "31/10/2026 17:20:19"
+  },
+  "SGH936610": {
+    "status": "Đã xử lý",
+    "time": "31/10/2026 17:28:08"
+  },
+  "SGH429017": {
+    "status": "Đã xử lý",
+    "time": "31/10/2026 17:35:09"
+  },
+  "SGH662596": {
+    "status": "Đã xử lý",
+    "time": "01/11/2026 09:00:36"
+  },
+  "SGJ017731": {
+    "status": "Đã xử lý",
+    "time": "01/11/2026 09:40:29"
+  },
+  "SGAFX1591": {
+    "status": "Đã xử lý",
+    "time": "01/11/2026 10:41:11"
+  },
+  "SGH708999": {
+    "status": "Đã xử lý",
+    "time": "01/11/2026 11:27:01"
+  },
+  "SGAEZ2329": {
+    "status": "Đã xử lý",
+    "time": "01/11/2026 12:16:16"
+  },
+  "SGH394523": {
+    "status": "Đã xử lý",
+    "time": "01/11/2026 14:24:52"
+  },
+  "SGAFW8269": {
+    "status": "Đã xử lý",
+    "time": "01/11/2026 14:33:30"
+  },
+  "SGAFX3602": {
+    "status": "Đã xử lý",
+    "time": "01/11/2026 15:25:14"
+  },
+  "SGJ020585": {
+    "status": "Đã xử lý",
+    "time": "01/11/2026 19:35:25"
+  },
+  "SGAFS1559": {
+    "status": "Đã xử lý",
+    "time": "02/11/2026 11:39:00"
+  },
+  "SGJ082898": {
+    "status": "Đã xử lý",
+    "time": "02/11/2026 12:19:19"
+  },
+  "SGAFX3066": {
+    "status": "Đã xử lý",
+    "time": "02/11/2026 15:46:47"
+  },
+  "SGAFX2186": {
+    "status": "Đã xử lý",
+    "time": "02/11/2026 16:58:29"
+  },
+  "SGAFX3030": {
+    "status": "Đã xử lý",
+    "time": "02/11/2026 17:16:37"
+  },
+  "SGAFX2835": {
+    "status": "Đã xử lý",
+    "time": "02/11/2026 17:17:33"
+  },
+  "SGAFT0337": {
+    "status": "Đã xử lý",
+    "time": "02/11/2026 17:19:40"
+  },
+  "SGAAQ3122": {
+    "status": "Đã xử lý",
+    "time": "02/11/2026 17:45:38"
+  },
+  "SGH540182": {
+    "status": "Đã xử lý",
+    "time": "02/11/2026 21:10:25"
+  },
+  "SGACN2026": {
+    "status": "Đã xử lý",
+    "time": "02/11/2026 21:10:53"
+  },
+  "SGAAX7023": {
+    "status": "Đã xử lý",
+    "time": "03/11/2026 10:19:30"
+  },
+  "SGAFX4765": {
+    "status": "Đã xử lý",
+    "time": "03/11/2026 13:02:25"
+  },
+  "SGAFX4855": {
+    "status": "Đã xử lý",
+    "time": "03/11/2026 13:35:09"
+  },
+  "SGAER3563": {
+    "status": "Đã xử lý",
+    "time": "03/11/2026 16:16:54"
+  },
+  "SGAFV4820": {
+    "status": "Đã xử lý",
+    "time": "03/11/2026 22:08:33"
+  },
+  "SGAFX3277": {
+    "status": "Đã xử lý",
+    "time": "03/11/2026 22:09:00"
+  },
+  "SGAFX3513": {
+    "status": "Đã xử lý",
+    "time": "04/11/2026 10:13:40"
+  },
+  "SGAFX3751": {
+    "status": "Đã xử lý",
+    "time": "04/11/2026 10:36:21"
+  },
+  "SGAFX4412": {
+    "status": "Đã xử lý",
+    "time": "04/11/2026 11:27:33"
+  },
+  "SGAFL2858": {
+    "status": "Đã xử lý",
+    "time": "04/11/2026 11:33:33"
+  },
+  "SGABH2498": {
+    "status": "Đã xử lý",
+    "time": "04/11/2026 12:56:53"
+  },
+  "SGABN5002": {
+    "status": "Đã xử lý",
+    "time": "04/11/2026 23:15:04"
+  },
+  "SGFD85396": {
+    "status": "Đã xử lý",
+    "time": "05/11/2026 11:53:17"
+  },
+  "SGABE7037": {
+    "status": "Đã xử lý",
+    "time": "05/11/2026 12:52:32"
+  },
+  "SGAET8151": {
+    "status": "Đã xử lý",
+    "time": "05/11/2026 16:19:17"
+  },
+  "SGAES1730": {
+    "status": "Đã xử lý",
+    "time": "05/11/2026 22:59:02"
+  },
+  "SGH774588": {
+    "status": "Đã xử lý",
+    "time": "06/11/2026 10:57:58"
+  },
+  "SGH263406_129": {
+    "status": "Không thành công : Trong 14N vi phạm 5 Hợp đồng ( cụ thể: SGAFT0337, SGH429017, SGAFX0794, SGAEE1948, SGAFW7743 ) Nhân sự thực hiện xử lý lại Suy Hao để được mở quyền Bypass",
+    "time": "05/11/2026 23:32:50",
+    "timestamp_epoch": 1793941229.4639606,
+    "force_override": true,
+    "ghi_chu": ""
+  },
+  "SGH263406_131": {
+    "status": "Không thành công : Trong 14N vi phạm 5 Hợp đồng ( cụ thể: SGAFT0337, SGH429017, SGAFX0794, SGAEE1948, SGAFW7743 ) Nhân sự thực hiện xử lý lại Suy Hao để được mở quyền Bypass",
+    "time": "06/11/2026 12:04:17",
+    "timestamp_epoch": 1793941457.6201088,
+    "force_override": true,
+    "ghi_chu": ""
+  },
+  "SGAET3862": {
+    "status": "Đã xử lý",
+    "time": "06/11/2026 12:23:48",
+    "timestamp_epoch": 1793942628.932895
+  },
+  "SGAET3862_132": {
+    "status": "Đã xử lý",
+    "time": "06/11/2026 12:23:48",
+    "timestamp_epoch": 1793942628.932895
+  },
+  "SGH829424": {
+    "status": "Đã xử lý",
+    "time": "06/11/2026 16:22:23",
+    "timestamp_epoch": 1793956943.2362278
+  },
+  "SGH829424_133": {
+    "status": "Đã xử lý",
+    "time": "06/11/2026 16:22:23",
+    "timestamp_epoch": 1793956943.2362278
+  },
+  "SGH123123": {
+    "status": "Không thành công : Trong 14N vi phạm 5 Hợp đồng ( cụ thể: SGAFT0337, SGH429017, SGAFX0794, SGAEE1948, SGAFW7743 ) Nhân sự thực hiện xử lý lại Suy Hao để được mở quyền Bypass",
+    "time": "06/11/2026 23:25:04",
+    "timestamp_epoch": 1793982304.3434038,
+    "force_override": true,
+    "ghi_chu": ""
+  },
+  "SGH123123_134": {
+    "status": "Không thành công : Trong 14N vi phạm 5 Hợp đồng ( cụ thể: SGAFT0337, SGH429017, SGAFX0794, SGAEE1948, SGAFW7743 ) Nhân sự thực hiện xử lý lại Suy Hao để được mở quyền Bypass",
+    "time": "06/11/2026 23:25:04",
+    "timestamp_epoch": 1793982304.3434038,
+    "force_override": true,
+    "ghi_chu": ""
+  },
+  "SGH124456": {
+    "status": "Không thành công : Trong 14N vi phạm 5 Hợp đồng ( cụ thể: SGAFT0337, SGH429017, SGAFX0794, SGAEE1948, SGAFW7743 ) Nhân sự thực hiện xử lý lại Suy Hao để được mở quyền Bypass",
+    "time": "06/11/2026 23:25:07",
+    "timestamp_epoch": 1793982307.9214034,
+    "force_override": true,
+    "ghi_chu": ""
+  },
+  "SGH124456_135": {
+    "status": "Không thành công : Trong 14N vi phạm 5 Hợp đồng ( cụ thể: SGAFT0337, SGH429017, SGAFX0794, SGAEE1948, SGAFW7743 ) Nhân sự thực hiện xử lý lại Suy Hao để được mở quyền Bypass",
+    "time": "06/11/2026 23:25:07",
+    "timestamp_epoch": 1793982307.9214034,
+    "force_override": true,
+    "ghi_chu": ""
+  },
+  "ABCH1234": {
+    "status": "Không thành công : Trong 14N vi phạm 5 Hợp đồng ( cụ thể: SGAFT0337, SGH429017, SGAFX0794, SGAEE1948, SGAFW7743 ) Nhân sự thực hiện xử lý lại Suy Hao để được mở quyền Bypass",
+    "time": "07/11/2026 00:08:05",
+    "timestamp_epoch": 1793984885.3353302,
+    "force_override": true,
+    "ghi_chu": ""
+  },
+  "ABCH1234_136": {
+    "status": "Không thành công : Trong 14N vi phạm 5 Hợp đồng ( cụ thể: SGAFT0337, SGH429017, SGAFX0794, SGAEE1948, SGAFW7743 ) Nhân sự thực hiện xử lý lại Suy Hao để được mở quyền Bypass",
+    "time": "07/11/2026 00:08:05",
+    "timestamp_epoch": 1793984885.3353302,
+    "force_override": true,
+    "ghi_chu": ""
+  },
+  "SGH896438": {
+    "status": "Đã xử lý",
+    "time": "07/11/2026 08:41:10",
+    "timestamp_epoch": 1794015670.7884238
+  },
+  "SGH896438_137": {
+    "status": "Đã xử lý",
+    "time": "07/11/2026 08:41:10",
+    "timestamp_epoch": 1794015670.7884238
+  },
+  "SGACV0762": {
+    "status": "Đã xử lý",
+    "time": "07/11/2026 09:53:47",
+    "timestamp_epoch": 1794020027.870482
+  },
+  "SGACV0762_138": {
+    "status": "Đã xử lý",
+    "time": "07/11/2026 09:50:09",
+    "timestamp_epoch": 1794019809.4310799
+  },
+  "SGACV0762_139": {
+    "status": "Đã xử lý",
+    "time": "07/11/2026 09:53:47",
+    "timestamp_epoch": 1794020027.870482
+  },
+  "SGAAT1375": {
+    "status": "Đã xử lý",
+    "time": "07/11/2026 10:25:11",
+    "timestamp_epoch": 1794021911.3483791
+  },
+  "SGAAT1375_140": {
+    "status": "Đã xử lý",
+    "time": "07/11/2026 10:25:11",
+    "timestamp_epoch": 1794021911.3483791
+  },
+  "SGJ128539": {
+    "status": "Đã xử lý",
+    "time": "07/11/2026 10:53:12",
+    "timestamp_epoch": 1794023592.534267
+  },
+  "SGJ128539_141": {
+    "status": "Đã xử lý",
+    "time": "07/11/2026 10:53:12",
+    "timestamp_epoch": 1794023592.534267
+  },
+  "SGAFX3033": {
+    "status": "Đã xử lý",
+    "time": "07/11/2026 12:11:42",
+    "timestamp_epoch": 1794028302.8264015
+  },
+  "SGAFX3033_142": {
+    "status": "Đã xử lý",
+    "time": "07/11/2026 12:11:42",
+    "timestamp_epoch": 1794028302.8264015
+  },
+  "SGAFX6445": {
+    "status": "Đã xử lý",
+    "time": "08/11/2026 09:01:05",
+    "timestamp_epoch": 1794103265.8507407
+  },
+  "SGAFX6445_143": {
+    "status": "Đã xử lý",
+    "time": "08/11/2026 09:01:05",
+    "timestamp_epoch": 1794103265.8507407
+  },
+  "SGAAN6292": {
+    "status": "Đã xử lý",
+    "time": "08/11/2026 10:42:21",
+    "timestamp_epoch": 1794109341.1943853
+  },
+  "SGAAN6292_144": {
+    "status": "Đã xử lý",
+    "time": "08/11/2026 10:42:21",
+    "timestamp_epoch": 1794109341.1943853
+  },
+  "SGACF6838": {
+    "status": "Đã xử lý",
+    "time": "08/11/2026 10:58:46",
+    "timestamp_epoch": 1794110326.302456
+  },
+  "SGACF6838_145": {
+    "status": "Đã xử lý",
+    "time": "08/11/2026 10:58:46",
+    "timestamp_epoch": 1794110326.302456
+  },
+  "SGH831116": {
+    "status": "Đã xử lý",
+    "time": "08/11/2026 12:12:22",
+    "timestamp_epoch": 1794114742.479748
+  },
+  "SGH831116_146": {
+    "status": "Đã xử lý",
+    "time": "08/11/2026 12:12:22",
+    "timestamp_epoch": 1794114742.479748
+  },
+  "SGAFM8397": {
+    "status": "Đã xử lý",
+    "time": "08/11/2026 17:35:21",
+    "timestamp_epoch": 1794134121.862927
+  },
+  "SGAFM8397_147": {
+    "status": "Đã xử lý",
+    "time": "08/11/2026 17:35:21",
+    "timestamp_epoch": 1794134121.862927
+  },
+  "SGH234348": {
+    "status": "Đã xử lý",
+    "time": "08/11/2026 17:37:05",
+    "timestamp_epoch": 1794134225.7311819
+  },
+  "SGH234348_148": {
+    "status": "Đã xử lý",
+    "time": "08/11/2026 17:37:05",
+    "timestamp_epoch": 1794134225.7311819
+  },
+  "SGAAQ8866": {
+    "status": "Đã xử lý",
+    "time": "08/11/2026 17:55:06",
+    "timestamp_epoch": 1794135306.567388
+  },
+  "SGAAQ8866_149": {
+    "status": "Đã xử lý",
+    "time": "08/11/2026 17:55:06",
+    "timestamp_epoch": 1794135306.567388
+  },
+  "SGAEN7886.2611061943": {
+    "status": "Đã xử lý",
+    "time": "09/11/2026 10:03:12",
+    "timestamp_epoch": 1794193392.658194
+  },
+  "SGAEN7886.2611061943_150": {
+    "status": "Đã xử lý",
+    "time": "09/11/2026 10:03:12",
+    "timestamp_epoch": 1794193392.658194
+  },
+  "SGAEN7886": {
+    "status": "Đã xử lý",
+    "time": "09/11/2026 10:03:55",
+    "timestamp_epoch": 1794193435.9021986
+  },
+  "SGAEN7886_151": {
+    "status": "Đã xử lý",
+    "time": "09/11/2026 10:03:55",
+    "timestamp_epoch": 1794193435.9021986
+  },
+  "SGACY7896": {
+    "status": "Đã xử lý",
+    "time": "09/11/2026 16:30:15",
+    "timestamp_epoch": 1794216615.6907449
+  },
+  "SGACY7896_152": {
+    "status": "Đã xử lý",
+    "time": "09/11/2026 16:30:15",
+    "timestamp_epoch": 1794216615.6907449
+  },
+  "SGAFX8858": {
+    "status": "Đã xử lý",
+    "time": "09/11/2026 16:30:42",
+    "timestamp_epoch": 1794216642.4023063
+  },
+  "SGAFX8858_153": {
+    "status": "Đã xử lý",
+    "time": "09/11/2026 16:30:42",
+    "timestamp_epoch": 1794216642.4023063
+  },
+  "SGAAG5372": {
+    "status": "Đã xử lý",
+    "time": "09/11/2026 16:35:30",
+    "timestamp_epoch": 1794216930.395191
+  },
+  "SGAAG5372_154": {
+    "status": "Đã xử lý",
+    "time": "09/11/2026 16:35:30",
+    "timestamp_epoch": 1794216930.395191
+  },
+  "SGAFC5382": {
+    "status": "Đã xử lý",
+    "time": "10/11/2026 08:08:38",
+    "timestamp_epoch": 1794272918.365914
+  },
+  "SGAFC5382_155": {
+    "status": "Đã xử lý",
+    "time": "10/11/2026 08:08:38",
+    "timestamp_epoch": 1794272918.365914
+  },
+  "SGAFX8617": {
+    "status": "Đã xử lý",
+    "time": "10/11/2026 09:58:21",
+    "timestamp_epoch": 1794279501.4695902
+  },
+  "SGAFX8617_156": {
+    "status": "Đã xử lý",
+    "time": "10/11/2026 09:58:21",
+    "timestamp_epoch": 1794279501.4695902
+  },
+  "SGH810389": {
+    "status": "Đã xử lý",
+    "time": "10/11/2026 10:15:03",
+    "timestamp_epoch": 1794280503.0714443
+  },
+  "SGH810389_157": {
+    "status": "Không thành công : Trong 14N vi phạm 2 Hợp đồng ( cụ thể: SGAFV4820, SGACL2792 ) Nhân sự thực hiện xử lý lại Suy Hao để được mở quyền Bypass",
+    "time": "10/11/2026 10:05:00",
+    "timestamp_epoch": 1794279900.964306,
+    "force_override": true,
+    "ghi_chu": ""
+  },
+  "SGH810389_158": {
+    "status": "Đã xử lý",
+    "time": "10/11/2026 10:15:03",
+    "timestamp_epoch": 1794280503.0714443
+  },
+  "SGAFX8676": {
+    "status": "Đã xử lý",
+    "time": "10/11/2026 11:02:31",
+    "timestamp_epoch": 1794283351.2967389
+  },
+  "SGAFX8676_159": {
+    "status": "Đã xử lý",
+    "time": "10/11/2026 11:02:31",
+    "timestamp_epoch": 1794283351.2967389
+  },
+  "SGAFX6763": {
+    "status": "Đã xử lý",
+    "time": "10/11/2026 12:19:07",
+    "timestamp_epoch": 1794287947.564069
+  },
+  "SGAFX6763_160": {
+    "status": "Đã xử lý",
+    "time": "10/11/2026 12:19:07",
+    "timestamp_epoch": 1794287947.564069
+  },
+  "SGAFX7392": {
+    "status": "Đã xử lý",
+    "time": "10/11/2026 13:44:04",
+    "timestamp_epoch": 1794293044.921081
+  },
+  "SGAFX7392_161": {
+    "status": "Đã xử lý",
+    "time": "10/11/2026 13:44:04",
+    "timestamp_epoch": 1794293044.921081
+  },
+  "SGJ071823": {
+    "status": "Đã xử lý",
+    "time": "10/11/2026 14:44:11",
+    "timestamp_epoch": 1794296651.7348633
+  },
+  "SGJ071823_162": {
+    "status": "Đã xử lý",
+    "time": "10/11/2026 14:43:15",
+    "timestamp_epoch": 1794296595.805739
+  },
+  "SGJ071823_163": {
+    "status": "Đã xử lý",
+    "time": "10/11/2026 14:44:11",
+    "timestamp_epoch": 1794296651.7348633
+  },
+  "SGJ120305": {
+    "status": "Đã xử lý",
+    "time": "10/11/2026 15:06:00",
+    "timestamp_epoch": 1794297960.7211776
+  },
+  "SGJ120305_164": {
+    "status": "Đã xử lý",
+    "time": "10/11/2026 15:06:00",
+    "timestamp_epoch": 1794297960.7211776
+  },
+  "SGABC5244": {
+    "status": "Không thành công : Trong 14N vi phạm 3 Hợp đồng ( cụ thể: SGAFX3033, SGACV0762, SGAAW1389 ) Nhân sự thực hiện xử lý lại Suy Hao để được mở quyền Bypass",
+    "time": "10/11/2026 16:44:18",
+    "timestamp_epoch": 1794303858.4170122,
+    "force_override": true,
+    "ghi_chu": ""
+  },
+  "SGABC5244_165": {
+    "status": "Không thành công : Trong 14N vi phạm 3 Hợp đồng ( cụ thể: SGAFX3033, SGACV0762, SGAAW1389 ) Nhân sự thực hiện xử lý lại Suy Hao để được mở quyền Bypass",
+    "time": "10/11/2026 16:44:18",
+    "timestamp_epoch": 1794303858.4170122,
+    "force_override": true,
+    "ghi_chu": ""
+  },
+  "SGH497743": {
+    "status": "Đã xử lý",
+    "time": "11/11/2026 08:30:22",
+    "timestamp_epoch": 1794360622.5523384
+  },
+  "SGH497743_158": {
+    "status": "Đã xử lý",
+    "time": "11/11/2026 08:30:22",
+    "timestamp_epoch": 1794360622.5523384
+  },
+  "SGAAS0789": {
+    "status": "Đã xử lý",
+    "time": "11/11/2026 09:45:28",
+    "timestamp_epoch": 1794365128.8549438
+  },
+  "SGAAS0789_160": {
+    "status": "Đã xử lý",
+    "time": "11/11/2026 09:45:28",
+    "timestamp_epoch": 1794365128.8549438
+  },
+  "SGAFX5748": {
+    "status": "Đã xử lý",
+    "time": "11/11/2026 09:46:18",
+    "timestamp_epoch": 1794365178.9864078
+  },
+  "SGAFX5748_159": {
+    "status": "Đã xử lý",
+    "time": "11/11/2026 09:46:18",
+    "timestamp_epoch": 1794365178.9864078
+  },
+  "SGAEU3140": {
+    "status": "Đã xử lý",
+    "time": "11/11/2026 10:20:25",
+    "timestamp_epoch": 1794367225.7658057
+  },
+  "SGAEU3140_161": {
+    "status": "Đã xử lý",
+    "time": "11/11/2026 10:15:45",
+    "timestamp_epoch": 1794366945.517898
+  },
+  "SGAEU3140_162": {
+    "status": "Đã xử lý",
+    "time": "11/11/2026 10:20:25",
+    "timestamp_epoch": 1794367225.7658057
+  },
+  "SGACZ2903": {
+    "status": "Đã xử lý",
+    "time": "11/11/2026 10:40:08",
+    "timestamp_epoch": 1794368408.1692908
+  },
+  "SGACZ2903_163": {
+    "status": "Đã xử lý",
+    "time": "11/11/2026 10:40:08",
+    "timestamp_epoch": 1794368408.1692908
+  },
+  "SGJ036877": {
+    "status": "Đã xử lý",
+    "time": "11/11/2026 10:42:04",
+    "timestamp_epoch": 1794368524.529444
+  },
+  "SGJ036877_164": {
+    "status": "Đã xử lý",
+    "time": "11/11/2026 10:42:04",
+    "timestamp_epoch": 1794368524.529444
+  },
+  "SGH548041": {
+    "status": "Đã xử lý",
+    "time": "11/11/2026 13:38:01",
+    "timestamp_epoch": 1794379081.3935578
+  },
+  "SGH548041_165": {
+    "status": "Đã xử lý",
+    "time": "11/11/2026 12:28:31",
+    "timestamp_epoch": 1794374911.5255923
+  },
+  "SGH548041_166": {
+    "status": "Đã xử lý",
+    "time": "11/11/2026 13:38:01",
+    "timestamp_epoch": 1794379081.3935578
+  },
+  "SGAFX8350": {
+    "status": "Đã xử lý",
+    "time": "11/11/2026 14:37:38",
+    "timestamp_epoch": 1794382658.7467484
+  },
+  "SGAFX8350_167": {
+    "status": "Đã xử lý",
+    "time": "11/11/2026 14:37:38",
+    "timestamp_epoch": 1794382658.7467484
+  },
+  "SGD798151": {
+    "status": "Đã xử lý",
+    "time": "11/11/2026 15:24:50",
+    "timestamp_epoch": 1794385490.7509024
+  },
+  "SGD798151_168": {
+    "status": "Đã xử lý",
+    "time": "11/11/2026 15:10:16",
+    "timestamp_epoch": 1794384616.5862653
+  },
+  "SGD798151_169": {
+    "status": "Đã xử lý",
+    "time": "11/11/2026 15:24:50",
+    "timestamp_epoch": 1794385490.7509024
+  },
+  "SGAFP1932": {
+    "status": "Đã xử lý",
+    "time": "11/11/2026 15:41:23",
+    "timestamp_epoch": 1794386483.111772
+  },
+  "SGAFP1932_170": {
+    "status": "Đã xử lý",
+    "time": "11/11/2026 15:41:23",
+    "timestamp_epoch": 1794386483.111772
+  },
+  "SGAFY1398": {
+    "status": "Đã xử lý",
+    "time": "12/11/2026 12:00:33",
+    "timestamp_epoch": 1794459633.361889
+  },
+  "SGAFY1398_171": {
+    "status": "Đã xử lý",
+    "time": "12/11/2026 12:00:33",
+    "timestamp_epoch": 1794459633.361889
+  },
+  "SGABZ4048": {
+    "status": "Đã xử lý",
+    "time": "12/11/2026 13:23:08",
+    "timestamp_epoch": 1794464588.944033
+  },
+  "SGABZ4048_172": {
+    "status": "Đã xử lý",
+    "time": "12/11/2026 13:23:08",
+    "timestamp_epoch": 1794464588.944033
+  },
+  "SGAFY0364": {
+    "status": "Đã xử lý",
+    "time": "12/11/2026 13:26:40",
+    "timestamp_epoch": 1794464800.703264
+  },
+  "SGAFY0364_173": {
+    "status": "Đã xử lý",
+    "time": "12/11/2026 13:26:40",
+    "timestamp_epoch": 1794464800.703264
+  },
+  "SGAEY6646": {
+    "status": "Đã xử lý",
+    "time": "12/11/2026 16:01:16",
+    "timestamp_epoch": 1794474076.3496566
+  },
+  "SGAEY6646_174": {
+    "status": "Đã xử lý",
+    "time": "12/11/2026 16:01:16",
+    "timestamp_epoch": 1794474076.3496566
+  },
+  "SGAFY1402": {
+    "status": "Không thành công : Trong 14N vi phạm 2 Hợp đồng ( cụ thể: SGAEY6646, SGAES1730 ) Nhân sự thực hiện xử lý lại Suy Hao để được mở quyền Bypass",
+    "time": "13/11/2026 08:42:21",
+    "timestamp_epoch": 1794534141.0330148,
+    "force_override": true,
+    "ghi_chu": ""
+  },
+  "SGAFY1402_175": {
+    "status": "Không thành công : Trong 14N vi phạm 2 Hợp đồng ( cụ thể: SGAEY6646, SGAES1730 ) Nhân sự thực hiện xử lý lại Suy Hao để được mở quyền Bypass",
+    "time": "13/11/2026 08:42:21",
+    "timestamp_epoch": 1794534141.0330148,
+    "force_override": true,
+    "ghi_chu": ""
+  },
+  "SGAFY2210": {
+    "status": "Đã xử lý",
+    "time": "13/11/2026 09:02:59",
+    "timestamp_epoch": 1794535379.0902138
+  },
+  "SGAFY2210_176": {
+    "status": "Đã xử lý",
+    "time": "13/11/2026 09:02:59",
+    "timestamp_epoch": 1794535379.0902138
   }
 }

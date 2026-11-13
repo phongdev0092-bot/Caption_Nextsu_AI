@@ -3,7 +3,11 @@ from PyInstaller.utils.hooks import collect_all
 
 datas = [('templates', 'templates'), ('static', 'static'), ('config.json', '.'), ('Template_Danh_Sach_Hop_Dong.xlsx', '.')]
 binaries = []
-hiddenimports = ['zstandard', 'openpyxl', 'pandas', 'pyotp']
+hiddenimports = [
+    'zstandard', 'openpyxl', 'pandas', 'pyotp', 'selenium', 'bs4', 'PIL',
+    'core_login', 'inside_scraper', 'inside_bypass', 'inside_cls',
+    'inside_assign', 'inside_signal', 'inside_mybae', 'inside_spampool'
+]
 tmp_ret = collect_all('pyzbar')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 

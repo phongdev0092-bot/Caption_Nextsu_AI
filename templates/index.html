@@ -8,12 +8,6 @@
   ============================================================
 #}
 {% set STUB_TABS = [
-  {"key": "bypass-mybae", "panel_id": "tab-bypass-mybae", "btn_id": "tabBtn6", "title": "Auto Bypass MyBAE", "short": "Bypass MyBAE", "icon": "⚡", "color": "orange",
-   "desc": "Tự động bypass các bước kiểm tra trên MyBAE cho hợp đồng đủ điều kiện.",
-   "steps": ["Đọc danh sách SHD", "Đăng nhập MyBAE", "Tra cứu hợp đồng", "Thực hiện bypass", "Ghi kết quả"]},
-  {"key": "ipv6", "panel_id": "tab-ipv6", "btn_id": "tabBtn7", "title": "Auto Pool/ Deactive IPv6", "short": "Pool/Deactive IPv6", "icon": "🌐", "color": "teal",
-   "desc": "Tự động Pool hoặc Deactive IPv6 cho thuê bao theo danh sách hợp đồng.",
-   "steps": ["Đọc danh sách SHD", "Tra cứu thuê bao", "Chọn Pool / Deactive", "Xác nhận thao tác", "Ghi kết quả"]},
   {"key": "finish-ptc", "panel_id": "tab-finish-ptc", "btn_id": "tabBtn8", "title": "Auto Hoàn Tất PTC/PBT", "short": "Hoàn Tất PTC/PBT", "icon": "✅", "color": "emerald",
    "desc": "Tự động hoàn tất Phiếu Thi Công (PTC) và Phiếu Bảo Trì (PBT) đủ điều kiện.",
    "steps": ["Đọc danh sách phiếu", "Mở phiếu trên Inside", "Kiểm tra điều kiện", "Hoàn tất phiếu", "Ghi kết quả"]},
@@ -35,6 +29,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&family=Roboto:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   
+  <!-- Chart.js for MUI Analytics Charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -94,6 +91,10 @@
         {% include "components/tabs/assign.html" %}
         {% include "components/tabs/clear_signal.html" %}
         {% include "components/tabs/reset_signal.html" %}
+        {% include "components/tabs/mybae.html" %}
+        {% include "components/tabs/spampool.html" %}
+        {% include "components/tabs/bypass_nat.html" %}
+        {% include "components/tabs/port_manage.html" %}
         {% include "components/tabs/stub_tabs.html" %}
 
       </main>
@@ -109,19 +110,25 @@
   {% include "components/modals/snackbar.html" %}
 
   <!-- JS: thứ tự quan trọng (dùng chung scope toàn cục) -->
-  <script src="/static/js/core/dom.js?v=3.1"></script>
-  <script src="/static/js/core/shell.js?v=3.1"></script>
-  <script src="/static/js/core/tabs.js?v=3.1"></script>
-  <script src="/static/js/components/retrieval.js?v=3.1"></script>
-  <script src="/static/js/components/login.js?v=3.1"></script>
-  <script src="/static/js/components/import.js?v=3.1"></script>
-  <script src="/static/js/components/settings.js?v=3.1"></script>
-  <script src="/static/js/components/bypass.js?v=3.1"></script>
-  <script src="/static/js/components/clear_cls.js?v=3.1"></script>
-  <script src="/static/js/components/assign.js?v=3.1"></script>
-  <script src="/static/js/components/clear_signal.js?v=3.1"></script>
-  <script src="/static/js/components/reset_signal.js?v=3.1"></script>
-  <script src="/static/js/components/stub_tabs.js?v=3.1"></script>
-  <script src="/static/js/main.js?v=3.1"></script>
+  <script src="/static/js/core/dom.js?v=3.7"></script>
+  <script src="/static/js/core/shell.js?v=3.7"></script>
+  <script src="/static/js/core/tabs.js?v=3.7"></script>
+  <script src="/static/js/components/retrieval.js?v=3.7"></script>
+  <script src="/static/js/components/login.js?v=3.7"></script>
+  <script src="/static/js/components/import.js?v=3.7"></script>
+  <script src="/static/js/components/settings.js?v=3.7"></script>
+  <script src="/static/js/components/bypass.js?v=4.0"></script>
+  <script src="/static/js/components/clear_cls.js?v=3.7"></script>
+  <script src="/static/js/components/assign.js?v=3.7"></script>
+  <script src="/static/js/components/clear_signal.js?v=3.7"></script>
+  <script src="/static/js/components/reset_signal.js?v=3.7"></script>
+  <script src="/static/js/components/mybae.js?v=3.7"></script>
+  <script src="/static/js/components/spampool.js?v=3.9"></script>
+  <script src="/static/js/components/bypass_nat.js?v=3.9"></script>
+  <script src="/static/js/components/port_manage.js?v=1.3"></script>
+  <script src="/static/js/components/stub_tabs.js?v=3.7"></script>
+  <script src="/static/js/core/unified_tabs.js?v=4.2"></script>
+  <script src="/static/js/main.js?v=3.8"></script>
+  <script src="/static/js/core/auto_monitor.js?v=1.3"></script>
 </body>
 </html>

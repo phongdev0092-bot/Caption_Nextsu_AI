@@ -34,6 +34,8 @@ const autoResetSignalModeText       = document.getElementById('autoResetSignalMo
 const autoResetSignalModeDot        = document.getElementById('autoResetSignalModeDot');
 const resetSignalLogTerminal        = document.getElementById('resetSignalLogTerminal');
 const btnClearResetSignalLogs       = document.getElementById('btnClearResetSignalLogs');
+const selectDateFilterResetSignal   = document.getElementById('selectDateFilterResetSignal');
+const btnClearResetSignalCache      = document.getElementById('btnClearResetSignalCache');
 
 let currentResetSignalRecords  = [];
 let selectedResetSignalShds    = new Set();
@@ -139,7 +141,14 @@ if (btnAutoResetSignalModeToggle) {
 
 function _isResetSignalFinalDone(r) {
   const kq = String(r['Kết Quả'] || '').trim().toLowerCase();
-  return kq.includes('thành công') || kq.includes('đã xử lý') || kq.includes('lỗi') || kq.includes('thất bại') || kq.includes('không thành công');
+  return kq.includes('thành công')
+      || kq.includes('đã xử lý')
+      || kq.includes('đã cấp')
+      || kq.includes('cấp lại')
+      || kq.includes('tự động')
+      || kq.includes('lỗi')
+      || kq.includes('thất bại')
+      || kq.includes('không thành công');
 }
 
 function checkAndAutoTriggerResetSignal() {
@@ -194,7 +203,8 @@ function updateResetSignalKPIs() {
 
   currentResetSignalRecords.forEach(r => {
     const kq = String(r['Kết Quả'] || '').trim().toLowerCase();
-    if (kq.includes('thành công') || kq.includes('đã xử lý')) {
+    if (kq.includes('thành công') || kq.includes('đã xử lý')
+        || kq.includes('đã cấp') || kq.includes('cấp lại') || kq.includes('tự động')) {
       done++;
     } else if (kq.includes('lỗi') || kq.includes('thất bại') || kq.includes('không thành công')) {
       error++;
@@ -210,54 +220,106 @@ function updateResetSignalKPIs() {
   if (badgeResetSignalPending)badgeResetSignalPending.textContent= `${pending} chờ xử lý`;
 }
 
+let currentResetSignalPage = 1;
+
 function renderResetSignalTable() {
   if (!tbodyResetSignalList) return;
 
+  const dateFilter = selectDateFilterResetSignal ? selectDateFilterResetSignal.value : 'today';
   const keyword = inputSearchResetSignal ? inputSearchResetSignal.value.trim().toLowerCase() : '';
   const filterStatus = selectResetSignalFilterStatus ? selectResetSignalFilterStatus.value : 'all';
 
-  const filtered = currentResetSignalRecords.filter(r => {
+  // Apply unified date filtering first
+  let dateFiltered = currentResetSignalRecords;
+  if (window.UnifiedWorkTabs && typeof window.UnifiedWorkTabs.filterRecords === 'function') {
+    dateFiltered = window.UnifiedWorkTabs.filterRecords(currentResetSignalRecords, dateFilter);
+  }
+
+  // Render Charts & Top Staff
+  if (window.UnifiedWorkTabs) {
+    if (typeof window.UnifiedWorkTabs.updateDailyChart === 'function') {
+      window.UnifiedWorkTabs.updateDailyChart('resetSignalDailyChart', currentResetSignalRecords, dateFilter);
+    }
+    if (typeof window.UnifiedWorkTabs.updateTopStaff === 'function') {
+      window.UnifiedWorkTabs.updateTopStaff('resetSignalTopStaffContainer', currentResetSignalRecords, dateFilter);
+    }
+  }
+
+  const filtered = dateFiltered.filter(r => {
     if (filterStatus === 'pending' && _isResetSignalFinalDone(r)) return false;
-    if (filterStatus === 'done' && !String(r['Kết Quả'] || '').toLowerCase().includes('thành công') && !String(r['Kết Quả'] || '').toLowerCase().includes('đã xử lý')) return false;
+    if (filterStatus === 'done' && !_isResetSignalFinalDone(r)) return false;
     if (filterStatus === 'error' && !String(r['Kết Quả'] || '').toLowerCase().includes('lỗi') && !String(r['Kết Quả'] || '').toLowerCase().includes('thất bại')) return false;
 
     if (!keyword) return true;
     const shd = String(r['SHD'] || '').toLowerCase();
     const ten = String(r['Họ và Tên'] || '').toLowerCase();
     const mail= String(r['Email'] || '').toLowerCase();
-    return shd.includes(keyword) || ten.includes(keyword) || mail.includes(keyword);
+    const nguon= String(r['Nguồn'] || r['Nguon'] || '').toLowerCase();
+    return shd.includes(keyword) || ten.includes(keyword) || mail.includes(keyword) || nguon.includes(keyword);
   });
 
+  // Đảm bảo luôn sắp xếp từ gần nhất đến xa nhất (mới nhất lên đầu)
+  const sortedFiltered = (window.UnifiedWorkTabs && typeof window.UnifiedWorkTabs.sortRecordsNewestFirst === 'function')
+    ? window.UnifiedWorkTabs.sortRecordsNewestFirst(filtered)
+    : filtered;
+
   if (resetSignalTableFooterText) {
-    resetSignalTableFooterText.textContent = `Hiển thị ${filtered.length} / ${currentResetSignalRecords.length} bản ghi`;
+    resetSignalTableFooterText.textContent = `Hiển thị ${sortedFiltered.length} / ${currentResetSignalRecords.length} bản ghi`;
   }
   if (resetSignalSelectedCountText) {
     resetSignalSelectedCountText.textContent = `(${selectedResetSignalShds.size} HĐ đã chọn)`;
   }
 
-  if (filtered.length === 0) {
+  if (sortedFiltered.length === 0) {
     tbodyResetSignalList.innerHTML = `
       <tr>
-        <td colspan="8" class="text-center py-8 text-slate-400">
+        <td colspan="9" class="text-center py-8 text-slate-400">
           Không tìm thấy hợp đồng Cấp Lại Tín Hiệu phù hợp
         </td>
       </tr>`;
+    if (window.UnifiedWorkTabs) {
+      window.UnifiedWorkTabs.renderPagination('resetSignalPagination', { total: 0 });
+    }
     return;
   }
 
-  tbodyResetSignalList.innerHTML = filtered.map((r, idx) => {
+  // Phân trang 10 dòng 1 trang
+  const pageState = window.UnifiedWorkTabs
+    ? window.UnifiedWorkTabs.paginate(sortedFiltered, currentResetSignalPage, 10)
+    : { items: sortedFiltered.slice(0, 10), currentPage: 1, totalPages: Math.ceil(sortedFiltered.length / 10), total: sortedFiltered.length, startIdx: 0, endIdx: Math.min(10, sortedFiltered.length) };
+  currentResetSignalPage = pageState.currentPage;
+
+  tbodyResetSignalList.innerHTML = pageState.items.map((r, idx) => {
+    const globalIdx = pageState.startIdx + idx;
     const shd = r['SHD'] || '';
     const isChecked = selectedResetSignalShds.has(shd) ? 'checked' : '';
     const kq = r['Kết Quả'] || '';
     const kqLower = kq.toLowerCase();
 
     let badgeClass = 'bg-amber-50 text-amber-700 border-amber-200';
-    let badgeText = kq || 'Chưa xử lý';
+    let badgeText = kq || 'Chưa cập nhật';
 
-    if (kqLower.includes('thành công') || kqLower.includes('đã xử lý')) {
+    const _isDone   = kqLower.includes('thành công') || kqLower.includes('đã xử lý')
+                   || kqLower.includes('đã cấp')     || kqLower.includes('cấp lại')
+                   || kqLower.includes('tự động');
+    const _isError  = kqLower.includes('lỗi') || kqLower.includes('thất bại') || kqLower.includes('không thành công');
+    const _isPending = !kq || kqLower.includes('chưa');
+
+    if (_isDone) {
       badgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
-    } else if (kqLower.includes('lỗi') || kqLower.includes('thất bại') || kqLower.includes('không thành công')) {
+    } else if (_isError) {
       badgeClass = 'bg-rose-50 text-rose-700 border-rose-200';
+    } else if (_isPending) {
+      badgeClass = 'bg-amber-50 text-amber-700 border-amber-200';
+      badgeText  = kq || 'Chưa cập nhật';
+    }
+
+    const nguon = r['Nguồn'] || r['Nguon'] || 'User';
+    let nguonBadgeClass = 'bg-blue-50 text-blue-700 border-blue-200';
+    let nguonIcon = '👤';
+    if (nguon.includes('Auto') || nguon.includes('72H') || nguon.includes('72h')) {
+      nguonBadgeClass = 'bg-purple-50 text-purple-700 border-purple-200 font-semibold';
+      nguonIcon = '🤖';
     }
 
     return `
@@ -265,11 +327,17 @@ function renderResetSignalTable() {
         <td class="p-3 text-center">
           <input type="checkbox" class="chk-reset-signal-row rounded text-purple-600" data-shd="${shd}" ${isChecked}>
         </td>
-        <td class="p-3 text-center font-semibold text-slate-500">${idx + 1}</td>
+        <td class="p-3 text-center font-semibold text-slate-500">${globalIdx + 1}</td>
         <td class="p-3 font-semibold text-slate-800">${r['Họ và Tên'] || '-'}</td>
         <td class="p-3 text-slate-600 text-xs">${r['Email'] || '-'}</td>
         <td class="p-3 font-mono font-bold text-purple-700">${shd || '-'}</td>
         <td class="p-3 text-slate-500 text-xs">${r['Ngày Cập Nhật'] || '-'}</td>
+        <td class="p-3 text-center">
+          <span class="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] rounded-full border ${nguonBadgeClass}">
+            <span>${nguonIcon}</span>
+            <span>${nguon}</span>
+          </span>
+        </td>
         <td class="p-3 text-center">
           <span class="inline-block px-2.5 py-1 text-[11px] font-semibold rounded-full border ${badgeClass}">
             ${badgeText}
@@ -283,6 +351,14 @@ function renderResetSignalTable() {
       </tr>
     `;
   }).join('');
+
+  // Render pagination controls
+  if (window.UnifiedWorkTabs) {
+    window.UnifiedWorkTabs.renderPagination('resetSignalPagination', pageState, (newPage) => {
+      currentResetSignalPage = newPage;
+      renderResetSignalTable();
+    });
+  }
 
   // Row selection handler
   tbodyResetSignalList.querySelectorAll('.chk-reset-signal-row').forEach(cb => {
@@ -317,12 +393,24 @@ if (chkResetSignalSelectAll) {
   });
 }
 
-if (inputSearchResetSignal) inputSearchResetSignal.addEventListener('input', renderResetSignalTable);
-if (selectResetSignalFilterStatus) selectResetSignalFilterStatus.addEventListener('change', renderResetSignalTable);
+if (inputSearchResetSignal) inputSearchResetSignal.addEventListener('input', () => { currentResetSignalPage = 1; renderResetSignalTable(); });
+if (selectResetSignalFilterStatus) selectResetSignalFilterStatus.addEventListener('change', () => { currentResetSignalPage = 1; renderResetSignalTable(); });
+if (selectDateFilterResetSignal)   selectDateFilterResetSignal.addEventListener('change',   () => { currentResetSignalPage = 1; renderResetSignalTable(); });
 if (btnRefreshResetSignalSheetData) {
   btnRefreshResetSignalSheetData.addEventListener('click', () => {
     showSnackbar('🔄 Đang tải lại dữ liệu Cấp Lại Tín Hiệu từ Google Sheet...');
     loadResetSignalSheetData();
+  });
+}
+if (btnClearResetSignalCache) {
+  btnClearResetSignalCache.addEventListener('click', async () => {
+    try {
+      await fetch('/api/reset-signal/clear-cache', { method: 'POST' });
+      showSnackbar('🧹 Đã xóa bộ nhớ đệm Cấp Lại Tín Hiệu!');
+      loadResetSignalSheetData();
+    } catch (e) {
+      showSnackbar('Không thể xóa cache Cấp Lại Tín Hiệu');
+    }
   });
 }
 

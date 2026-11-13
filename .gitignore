@@ -13,5 +13,16 @@ dist/
 retrieval_history.json.zst
 DevToolsActivePort
 
-# Temporary caches
+# Temporary caches & Browser Profiles
 *.tmp
+*_SessionProfile/
+InsideFPT_SessionProfile/
+RadiusPortal_SessionProfile/
+Port_SessionProfile/
+
+# Auto Import secrets, cookies, logs, temp & virtualenv
+.env
+inside_session_cookies.json
+logs/
+tmp_auto_import/
+.venv/

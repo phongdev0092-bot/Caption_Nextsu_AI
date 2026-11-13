@@ -4,135 +4,82 @@
         <!-- ======================================================== -->
         <section class="tab-panel" id="tab-manual-assign">
 
-          <!-- Header -->
-          <div class="flex items-center justify-between flex-wrap gap-3 bg-white p-3 rounded-2xl border border-slate-200/80 shadow-sm">
-            <div class="flex items-center gap-2">
-              <div class="px-4 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-sky-600 to-cyan-500 text-white shadow-sm flex items-center gap-2">
-                <span>🧭 Quản Lý Phân Công Tay (Google Sheet GID: 909147347)</span>
-                <span class="px-2 py-0.5 text-[10px] bg-white/20 rounded-md font-bold" id="badgeAssignPending">0 chờ xử lý</span>
+          <!-- Unified Header Action Bar -->
+          <div class="flex items-center justify-between flex-wrap gap-3 bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-sm mb-4">
+            <div class="flex items-center gap-2.5 flex-wrap">
+              <div class="px-3.5 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-sky-600 to-cyan-500 text-white shadow-sm flex items-center gap-2">
+                <span>🧭 Auto Phân Công Tay</span>
+                <span class="px-2 py-0.5 text-[10px] bg-white/20 rounded-md font-bold" id="badgeAssignPending">0 chờ</span>
               </div>
             </div>
 
-            <!-- Sheet Link & Sync -->
-            <div class="flex items-center gap-2 flex-wrap text-xs">
-              <a href="https://docs.google.com/spreadsheets/d/1Sw-qSbLzvVdcW4rj7ywEZBEzKI6w5M82EQeYJUpdx7M/edit#gid=909147347"
-                 target="_blank"
-                 class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 font-medium transition-all"
-                 title="Mở trực tiếp tab Phân Công Tay trên Google Sheet">
-                <span class="text-sm">📊</span>
-                <span>Mở Google Sheet</span>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-              </a>
+            <!-- Controls: Date filter, Auto 4s, Chrome switch, Run button & SpeedDial -->
+            <div class="flex items-center gap-2.5 flex-wrap text-xs">
+              <!-- Bộ Lọc Thời Gian -->
+              <div class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 hover:border-sky-400 transition-all">
+                <span>📅</span>
+                <select id="selectDateFilterAssign" class="bg-transparent outline-none cursor-pointer font-medium text-slate-700">
+                  <option value="today" selected>Hôm nay</option>
+                  <option value="all">Tất cả thời gian</option>
+                  <option value="7days">7 ngày qua</option>
+                  <option value="30days">30 ngày qua</option>
+                </select>
+              </div>
 
+              <!-- Mở Chrome Switch (Mặc định TẮT) -->
+              <label class="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 transition-all" title="Bật nếu muốn xem cửa sổ Chrome trực tiếp">
+                <input type="checkbox" id="chkAssignVisible" class="rounded text-sky-600 cursor-pointer">
+                <span>👁️ Mở Chrome</span>
+              </label>
+
+              <!-- Auto Mode Toggle (Mặc định BẬT đọc sheet 4s) -->
               <button type="button"
-                class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 font-medium transition-all"
-                id="btnRefreshAssignSheetData" title="Tải lại dữ liệu mới nhất từ Google Sheet GID 909147347">
-                <span>🔄 Tải Lại Sheet</span>
+                id="btnAutoAssignModeToggle"
+                class="flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold border-2 border-emerald-500 bg-emerald-50 text-emerald-700 transition-all shadow-sm cursor-pointer"
+                title="Tự động đồng bộ Sheet 4s/lần và tự chạy khi có HĐ chưa xử lý">
+                <span id="autoAssignModeIcon">🤖</span>
+                <span id="autoAssignModeText">Auto 4s: BẬT</span>
+                <span id="autoAssignModeDot" class="w-2 h-2 rounded-full bg-emerald-600 transition-all animate-pulse"></span>
               </button>
 
-              <button type="button"
-                class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 font-medium transition-all cursor-pointer"
-                id="btnExportAssignData" title="Xuất dữ liệu Phân Công Tay đã xử lý ra file Excel">
-                <span class="text-sm">📥</span>
-                <span>Xuất Data Xử Lý</span>
+              <!-- Nút Bắt Đầu / Dừng Auto -->
+              <button type="button" class="mui-btn bg-sky-600 hover:bg-sky-700 text-white flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-xl shadow-md transition-all cursor-pointer" id="btnRunAutoAssign">
+                <span class="btn-spinner" id="assignSpinner" style="display:none;"></span>
+                <span id="assignRunIcon">🚀</span>
+                <span id="assignRunText">Bắt Đầu Auto</span>
               </button>
-            </div>
-          </div>
 
-          <!-- Webhook Sync Bar -->
-          <div class="mui-card p-3.5 bg-gradient-to-r from-sky-50/60 via-white to-slate-50 border border-sky-200/80 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs mb-4 shadow-sm">
-            <div class="flex items-center gap-2.5 flex-1 min-w-[320px]">
-              <span class="p-2 bg-sky-100 text-sky-700 rounded-xl text-lg flex items-center justify-center">🧭</span>
-              <div class="flex-1">
-                <div class="font-bold text-slate-800 text-[12px] flex items-center gap-2">
-                  <span>Google Sheet Webhook Phân Công Tay (Tự động cập nhật Kết quả &amp; Thao tác)</span>
-                  <span class="text-[10px] px-2 py-0.5 rounded-full font-medium bg-slate-100 text-slate-600 border border-slate-200" id="assignWebhookStatusBadge">⚠ Chưa cấu hình Webhook</span>
-                </div>
-                <div class="flex items-center gap-2 mt-1.5">
-                  <input type="text" id="inputAssignWebhookUrl" placeholder="Dán URL Webhook Google Apps Script vào đây..."
-                    class="flex-1 px-3 py-1.5 bg-white border border-sky-300 rounded-lg text-xs outline-none focus:border-sky-500 font-mono text-slate-800 shadow-inner">
-                  <button type="button" class="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg font-semibold transition-all shadow-sm flex items-center gap-1 hover:shadow cursor-pointer" id="btnSaveAssignWebhook">
-                    <span>💾</span> Lưu
+              <!-- Phím Chức Năng (Hover SpeedDial Bung Ra 4 Nút) -->
+              <div class="relative group inline-block">
+                <button type="button" class="speed-dial-trigger flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white border border-slate-300 text-slate-700 shadow-sm hover:border-sky-500 hover:text-sky-600 hover:shadow transition-all cursor-pointer">
+                  <span class="text-sky-600 text-sm">⚡</span>
+                  <span>Phím Chức Năng</span>
+                  <svg class="w-3.5 h-3.5 text-slate-400 transition-transform group-hover:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </button>
+                <div class="speed-dial-menu absolute right-0 top-full mt-1.5 w-48 bg-white border border-slate-200 rounded-2xl shadow-xl p-1.5 z-40 transition-all duration-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus-within:opacity-100 group-focus-within:visible space-y-1">
+                  <button type="button" class="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 transition-colors cursor-pointer" id="btnExportAssignData" title="Tải dữ liệu Phân Công Tay ra Excel">
+                    <span class="text-emerald-600 text-sm">📥</span>
+                    <span>Tải Excel</span>
+                  </button>
+                  <a href="https://docs.google.com/spreadsheets/d/1Sw-qSbLzvVdcW4rj7ywEZBEzKI6w5M82EQeYJUpdx7M/edit#gid=909147347" target="_blank" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-teal-50 hover:text-teal-700 transition-colors" title="Mở trực tiếp Google Sheet">
+                    <span class="text-teal-600 text-sm">📊</span>
+                    <span>Truy Cập Sheet</span>
+                  </a>
+                  <button type="button" class="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-sky-50 hover:text-sky-700 transition-colors cursor-pointer" id="btnRefreshAssignSheetData" title="Tải lại dữ liệu mới nhất từ Google Sheet">
+                    <span class="text-sky-600 text-sm">🔄</span>
+                    <span>Tải Lại Sheet</span>
+                  </button>
+                  <button type="button" class="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-rose-50 hover:text-rose-700 transition-colors cursor-pointer" id="btnClearAssignCache" title="Xóa cache các hợp đồng đã xử lý để có thể chạy lại">
+                    <span class="text-rose-600 text-sm">🧹</span>
+                    <span>Xóa Cache</span>
                   </button>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- KPI Cards -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-              <div>
-                <div class="text-xs font-semibold uppercase text-slate-400">Tổng Dòng Trên Sheet</div>
-                <div class="text-2xl font-bold text-slate-900 mt-1" id="assignStatTotal">0</div>
-                <div class="text-[11px] text-slate-500 mt-0.5">Bản ghi GID 909147347</div>
-              </div>
-              <div class="w-11 h-11 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center text-xl">📑</div>
-            </div>
-
-            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-              <div>
-                <div class="text-xs font-semibold uppercase text-amber-500">Chờ Xử Lý</div>
-                <div class="text-2xl font-bold text-amber-600 mt-1" id="assignStatPending">0</div>
-                <div class="text-[11px] text-amber-600 font-medium mt-0.5">● Cần phân công trên Inside</div>
-              </div>
-              <div class="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl">⏳</div>
-            </div>
-
-            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-              <div>
-                <div class="text-xs font-semibold uppercase text-emerald-600">Phân Công Thành Công</div>
-                <div class="text-2xl font-bold text-emerald-600 mt-1" id="assignStatDone">0</div>
-                <div class="text-[11px] text-emerald-600 font-medium mt-0.5">✓ Đã hoàn tất trên Inside</div>
-              </div>
-              <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">✅</div>
-            </div>
-
-            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-              <div>
-                <div class="text-xs font-semibold uppercase text-rose-500">Không Thành Công / Lỗi</div>
-                <div class="text-2xl font-bold text-rose-600 mt-1" id="assignStatError">0</div>
-                <div class="text-[11px] text-rose-500 mt-0.5">✕ Cần kiểm tra lại phiếu</div>
-              </div>
-              <div class="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center text-xl">⚠️</div>
-            </div>
-          </div>
-
-          <!-- Action Bar -->
-          <div class="mui-card flex flex-wrap items-center justify-between gap-4 p-4 bg-gradient-to-r from-sky-50/50 via-white to-slate-50 border border-sky-100">
-            <div class="flex items-center gap-3">
-              <span class="text-2xl p-2 bg-sky-100 text-sky-600 rounded-xl">🧭</span>
-              <div>
-                <h2 class="text-base font-bold text-slate-900 leading-tight">Quy Trình Tự Động Hóa Phân Công Tay Trên Inside FPT</h2>
-                <p class="text-xs text-slate-600 mt-0.5">Inside V5 ➜ Thông tin chung ➜ Tag TRIỂN KHAI ➜ Nhập SHD ➜ Phiếu thi công ➜ Phân tuyến ➜ Chọn Block + NVKT ➜ Cập nhật</p>
-              </div>
-            </div>
-
-            <div class="flex items-center gap-3 flex-wrap">
-              <label class="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700 bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-sm hover:bg-slate-50">
-                <input type="checkbox" id="chkAssignVisible" class="rounded text-sky-600">
-                <span>👁️ Mở Chrome xem trực tiếp</span>
-              </label>
-
-              <button type="button"
-                id="btnAutoAssignModeToggle"
-                class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border-2 border-sky-400 bg-sky-50 text-sky-700 transition-all shadow-sm animate-pulse cursor-pointer"
-                title="Bật chế độ tự động phân công">
-                <span id="autoAssignModeIcon">🤖</span>
-                <span id="autoAssignModeText">Tự Động: BẬT</span>
-                <span id="autoAssignModeDot" class="w-2 h-2 rounded-full bg-sky-600 transition-all animate-bounce"></span>
-              </button>
-
-              <button type="button" class="mui-btn bg-sky-600 hover:bg-sky-700 text-white flex items-center gap-2 px-5 py-2.5 text-xs font-semibold rounded-xl shadow-md transition-all" id="btnRunAutoAssign">
-                <span class="btn-spinner" id="assignSpinner" style="display:none;"></span>
-                <span id="assignRunIcon">🚀</span>
-                <span id="assignRunText">Bắt Đầu Phân Công Tay</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Progress Tracker -->
-          <div class="process-tracker" id="assignProgressTracker" style="display:none;">
+          <!-- Progress Tracker Bar (Visible during processing) -->
+          <div class="process-tracker mb-4" id="assignProgressTracker" style="display:none;">
             <div class="tracker-header">
               <span class="tracker-status" id="assignTrackerStatus">Đang chuẩn bị điều hướng Inside FPT...</span>
               <span class="tracker-percent" id="assignTrackerPercent">0%</span>
@@ -142,95 +89,152 @@
             </div>
           </div>
 
-          <!-- Live Task Events Console & Google Sheet Data Table -->
-          <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
-            
-            <!-- Left 2 Cols: Table Card -->
-            <div class="lg:col-span-2 mui-card p-4 space-y-4">
-              <div class="flex items-center justify-between flex-wrap gap-3">
-                <div class="flex items-center gap-2">
-                  <h3 class="text-sm font-bold text-slate-800">Danh Sách Hợp Đồng Cần Phân Công</h3>
-                  <span class="text-xs px-2.5 py-0.5 bg-sky-50 text-sky-700 rounded-full font-semibold border border-sky-100">GID: 909147347</span>
-                  <span class="text-xs text-slate-500 font-medium" id="assignSelectedCountText">(0 HĐ đã chọn)</span>
-                </div>
-
-                <!-- Search & Filter -->
-                <div class="flex items-center gap-2 flex-wrap">
-                  <div class="relative">
-                    <input type="text" id="inputSearchAssign" placeholder="Tìm theo SHD, NVKT, Block..."
-                      class="w-48 pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-sky-500">
-                    <span class="absolute left-2.5 top-2 text-slate-400 text-xs">🔍</span>
-                  </div>
-
-                  <select id="selectAssignFilterStatus" class="px-2.5 py-1.5 text-xs rounded-xl border border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-sky-500">
-                    <option value="all" selected>Tất Cả Trạng Thái</option>
-                    <option value="pending">Chưa Xử Lý</option>
-                    <option value="done">Thành Công</option>
-                    <option value="error">Không Thành Công / Lỗi</option>
-                  </select>
-
-                  <select id="selectAssignFilterType" class="px-2.5 py-1.5 text-xs rounded-xl border border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-sky-500">
-                    <option value="all">Tất Cả Loại Tác Vụ</option>
-                    <option value="TRIỂN KHAI">TRIỂN KHAI</option>
-                    <option value="BẢO TRÌ">BẢO TRÌ</option>
-                  </select>
-                </div>
+          <!-- 1. CÁC CARD THỐNG KÊ NẰM TRÊN ĐẦU -->
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mb-4">
+            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+              <div>
+                <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Tổng Dòng Trên Sheet</div>
+                <div class="text-2xl font-bold text-slate-900 mt-1" id="assignStatTotal">0</div>
+                <div class="text-[11px] text-slate-500 mt-0.5">Tổng bản ghi trên Sheet</div>
               </div>
-
-              <!-- Table Container -->
-              <div class="table-responsive rounded-xl border border-slate-200/80 overflow-x-auto max-h-[520px]">
-                <table class="mui-table w-full text-left border-collapse text-xs" id="tableAssignData">
-                  <thead>
-                    <tr class="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
-                      <th class="p-3 w-10 text-center">
-                        <input type="checkbox" id="chkAssignSelectAll" class="rounded text-sky-600" checked>
-                      </th>
-                      <th class="p-3 w-12 text-center">STT</th>
-                      <th class="p-3 font-semibold text-slate-700">Tác Vụ</th>
-                      <th class="p-3 font-semibold text-slate-800">Số Hợp Đồng</th>
-                      <th class="p-3 text-slate-600">Email NVKT</th>
-                      <th class="p-3 text-slate-600">Loại Tác Vụ</th>
-                      <th class="p-3 text-slate-600">Block Đến</th>
-                      <th class="p-3 text-slate-600">Nhân Viên Đến</th>
-                      <th class="p-3 text-slate-600">Ngày Cập Nhật</th>
-                      <th class="p-3 text-center">Thao Tác</th>
-                      <th class="p-3 text-center w-20">Hành Động</th>
-                    </tr>
-                  </thead>
-                  <tbody id="tbodyAssignList" class="divide-y divide-slate-100">
-                    <tr>
-                      <td colspan="11" class="text-center py-8 text-slate-400">
-                        <div class="flex flex-col items-center justify-center gap-2">
-                          <span class="text-2xl animate-spin">⏳</span>
-                          <span>Đang tải danh sách từ Google Sheet (GID: 909147347)...</span>
-                        </div>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              <div class="flex items-center justify-between text-xs text-slate-500 pt-1">
-                <div id="assignTableFooterText">Hiển thị 0 bản ghi</div>
-                <div class="text-[11px] text-slate-400">Tự động đồng bộ và lưu kết quả vĩnh viễn trên hệ thống</div>
-              </div>
+              <div class="w-11 h-11 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center text-xl shrink-0">📑</div>
             </div>
 
-            <!-- Right 1 Col: Live Realtime Console Logs -->
-            <div class="mui-card p-4 flex flex-col">
+            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+              <div>
+                <div class="text-[11px] font-semibold uppercase tracking-wider text-amber-500">Chờ Xử Lý</div>
+                <div class="text-2xl font-bold text-amber-600 mt-1" id="assignStatPending">0</div>
+                <div class="text-[11px] text-amber-600 font-medium mt-0.5">● Cần phân công trên Inside</div>
+              </div>
+              <div class="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl shrink-0">⏳</div>
+            </div>
+
+            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+              <div>
+                <div class="text-[11px] font-semibold uppercase tracking-wider text-emerald-600">Phân Công Thành Công</div>
+                <div class="text-2xl font-bold text-emerald-600 mt-1" id="assignStatDone">0</div>
+                <div class="text-[11px] text-emerald-600 font-medium mt-0.5">✓ Đã hoàn tất trên Inside</div>
+              </div>
+              <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl shrink-0">✅</div>
+            </div>
+
+            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+              <div>
+                <div class="text-[11px] font-semibold uppercase tracking-wider text-rose-500">Không Thành Công / Lỗi</div>
+                <div class="text-2xl font-bold text-rose-600 mt-1" id="assignStatError">0</div>
+                <div class="text-[11px] text-rose-500 mt-0.5">✕ Cần kiểm tra lại phiếu</div>
+              </div>
+              <div class="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center text-xl shrink-0">⚠️</div>
+            </div>
+          </div>
+
+          <!-- 2. BIỂU ĐỒ CỘT THỐNG KÊ THEO NGÀY & TOP 5 NHÂN SỰ -->
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-4">
+            <!-- Cột trái (7 cols): Biểu Đồ Số Lượng Theo Ngày -->
+            <div class="lg:col-span-7 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col">
               <div class="flex items-center justify-between mb-2">
                 <div class="flex items-center gap-2">
-                  <span class="w-2.5 h-2.5 rounded-full bg-sky-500 animate-pulse"></span>
-                  <span class="font-semibold text-sm text-slate-900">Nhật Ký Auto Phân Công Trực Tiếp</span>
+                  <span class="text-base">📊</span>
+                  <h3 class="text-xs font-bold text-slate-900 uppercase tracking-wider">Khối Lượng Phân Công Theo Ngày</h3>
                 </div>
-                <button type="button" class="text-xs text-slate-400 hover:text-slate-600 cursor-pointer" id="btnClearAssignLogs">Xóa</button>
+                <span class="text-[11px] text-slate-500 font-medium">Theo bộ lọc thời gian</span>
               </div>
-
-              <div class="task-log-terminal flex-1 bg-slate-900 text-slate-200 rounded-xl p-3 font-mono text-[11px] overflow-y-auto max-h-[520px] min-h-[300px] space-y-1.5" id="assignLogTerminal">
-                <div class="text-slate-500 italic">Sẵn sàng thực thi. Nhấp "Bắt Đầu Phân Công Tay" để chạy...</div>
+              <div class="relative flex-1 min-h-[160px] max-h-[200px]">
+                <canvas id="assignDailyChart"></canvas>
               </div>
             </div>
 
+            <!-- Cột phải (5 cols): TOP 5 Nhân Sự Thao Tác Nhiều Nhất -->
+            <div class="lg:col-span-5 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col">
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2">
+                  <span class="text-base">🏆</span>
+                  <h3 class="text-xs font-bold text-slate-900 uppercase tracking-wider">TOP 5 Nhân Sự Thao Tác</h3>
+                </div>
+                <span class="text-[11px] text-slate-500 font-medium">Khối lượng nhiều nhất</span>
+              </div>
+              <div class="flex-1 overflow-y-auto space-y-1.5 pr-1 max-h-[200px]" id="assignTopStaffContainer">
+                <div class="h-full flex items-center justify-center text-slate-400 text-xs">Đang nạp dữ liệu nhân sự...</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. TABLE DỮ LIỆU CÓ BỘ LỌC KẾT QUẢ & SEARCH SHD -->
+          <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm mb-4">
+            <div class="flex items-center justify-between mb-3 flex-wrap gap-2.5 pb-3 border-b border-slate-100">
+              <div class="flex items-center gap-2 flex-wrap">
+                <h3 class="text-sm font-bold text-slate-800">Danh Sách Hợp Đồng Cần Phân Công</h3>
+                <span class="text-xs text-slate-500 font-medium" id="assignSelectedCountText">(0 HĐ đã chọn)</span>
+              </div>
+
+              <!-- Search & Filter Controls -->
+              <div class="flex items-center gap-2 flex-wrap">
+                <div class="relative">
+                  <input type="text" id="inputSearchAssign" placeholder="🔍 Tìm theo SHD, NVKT..."
+                    class="w-44 sm:w-56 pl-3 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:border-sky-500 focus:bg-white transition-all">
+                </div>
+
+                <select id="selectAssignFilterStatus" class="px-3 py-1.5 text-xs rounded-xl border border-slate-200 bg-slate-50 text-slate-700 focus:outline-none focus:border-sky-500 cursor-pointer">
+                  <option value="all" selected>Tất Cả Trạng Thái</option>
+                  <option value="pending">⏳ Chưa Xử Lý</option>
+                  <option value="done">✅ Thành Công</option>
+                  <option value="error">⚠️ Không Thành Công / Lỗi</option>
+                </select>
+
+                <select id="selectAssignFilterType" class="px-3 py-1.5 text-xs rounded-xl border border-slate-200 bg-slate-50 text-slate-700 focus:outline-none focus:border-sky-500 cursor-pointer">
+                  <option value="all">Tất Cả Loại Tác Vụ</option>
+                  <option value="TRIỂN KHAI">TRIỂN KHAI</option>
+                  <option value="BẢO TRÌ">BẢO TRÌ</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="table-responsive rounded-xl border border-slate-200/80 overflow-x-auto max-h-[460px]">
+              <table class="mui-table w-full text-left border-collapse text-xs" id="tableAssignData">
+                <thead>
+                  <tr class="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                    <th class="p-3 w-10 text-center">
+                      <input type="checkbox" id="chkAssignSelectAll" class="rounded text-sky-600 cursor-pointer" checked>
+                    </th>
+                    <th class="p-3 w-12 text-center">STT</th>
+                    <th class="p-3 font-semibold text-slate-700">Tác Vụ</th>
+                    <th class="p-3 font-semibold text-slate-800">Số Hợp Đồng</th>
+                    <th class="p-3 text-slate-600">Email NVKT</th>
+                    <th class="p-3 text-slate-600">Loại Tác Vụ</th>
+                    <th class="p-3 text-slate-600">Block Đến</th>
+                    <th class="p-3 text-slate-600">Nhân Viên Đến</th>
+                    <th class="p-3 text-slate-600">Ngày Cập Nhật</th>
+                    <th class="p-3 text-center">Thao Tác</th>
+                    <th class="p-3 text-center w-20">Hành Động</th>
+                  </tr>
+                </thead>
+                <tbody id="tbodyAssignList" class="divide-y divide-slate-100">
+                  <tr>
+                    <td colspan="11" class="text-center py-8 text-slate-400">
+                      <div class="flex flex-col items-center justify-center gap-2">
+                        <span class="text-2xl animate-spin">⏳</span>
+                        <span>Đang tải danh sách từ Google Sheet (GID: 909147347)...</span>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Phân trang (10 dòng 1 trang) -->
+            <div id="assignPagination"></div>
+
+            <div class="flex items-center justify-between text-xs text-slate-500 pt-2">
+              <div id="assignTableFooterText">Hiển thị 0 bản ghi</div>
+              <div class="text-[11px] text-slate-400">Tự động đồng bộ và lưu kết quả vĩnh viễn trên hệ thống</div>
+            </div>
+          </div>
+
+          <!-- WEBHOOK: ẨN ĐI HOÀN TOÀN KHỎI GIAO DIỆN THEO YÊU CẦU -->
+          <div class="hidden" style="display:none !important;">
+            <input type="text" id="inputAssignWebhookUrl" value="https://script.google.com/macros/s/AKfycbyX7gEztw78VM71U8HDFh1iUJAvkqV2fzlpUe5kAgrV9Io-R-kZuEeDYXwntlHkdr-M/exec">
+            <button type="button" id="btnSaveAssignWebhook"></button>
+            <span id="assignWebhookStatusBadge"></span>
           </div>
 
         </section>

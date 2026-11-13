@@ -3,120 +3,82 @@
         <!-- ======================================================== -->
         <section class="tab-panel" id="tab-tasks">
           
-          <!-- ByPass Header Action Bar -->
-          <div class="flex items-center justify-between flex-wrap gap-3 bg-white p-3 rounded-2xl border border-slate-200/80 shadow-sm">
-            <div class="flex items-center gap-2">
-              <div class="px-4 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm flex items-center gap-2" id="btnSubTabBypass">
-                <span>⚡ Quản Lý ByPass (Google Sheet GID: 0)</span>
-                <span class="px-2 py-0.5 text-[10px] bg-white/20 rounded-md font-bold" id="badgeBypassPending">0 chờ xử lý</span>
+          <!-- Unified Header Action Bar -->
+          <div class="flex items-center justify-between flex-wrap gap-3 bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-sm mb-4">
+            <div class="flex items-center gap-2.5 flex-wrap">
+              <div class="px-3.5 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm flex items-center gap-2" id="btnSubTabBypass">
+                <span>⚡ Auto ByPass</span>
+                <span class="px-2 py-0.5 text-[10px] bg-white/20 rounded-md font-bold" id="badgeBypassPending">0 chờ</span>
               </div>
             </div>
 
-            <!-- Google Sheet Link & Sync Button -->
-            <div class="flex items-center gap-2 flex-wrap text-xs">
-              <a href="https://docs.google.com/spreadsheets/d/1Sw-qSbLzvVdcW4rj7ywEZBEzKI6w5M82EQeYJUpdx7M/edit" target="_blank" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-medium transition-all" title="Mở trực tiếp Google Sheet trên trình duyệt">
-                <span class="text-sm">📊</span>
-                <span>Mở Google Sheet</span>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-              </a>
-
-              <button type="button" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 font-medium transition-all" id="btnRefreshSheetData" title="Tải lại dữ liệu mới nhất từ Google Sheet">
-                <span>🔄 Tải Lại Sheet</span>
-              </button>
-
-              <button type="button" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 font-medium transition-all cursor-pointer" id="btnExportBypassData" title="Xuất dữ liệu ByPass đã xử lý ra file Excel">
-                <span class="text-sm">📥</span>
-                <span>Xuất Data Xử Lý</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- KPI Summary Cards for ByPass -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            
-            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-              <div>
-                <div class="text-xs font-semibold uppercase text-slate-400">Tổng Dòng Trên Sheet</div>
-                <div class="text-2xl font-bold text-slate-900 mt-1" id="sheetStatTotal">0</div>
-                <div class="text-[11px] text-slate-500 mt-0.5">Bản ghi cần theo dõi</div>
+            <!-- Controls: Date filter, Auto 4s, Chrome switch, Run button & SpeedDial -->
+            <div class="flex items-center gap-2.5 flex-wrap text-xs">
+              <!-- Bộ Lọc Thời Gian -->
+              <div class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 hover:border-blue-400 transition-all">
+                <span>📅</span>
+                <select id="selectDateFilterBypass" class="bg-transparent outline-none cursor-pointer font-medium text-slate-700">
+                  <option value="today" selected>Hôm nay</option>
+                  <option value="all">Tất cả thời gian</option>
+                  <option value="7days">7 ngày qua</option>
+                  <option value="30days">30 ngày qua</option>
+                </select>
               </div>
-              <div class="w-11 h-11 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center text-xl">
-                📑
-              </div>
-            </div>
 
-            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-              <div>
-                <div class="text-xs font-semibold uppercase text-amber-500">Chưa Xử Lý (Chờ Chạy)</div>
-                <div class="text-2xl font-bold text-amber-600 mt-1" id="sheetStatPending">0</div>
-                <div class="text-[11px] text-amber-600 font-medium mt-0.5">● Cần ByPass trên Inside</div>
-              </div>
-              <div class="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl">
-                ⏳
-              </div>
-            </div>
-
-            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-              <div>
-                <div class="text-xs font-semibold uppercase text-emerald-600">Đã Xử Lý Thành Công</div>
-                <div class="text-2xl font-bold text-emerald-600 mt-1" id="sheetStatDone">0</div>
-                <div class="text-[11px] text-emerald-600 font-medium mt-0.5">✓ Đã lưu thành công</div>
-              </div>
-              <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">
-                ✅
-              </div>
-            </div>
-
-            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-              <div>
-                <div class="text-xs font-semibold uppercase text-blue-600">Phiên Thao Tác Inside</div>
-                <div class="text-sm font-bold text-slate-800 mt-1" id="bypassSessionStatus">Đang kiểm tra...</div>
-                <div class="text-[11px] text-slate-400 mt-0.5">Sử dụng tài khoản Global</div>
-              </div>
-              <div class="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl">
-                🌐
-              </div>
-            </div>
-
-          </div>
-
-          <!-- Main Automation Action Bar -->
-          <div class="mui-card flex flex-wrap items-center justify-between gap-4 p-4 bg-gradient-to-r from-blue-50/50 via-white to-slate-50 border border-blue-100">
-            <div class="flex items-center gap-3">
-              <span class="text-2xl p-2 bg-blue-100 text-blue-600 rounded-xl">⚡</span>
-              <div>
-                <h2 class="text-base font-bold text-slate-900 leading-tight">Quy Trình Tự Động Hóa Quản Lý ByPass Trên Inside FPT</h2>
-                <p class="text-xs text-slate-600 mt-0.5">Hỗ trợ kỹ thuật ➜ Quản Lý Chất Lượng DVKH ➜ Quản Lý ByPass ➜ Import ➜ Điền SHD, NVKT, Tình trạng, Lý do ➜ Bấm Save</p>
-              </div>
-            </div>
-
-            <div class="flex items-center gap-3 flex-wrap">
-              <label class="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700 bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-sm hover:bg-slate-50">
-                <input type="checkbox" id="chkByPassVisible" class="rounded text-blue-600">
-                <span>👁️ Mở Chrome xem trực tiếp</span>
+              <!-- Mở Chrome Switch (Mặc định TẮT) -->
+              <label class="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 transition-all" title="Bật nếu muốn theo dõi cửa sổ trình duyệt Chrome">
+                <input type="checkbox" id="chkByPassVisible" class="rounded text-blue-600 cursor-pointer">
+                <span>👁️ Mở Chrome</span>
               </label>
 
-              <!-- AUTO MODE TOGGLE -->
+              <!-- Auto Mode Toggle (Mặc định BẬT đọc sheet 4s) -->
               <button type="button"
                 id="btnAutoModeToggle"
-                class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border-2 border-amber-400 bg-amber-50 text-amber-700 transition-all shadow-sm animate-pulse"
-                title="Bật chế độ tự động: Hệ thống sẽ tự khởi động ByPass ngay khi phát hiện dòng chưa xử lý trên Sheet">
+                class="flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold border-2 border-emerald-500 bg-emerald-50 text-emerald-700 transition-all shadow-sm cursor-pointer"
+                title="Tự động đồng bộ Sheet 4s/lần và tự chạy khi có HĐ chưa xử lý">
                 <span id="autoModeIcon">🤖</span>
-                <span id="autoModeText">Tự Động: BẬT</span>
-                <span id="autoModeDot" class="w-2 h-2 rounded-full bg-amber-500 transition-all animate-bounce"></span>
+                <span id="autoModeText">Auto 4s: BẬT</span>
+                <span id="autoModeDot" class="w-2 h-2 rounded-full bg-emerald-600 transition-all animate-pulse"></span>
               </button>
 
-              <button type="button" class="mui-btn mui-btn-primary flex items-center gap-2 px-5 py-2.5 text-xs font-semibold rounded-xl shadow-md transition-all" id="btnRunAutoBypass">
+              <!-- Nút Bắt Đầu / Dừng Auto -->
+              <button type="button" class="mui-btn mui-btn-primary flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-xl shadow-md transition-all cursor-pointer" id="btnRunAutoBypass">
                 <span class="btn-spinner" id="bypassSpinner" style="display:none;"></span>
                 <span id="bypassRunIcon">🚀</span>
-                <span id="bypassRunText">Bắt Đầu Auto ByPass Trên Inside</span>
+                <span id="bypassRunText">Bắt Đầu Auto</span>
               </button>
+
+              <!-- Phím Chức Năng (Hover SpeedDial Bung Ra 4 Nút) -->
+              <div class="relative group inline-block">
+                <button type="button" class="speed-dial-trigger flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white border border-slate-300 text-slate-700 shadow-sm hover:border-blue-500 hover:text-blue-600 hover:shadow transition-all cursor-pointer">
+                  <span class="text-blue-600 text-sm">⚡</span>
+                  <span>Phím Chức Năng</span>
+                  <svg class="w-3.5 h-3.5 text-slate-400 transition-transform group-hover:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </button>
+                <div class="speed-dial-menu absolute right-0 top-full mt-1.5 w-48 bg-white border border-slate-200 rounded-2xl shadow-xl p-1.5 z-40 transition-all duration-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus-within:opacity-100 group-focus-within:visible space-y-1">
+                  <button type="button" class="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 transition-colors cursor-pointer" id="btnExportBypassData" title="Tải dữ liệu đã xử lý ra Excel">
+                    <span class="text-emerald-600 text-sm">📥</span>
+                    <span>Tải Excel</span>
+                  </button>
+                  <a href="https://docs.google.com/spreadsheets/d/1Sw-qSbLzvVdcW4rj7ywEZBEzKI6w5M82EQeYJUpdx7M/edit" target="_blank" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-teal-50 hover:text-teal-700 transition-colors" title="Mở trực tiếp Google Sheet">
+                    <span class="text-teal-600 text-sm">📊</span>
+                    <span>Truy Cập Sheet</span>
+                  </a>
+                  <button type="button" class="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition-colors cursor-pointer" id="btnRefreshSheetData" title="Tải lại dữ liệu mới nhất từ Google Sheet">
+                    <span class="text-blue-600 text-sm">🔄</span>
+                    <span>Tải Lại Sheet</span>
+                  </button>
+                  <button type="button" class="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-rose-50 hover:text-rose-700 transition-colors cursor-pointer" id="btnClearBypassCache" title="Xóa cache các hợp đồng đã xử lý để có thể chạy lại">
+                    <span class="text-rose-600 text-sm">🧹</span>
+                    <span>Xóa Cache</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
-
           <!-- Progress Tracker Bar (Visible during processing) -->
-          <div class="process-tracker" id="bypassProgressTracker" style="display:none;">
+          <div class="process-tracker mb-4" id="bypassProgressTracker" style="display:none;">
             <div class="tracker-header">
               <span class="tracker-status" id="bypassTrackerStatus">Đang chuẩn bị điều hướng Inside FPT...</span>
               <span class="tracker-percent" id="bypassTrackerPercent">0%</span>
@@ -126,103 +88,204 @@
             </div>
           </div>
 
-          <!-- Google Sheet Webhook Sync Bar (Webhook đã được cấu hình sẵn) -->
-          <div class="mui-card p-3.5 bg-gradient-to-r from-emerald-50/60 via-white to-slate-50 border border-emerald-200/80 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs mb-4 shadow-sm">
-            <div class="flex items-center gap-2.5 flex-1 min-w-[320px]">
-              <span class="p-2 bg-emerald-100 text-emerald-700 rounded-xl text-lg flex items-center justify-center">📊</span>
-              <div class="flex-1">
-                <div class="font-bold text-slate-800 text-[12px] flex items-center gap-2">
-                  <span>Google Sheet Webhook (Cập nhật tự động lên Sheet)</span>
-                  <span class="text-[10px] px-2 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-800 border border-emerald-200" id="webhookStatusBadge">✓ Đã kết nối Webhook</span>
-                </div>
-                <div class="flex items-center gap-2 mt-1.5">
-                  <input type="text" id="inputSheetWebhookUrl" value="https://script.google.com/macros/s/AKfycbz66OgDwskEuYIn_FDlwSEMrkzJRy3V_s4pJzMu-bKrzs3iNkSN9yNycIZe3TF6UxL2pw/exec" class="flex-1 px-3 py-1.5 bg-white border border-emerald-300 rounded-lg text-xs outline-none focus:border-emerald-500 font-mono text-slate-800 shadow-inner">
-                  <button type="button" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold transition-all shadow-sm flex items-center gap-1 hover:shadow" id="btnSaveSheetWebhook">
-                    <span>💾</span> Lưu
-                  </button>
-                </div>
+          <!-- 1. CÁC CARD THỐNG KÊ NẰM TRÊN ĐẦU -->
+          <div class="grid grid-cols-2 lg:grid-cols-5 gap-3.5 mb-4">
+            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+              <div>
+                <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Tổng Dòng Trên Sheet</div>
+                <div class="text-2xl font-bold text-slate-900 mt-1" id="sheetStatTotal">0</div>
+                <div class="text-[11px] text-slate-500 mt-0.5">Bản ghi cần theo dõi</div>
+              </div>
+              <div class="w-11 h-11 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center text-xl shrink-0">
+                📑
               </div>
             </div>
-            <div class="flex items-center gap-2">
-              <button type="button" class="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-semibold transition-all shadow-sm flex items-center gap-2 hover:shadow-md text-xs cursor-pointer" id="btnShowWebhookGuide">
-                <span class="text-sm">📖</span>
-                <span>Hướng Dẫn Cấu Hình (Apps Script)</span>
-              </button>
+
+            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+              <div>
+                <div class="text-[11px] font-semibold uppercase tracking-wider text-amber-500">Chờ Xử Lý (Chưa Chạy)</div>
+                <div class="text-2xl font-bold text-amber-600 mt-1" id="sheetStatPending">0</div>
+                <div class="text-[11px] text-amber-600 font-medium mt-0.5">● Cần ByPass trên Inside</div>
+              </div>
+              <div class="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl shrink-0">
+                ⏳
+              </div>
+            </div>
+
+            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+              <div>
+                <div class="text-[11px] font-semibold uppercase tracking-wider text-emerald-600">Đã Xử Lý Thành Công</div>
+                <div class="text-2xl font-bold text-emerald-600 mt-1" id="sheetStatDone">0</div>
+                <div class="text-[11px] text-emerald-600 font-medium mt-0.5">✓ Đã lưu thành công</div>
+              </div>
+              <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl shrink-0">
+                ✅
+              </div>
+            </div>
+
+            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+              <div>
+                <div class="text-[11px] font-semibold uppercase tracking-wider text-rose-600">Hậu Kiểm Không Đạt</div>
+                <div class="flex items-baseline gap-2 mt-1">
+                  <span class="text-2xl font-bold text-rose-600" id="sheetStatHauKiemFail">0</span>
+                  <span class="text-xs text-slate-500 font-medium">/ <span id="sheetStatHauKiemPass" class="text-emerald-600 font-bold">0</span> Đạt</span>
+                </div>
+                <div class="text-[11px] text-rose-600 font-medium mt-0.5" id="sheetStatHauKiemFailPct">Tỷ lệ không đạt: 0%</div>
+              </div>
+              <div class="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center text-xl shrink-0">
+                ⚠️
+              </div>
+            </div>
+
+            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+              <div>
+                <div class="text-[11px] font-semibold uppercase tracking-wider text-blue-600">Phiên Thao Tác Inside</div>
+                <div class="text-sm font-bold text-slate-800 mt-1 truncate max-w-[120px]" id="bypassSessionStatus">Đang kiểm tra...</div>
+                <div class="text-[11px] text-slate-400 mt-0.5">Tài khoản kết nối</div>
+              </div>
+              <div class="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl shrink-0">
+                🌐
+              </div>
             </div>
           </div>
 
-
-          <!-- Live Task Events Console & Google Sheet Data Table -->
-          <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
-            
-            <!-- Left 2 Cols: Google Sheet Records Table -->
-            <div class="lg:col-span-2 mui-card p-4">
-              <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
-                <div class="flex items-center gap-2">
-                  <span class="font-semibold text-sm text-slate-900">Danh Sách Dữ Liệu Sheet:</span>
-                  <span class="text-xs px-2.5 py-0.5 bg-blue-50 text-blue-700 rounded-full font-semibold border border-blue-100" id="sheetCurrentTabTitle">ByPass (GID: 0)</span>
-                  <span class="text-xs text-slate-400" id="sheetRecordCountText">0 dòng</span>
-                </div>
-
-                <div class="flex items-center gap-2">
-                  <!-- Auto-sync indicator badge -->
-                  <div class="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] text-emerald-700 font-medium" title="Bảng tự động đồng bộ 4 giây/lần từ Google Sheet">
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block"></span>
-                    <span>Auto sync 4s</span>
-                    <span class="text-emerald-500 font-mono" id="sheetLastSyncTime">—</span>
-                  </div>
-
-                  <select id="sheetFilterStatusSelect" class="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white text-slate-700">
-                    <option value="all">Tất cả trạng thái</option>
-                    <option value="pending">Chỉ hiện Chưa xử lý</option>
-                    <option value="done">Chỉ hiện Đã xử lý</option>
-                  </select>
-
-                  <button type="button" class="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all shadow-sm cursor-pointer" id="btnShowWebhookGuideHeader" title="Xem hướng dẫn 3 bước Google Apps Script">
-                    <span>📖</span> Hướng Dẫn
-                  </button>
-                </div>
-              </div>
-
-
-              <div class="table-responsive max-h-[520px] overflow-y-auto">
-                <table class="mui-table text-xs" id="sheetDataTable">
-                  <thead>
-                    <tr id="sheetTableHeadRow">
-                      <th style="width: 35px;">STT</th>
-                      <th>Tác Vụ</th>
-                      <th>Số Hợp Đồng (SHD)</th>
-                      <th>Email NVKT</th>
-                      <th>Tình Trạng (NN 1)</th>
-                      <th>Lý Do ByPass (NN 2)</th>
-                      <th>Ngày Cập Nhật</th>
-                      <th>Thao Tác</th>
-                      <th style="text-align: center;">Chạy</th>
-                    </tr>
-                  </thead>
-                  <tbody id="sheetDataTableBody">
-                    <tr><td colspan="9" style="text-align:center; padding: 32px; color: #80868b;">Đang tải dữ liệu từ Google Sheet...</td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <!-- Right 1 Col: Live Realtime Console Logs -->
-            <div class="mui-card p-4 flex flex-col">
+          <!-- 2. BIỂU ĐỒ CỘT THỐNG KÊ THEO NGÀY & TOP 5 NHÂN SỰ -->
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-4">
+            <!-- Cột trái (7 cols): Biểu Đồ Số Lượng Theo Ngày -->
+            <div class="lg:col-span-7 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col">
               <div class="flex items-center justify-between mb-2">
                 <div class="flex items-center gap-2">
-                  <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span class="font-semibold text-sm text-slate-900">Nhật Ký Auto ByPass Trực Tiếp</span>
+                  <span class="text-base">📊</span>
+                  <h3 class="text-xs font-bold text-slate-900 uppercase tracking-wider">Khối Lượng Xử Lý Theo Ngày</h3>
                 </div>
-                <button type="button" class="text-xs text-slate-400 hover:text-slate-600" id="btnClearBypassLogs">Xóa</button>
+                <span class="text-[11px] text-slate-500 font-medium">Theo bộ lọc thời gian</span>
               </div>
-
-              <div class="task-log-terminal flex-1 bg-slate-900 text-slate-200 rounded-xl p-3 font-mono text-[11px] overflow-y-auto max-h-[480px] min-h-[300px] space-y-1.5" id="bypassLogTerminal">
-                <!-- Logs rendered via JS -->
-                <div class="text-slate-500 italic">Sẵn sàng thực thi. Nhấp "Bắt Đầu Auto ByPass" để chạy...</div>
+              <div class="relative flex-1 min-h-[160px] max-h-[200px]">
+                <canvas id="bypassDailyChart"></canvas>
               </div>
             </div>
 
+            <!-- Cột phải (5 cols): TOP 5 Nhân Sự Thao Tác Nhiều Nhất -->
+            <div class="lg:col-span-5 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col">
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2">
+                  <span class="text-base">🏆</span>
+                  <h3 class="text-xs font-bold text-slate-900 uppercase tracking-wider">TOP 5 Nhân Sự Thao Tác</h3>
+                </div>
+                <span class="text-[11px] text-slate-500 font-medium">Khối lượng nhiều nhất</span>
+              </div>
+              <div class="flex-1 overflow-y-auto space-y-1.5 pr-1 max-h-[200px]" id="bypassTopStaffContainer">
+                <div class="h-full flex items-center justify-center text-slate-400 text-xs">Đang nạp dữ liệu nhân sự...</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- BẢNG TOP CÁC NHÂN SỰ BYPASS KHÔNG ĐẠT NHIỀU NHẤT - TOP 10 -->
+          <div class="bg-white p-4 rounded-2xl border border-rose-200/90 shadow-sm mb-4">
+            <div class="flex items-center justify-between mb-3 flex-wrap gap-2.5 pb-3 border-b border-rose-100">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-base">🚨</span>
+                <h3 class="font-bold text-xs text-slate-900 uppercase tracking-wider">TOP 10 Nhân Sự Bypass Không Đạt Nhiều Nhất</h3>
+                <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200" id="badgeTopFailedTotal">0 ca Không Đạt</span>
+                <span class="text-[11px] text-slate-400 font-medium">(Thống kê theo kết quả Hậu kiểm trên Google Sheet)</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <button type="button" class="text-xs px-3 py-1.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 rounded-xl font-medium transition-all cursor-pointer flex items-center gap-1.5 shadow-xs" id="btnFilterAllFailedRecords" title="Lọc toàn bộ các hợp đồng Không Đạt trên bảng chính">
+                  <span>✕</span>
+                  <span>Xem tất cả ca Không Đạt</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="table-responsive max-h-[360px] overflow-y-auto rounded-xl border border-slate-200/70">
+              <table class="mui-table text-xs w-full" id="topFailedStaffTable">
+                <thead>
+                  <tr class="bg-rose-50/60 text-slate-700 font-semibold">
+                    <th style="width: 50px; text-align: center;">Hạng</th>
+                    <th>Nhân Viên Kỹ Thuật (Email)</th>
+                    <th style="width: 140px;">Tài Khoản / MSNV</th>
+                    <th style="width: 150px; text-align: center;">Số Ca Không Đạt</th>
+                    <th style="width: 130px; text-align: center;">Tỷ Lệ / Tổng Ca</th>
+                    <th>Lý Do / Suy Hao Thường Gặp</th>
+                    <th style="width: 90px; text-align: center;">Lọc Bảng</th>
+                  </tr>
+                </thead>
+                <tbody id="topFailedStaffTableBody">
+                  <tr><td colspan="7" class="text-center py-6 text-slate-400">Đang thống kê dữ liệu nhân sự không đạt...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 3. TABLE DỮ LIỆU CÓ BỘ LỌC KẾT QUẢ & SEARCH SHD -->
+          <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm mb-4">
+            <div class="flex items-center justify-between mb-3 flex-wrap gap-2.5 pb-3 border-b border-slate-100">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="font-bold text-sm text-slate-900">Danh Sách Dữ Liệu Sheet:</span>
+                <span class="text-xs px-2.5 py-0.5 bg-blue-50 text-blue-700 rounded-full font-semibold border border-blue-100" id="sheetCurrentTabTitle">ByPass</span>
+                <span class="text-xs text-slate-400 font-medium" id="sheetRecordCountText">0 dòng</span>
+                <div class="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] text-emerald-700 font-medium ml-1" title="Bảng tự động đồng bộ 4 giây/lần">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block"></span>
+                  <span>Auto sync 4s</span>
+                  <span class="text-emerald-500 font-mono" id="sheetLastSyncTime">—</span>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2 flex-wrap">
+                <!-- Search SHD, Email, MSNV -->
+                <div class="relative">
+                  <input type="text" id="inputSearchBypassSHD" placeholder="🔍 Tìm SHD, Email, MSNV..." class="pl-3 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 outline-none focus:border-blue-500 focus:bg-white transition-all w-48 sm:w-56">
+                </div>
+
+                <!-- Filter Status (Thành công / Chưa xử lý) -->
+                <select id="sheetFilterStatusSelect" class="text-xs border border-slate-200 rounded-xl px-3 py-1.5 bg-slate-50 text-slate-700 outline-none focus:border-blue-500 cursor-pointer">
+                  <option value="all">Tất cả trạng thái</option>
+                  <option value="pending">⏳ Chỉ hiện Chưa xử lý</option>
+                  <option value="done">✅ Chỉ hiện Đã xử lý</option>
+                </select>
+
+                <!-- Filter Hậu Kiểm -->
+                <select id="sheetFilterHauKiemSelect" class="text-xs border border-slate-200 rounded-xl px-3 py-1.5 bg-slate-50 text-slate-700 outline-none focus:border-blue-500 cursor-pointer">
+                  <option value="all">Hậu kiểm: Tất cả</option>
+                  <option value="fail">✕ Chỉ hiện KHÔNG ĐẠT</option>
+                  <option value="pass">✓ Chỉ hiện ĐẠT</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="table-responsive max-h-[440px] overflow-y-auto rounded-xl border border-slate-200/70">
+              <table class="mui-table text-xs w-full" id="sheetDataTable">
+                <thead>
+                  <tr id="sheetTableHeadRow">
+                    <th style="width: 135px; text-align: center;">Hậu Kiểm</th>
+                    <th style="width: 35px;">STT</th>
+                    <th>Tác Vụ</th>
+                    <th>Số Hợp Đồng (SHD)</th>
+                    <th>Email NVKT</th>
+                    <th>Tình Trạng (NN 1)</th>
+                    <th>Lý Do ByPass (NN 2)</th>
+                    <th>Ngày Cập Nhật</th>
+                    <th>Thao Tác</th>
+                    <th style="text-align: center;">Chạy</th>
+                  </tr>
+                </thead>
+                <tbody id="sheetDataTableBody">
+                  <tr><td colspan="10" style="text-align:center; padding: 32px; color: #80868b;">Đang tải dữ liệu từ Google Sheet...</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Phân trang (10 dòng 1 trang) -->
+            <div id="bypassPagination"></div>
+          </div>
+
+          <!-- WEBHOOK: ẨN ĐI HOÀN TOÀN KHỎI GIAO DIỆN THEO YÊU CẦU -->
+          <div class="hidden" style="display:none !important;">
+            <input type="text" id="inputSheetWebhookUrl" value="https://script.google.com/macros/s/AKfycbz66OgDwskEuYIn_FDlwSEMrkzJRy3V_s4pJzMu-bKrzs3iNkSN9yNycIZe3TF6UxL2pw/exec">
+            <button type="button" id="btnSaveSheetWebhook"></button>
+            <span id="webhookStatusBadge"></span>
+            <button type="button" id="btnShowWebhookGuide"></button>
+            <button type="button" id="btnShowWebhookGuideHeader"></button>
           </div>
 
         </section>

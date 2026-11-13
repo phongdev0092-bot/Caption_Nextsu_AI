@@ -53,7 +53,11 @@ function doPost(e) {
     var gid = data.gid || 0;
     var targetShd = (data.shd || "").toString().trim().toLowerCase();
     var status = data.status || data.thao_tac || "Đã xử lý";
-    var ketQua = data.ket_qua || "Đã xử lý";
+    var ketQua = data.ket_qua;
+    var autoCapLai = data.auto_cap_lai;
+    var nguon = data.nguon;
+    var ghiChu = data.ghi_chu;
+    var action = data.action;
     var timestamp = data.timestamp || Utilities.formatDate(new Date(), "GMT+7", "dd/MM/yyyy HH:mm:ss");
 
     var ss = SpreadsheetApp.openById(sheetId);
@@ -67,20 +71,28 @@ function doPost(e) {
     }
 
     var values = sheet.getDataRange().getValues();
-    if (values.length <= 1) return ContentService.createTextOutput(JSON.stringify({status: "empty"}));
+    if (values.length < 1) return ContentService.createTextOutput(JSON.stringify({status: "empty"}));
 
     var headers = values[0];
+    var colId = -1;
     var colShd = -1;
     var colThaoTac = -1;
     var colKetQua = -1;
     var colNgayCapNhat = -1;
+    var colAutoCapLai = -1;
+    var colNguon = -1;
+    var colGhiChu = -1;
 
     for (var j = 0; j < headers.length; j++) {
       var norm = removeVietnameseTones(headers[j]);
+      if (norm === "id") colId = j;
       if (norm === "shd" || norm.indexOf("hop dong") !== -1) colShd = j;
-      if (norm.indexOf("thao tac") !== -1 || norm.indexOf("ghi chu") !== -1 || norm.indexOf("noi dung") !== -1) colThaoTac = j;
+      if (norm.indexOf("thao tac") !== -1) colThaoTac = j;
+      if (norm.indexOf("ghi chu") !== -1 || norm.indexOf("note") !== -1) colGhiChu = j;
       if (norm.indexOf("ket qua") !== -1 || norm.indexOf("tinh trang") !== -1 || norm.indexOf("trang thai") !== -1) colKetQua = j;
       if (norm.indexOf("ngay") !== -1 || norm.indexOf("thoi gian") !== -1) colNgayCapNhat = j;
+      if (norm.indexOf("auto") !== -1 || norm.indexOf("cap lai") !== -1) colAutoCapLai = j;
+      if (norm.indexOf("nguon") !== -1) colNguon = j;
     }
 
     // Tự động nhận diện theo index truyền từ Tool nếu không khớp theo tên
@@ -88,24 +100,60 @@ function doPost(e) {
     if (colThaoTac === -1 && typeof data.col_thao_tac === "number") colThaoTac = data.col_thao_tac;
     if (colKetQua === -1 && typeof data.col_ket_qua === "number") colKetQua = data.col_ket_qua;
     if (colNgayCapNhat === -1 && typeof data.col_ngay === "number") colNgayCapNhat = data.col_ngay;
+    if (colAutoCapLai === -1 && typeof data.col_auto_cap_lai === "number") colAutoCapLai = data.col_auto_cap_lai;
+    if (colNguon === -1 && typeof data.col_nguon === "number") colNguon = data.col_nguon;
+    if (colGhiChu === -1 && typeof data.col_ghi_chu === "number") colGhiChu = data.col_ghi_chu;
 
     if (colShd === -1) return ContentService.createTextOutput(JSON.stringify({status: "no_shd_column"}));
 
-    var updated = 0;
-    for (var r = 1; r < values.length; r++) {
+    var targetRowId = (data.row_id !== undefined && data.row_id !== null) ? data.row_id.toString().trim() : "";
+    var targetRowIdx = -1;
+    for (var r = values.length - 1; r >= 1; r--) {
       var rowShd = values[r][colShd].toString().trim().toLowerCase();
       if (rowShd === targetShd) {
-        if (colThaoTac !== -1) sheet.getRange(r + 1, colThaoTac + 1).setValue(status);
-        if (colKetQua !== -1) sheet.getRange(r + 1, colKetQua + 1).setValue(ketQua);
-        if (colNgayCapNhat !== -1) sheet.getRange(r + 1, colNgayCapNhat + 1).setValue(timestamp);
-        updated++;
+        if (targetRowId && colId !== -1 && values[r][colId].toString().trim() === targetRowId) {
+          targetRowIdx = r;
+          break;
+        }
+        if (targetRowIdx === -1) targetRowIdx = r;
       }
+    }
+
+    var updated = 0;
+    if (targetRowIdx !== -1) {
+      if (colThaoTac !== -1 && status !== undefined) sheet.getRange(targetRowIdx + 1, colThaoTac + 1).setValue(status);
+      if (colGhiChu !== -1 && ghiChu !== undefined && ghiChu !== null && ghiChu !== "") sheet.getRange(targetRowIdx + 1, colGhiChu + 1).setValue(ghiChu);
+      if (colKetQua !== -1 && ketQua !== undefined) sheet.getRange(targetRowIdx + 1, colKetQua + 1).setValue(ketQua);
+      if (colNgayCapNhat !== -1 && timestamp !== undefined) sheet.getRange(targetRowIdx + 1, colNgayCapNhat + 1).setValue(timestamp);
+      if (colAutoCapLai !== -1 && autoCapLai !== undefined) sheet.getRange(targetRowIdx + 1, colAutoCapLai + 1).setValue(autoCapLai);
+      if (colNguon !== -1 && nguon !== undefined) sheet.getRange(targetRowIdx + 1, colNguon + 1).setValue(nguon);
+      updated = 1;
+    }
+
+    if (action === "append" || (updated === 0 && action === "upsert")) {
+      var newRow = [];
+      for (var j = 0; j < headers.length; j++) {
+        var norm = removeVietnameseTones(headers[j]);
+        if (norm === "id") newRow.push(data.row_id || values.length);
+        else if (norm.indexOf("ho") !== -1 && norm.indexOf("ten") !== -1) newRow.push(data.ho_ten || "");
+        else if (norm.indexOf("mail") !== -1) newRow.push(data.email || "");
+        else if (norm === "shd" || norm.indexOf("hop dong") !== -1) newRow.push(data.shd || "");
+        else if (norm.indexOf("mac") !== -1) newRow.push(data.mac || "");
+        else if (norm.indexOf("ket qua") !== -1) newRow.push(ketQua || "Chưa xử lý");
+        else if (norm.indexOf("ngay") !== -1) newRow.push(timestamp);
+        else if (norm.indexOf("auto") !== -1 || norm.indexOf("cap lai") !== -1) newRow.push(autoCapLai || "");
+        else if (norm.indexOf("nguon") !== -1) newRow.push(nguon || "Auto >72H");
+        else if (norm.indexOf("ghi chu") !== -1 || norm.indexOf("note") !== -1) newRow.push(ghiChu || "");
+        else newRow.push("");
+      }
+      sheet.appendRow(newRow);
+      updated = 1;
     }
 
     return ContentService.createTextOutput(JSON.stringify({
       status: "ok", 
       updated: updated,
-      matchedCols: { colShd: colShd, colThaoTac: colThaoTac, colKetQua: colKetQua, colNgayCapNhat: colNgayCapNhat }
+      matchedCols: { colShd: colShd, colThaoTac: colThaoTac, colKetQua: colKetQua, colNgayCapNhat: colNgayCapNhat, colAutoCapLai: colAutoCapLai, colNguon: colNguon, colGhiChu: colGhiChu }
     })).setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({status: "error", error: err.toString()}))

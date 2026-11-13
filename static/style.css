@@ -1841,6 +1841,39 @@ body.mui-light-theme {
   color: #f87171;
 }
 
+/* ================= SPEED DIAL & UNIFIED MUI TABS ================= */
+.speed-dial-menu {
+  transform-origin: top right;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
 
+.group:hover .speed-dial-menu,
+.group:focus-within .speed-dial-menu {
+  opacity: 1 !important;
+  visibility: visible !important;
+  transform: translateY(0);
+}
 
+/* MUI Card enhancements */
+.unified-card {
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  border-radius: 1rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease-in-out;
+}
 
+.unified-card:hover {
+  box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.06);
+}
+
+/* Responsive Table styling for mobile */
+@media (max-width: 768px) {
+  .mui-main-container {
+    padding: 12px !important;
+  }
+  .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}

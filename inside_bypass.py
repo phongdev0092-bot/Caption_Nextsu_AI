@@ -18,12 +18,256 @@ DEFAULT_SHEET_ID = "1Sw-qSbLzvVdcW4rj7ywEZBEzKI6w5M82EQeYJUpdx7M"
 GID_BYPASS = "0"
 GID_PHAN_CONG = "909147347"
 
+# Google Sheet phân quyền Roles (Cột AD = Roles; nếu Roles == Admin thì không bị giới hạn bất kỳ quyền/chức năng nào)
+ADMIN_ROLES_SHEET_ID = "17QLc9SlfpPPrR-d1R2BkBxA7DmCI5ZCuhmQffP5F6pY"
+ADMIN_ROLES_GID = "32204814"
+ADMIN_CACHE_TTL_SEC = 300
+
 import unicodedata
+import datetime
+import json
+
+BYPASS_VIOLATION_WINDOW_DAYS = 14
+BYPASS_VIOLATION_MIN_CONTRACTS = 2
+
+_admin_roles_cache = {
+    "last_fetch": 0.0,
+    "emails": {"phuongnam.phongnh5@fpt.net", "phuongnam.phongnh5@inside.fpt.net"},
+    "accounts": {"pnc01.phongnh5", "phuongnam.phongnh5"},
+    "msnvs": {"110827", "00110827"}
+}
+
+def _normalize_msnv(val):
+    s = str(val or "").strip().lower()
+    if not s or s == "nan":
+        return ""
+    return s.lstrip("0") or s
+
+def load_admin_staff_set(force_refresh=False):
+    """
+    Tải danh sách nhân sự có Roles = Admin từ Google Sheet 17QLc9SlfpPPrR-d1R2BkBxA7DmCI5ZCuhmQffP5F6pY (GID 32204814, Cột AD).
+    Có bộ nhớ đệm TTL 5 phút và giữ danh sách Admin mặc định nếu mất kết nối tạm thời.
+    """
+    now = time.time()
+    if not force_refresh and (now - _admin_roles_cache["last_fetch"] < ADMIN_CACHE_TTL_SEC):
+        return _admin_roles_cache
+
+    url = f"https://docs.google.com/spreadsheets/d/{ADMIN_ROLES_SHEET_ID}/gviz/tq?tqx=out:csv&gid={ADMIN_ROLES_GID}&_t={int(now * 1000)}"
+    try:
+        df = pd.read_csv(url, dtype=str, encoding="utf-8").fillna("")
+        emails = {"phuongnam.phongnh5@fpt.net", "phuongnam.phongnh5@inside.fpt.net"}
+        accounts = {"pnc01.phongnh5", "phuongnam.phongnh5"}
+        msnvs = {"110827", "00110827"}
+
+        cols = list(df.columns)
+        role_col = None
+        email_col = None
+        acc_col = None
+        msnv_col = None
+
+        for c in cols:
+            cl = normalize_nfc(c).lower()
+            if cl == "roles" or "role" in cl:
+                role_col = c
+            elif "email" in cl:
+                email_col = c
+            elif "inside" in cl or "account" in cl:
+                acc_col = c
+            elif "mã nv" in cl or "ma nv" in cl or "msnv" in cl:
+                msnv_col = c
+
+        # Fallback cột AD (index 29) nếu tên cột thay đổi
+        if role_col is None and len(cols) >= 30:
+            role_col = cols[29]
+
+        if role_col is not None:
+            for _, row in df.iterrows():
+                role_val = normalize_nfc(row.get(role_col, "")).strip().lower()
+                if role_val == "admin" or "admin" in role_val.split(","):
+                    if email_col:
+                        em = normalize_nfc(row.get(email_col, "")).strip().lower()
+                        if em:
+                            emails.add(em)
+                    if acc_col:
+                        ac = normalize_nfc(row.get(acc_col, "")).strip().lower()
+                        if ac:
+                            accounts.add(ac)
+                    if msnv_col:
+                        mv = normalize_nfc(row.get(msnv_col, "")).strip().lower()
+                        if mv:
+                            msnvs.add(mv)
+                            msnvs.add(_normalize_msnv(mv))
+
+        _admin_roles_cache["emails"] = emails
+        _admin_roles_cache["accounts"] = accounts
+        _admin_roles_cache["msnvs"] = msnvs
+        _admin_roles_cache["last_fetch"] = now
+    except Exception:
+        # Giữ nguyên cache hiện tại nếu mạng lỗi tạm thời
+        _admin_roles_cache["last_fetch"] = now - (ADMIN_CACHE_TTL_SEC - 30)
+
+    return _admin_roles_cache
+
+def is_admin_staff(record_or_email=None, email="", account_inside="", msnv=""):
+    """
+    Kiểm tra nhân sự có thuộc nhóm Roles = Admin hay không.
+    Rule: Admin không bị giới hạn bất kỳ quyền nào hoặc bị giới hạn chức năng (ví dụ ByPass 14N vi phạm).
+    """
+    if isinstance(record_or_email, dict):
+        email = email or record_or_email.get("Email") or record_or_email.get("NVKT") or ""
+        account_inside = (
+            account_inside
+            or record_or_email.get("Account Inside")
+            or record_or_email.get("Inside Account")
+            or ""
+        )
+        msnv = msnv or record_or_email.get("MSNV") or record_or_email.get("Mã NV") or ""
+    elif isinstance(record_or_email, str) and not email:
+        email = record_or_email
+
+    adm = load_admin_staff_set()
+    em_clean = normalize_nfc(email).strip().lower()
+    ac_clean = normalize_nfc(account_inside).strip().lower()
+    mv_clean = normalize_nfc(msnv).strip().lower()
+    mv_norm = _normalize_msnv(mv_clean)
+
+    if em_clean and em_clean in adm["emails"]:
+        return True
+    if ac_clean and ac_clean in adm["accounts"]:
+        return True
+    if mv_clean and (mv_clean in adm["msnvs"] or mv_norm in adm["msnvs"]):
+        return True
+    return False
 
 def normalize_nfc(text):
     if text is None:
         return ""
     return unicodedata.normalize('NFC', str(text)).strip()
+
+def remove_accents(text):
+    if text is None:
+        return ""
+    nfkd = unicodedata.normalize('NFD', str(text))
+    no_tone = "".join([c for c in nfkd if unicodedata.category(c) != 'Mn'])
+    return no_tone.replace("đ", "d").replace("Đ", "D").lower().strip()
+
+def parse_bypass_date(val):
+    """Trích xuất datetime.date từ chuỗi Ngày Cập Nhật trên Google Sheet."""
+    if not val:
+        return None
+    s = str(val).strip()
+    if not s or s.lower() in ("nan", "chưa cập nhật", "chưa xử lý"):
+        return None
+    m1 = re.match(r"^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})", s)
+    if m1:
+        try:
+            return datetime.date(int(m1.group(3)), int(m1.group(2)), int(m1.group(1)))
+        except ValueError:
+            pass
+    m2 = re.match(r"^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})", s)
+    if m2:
+        try:
+            return datetime.date(int(m2.group(1)), int(m2.group(2)), int(m2.group(3)))
+        except ValueError:
+            pass
+    return None
+
+def is_bypass_final_status(status_val):
+    """Kiểm tra trạng thái Thao Tác của Bypass đã hoàn tất.
+    Chỉ coi là final nếu = 'Đã xử lý'. Vi phạm 14N giờ được lưu vào cột Ghi Chú riêng.
+    """
+    st = normalize_nfc(status_val).lower()
+    if not st or st in ("nan", "chưa xử lý", "chưa cập nhật"):
+        return False
+    # Giữ tương thích ngược: cache cũ có thể còn chuỗi "vi phạm/từ chối"
+    if st == "đã xử lý" or "vi phạm" in st or "từ chối" in st or "suy hao" in st:
+        return True
+    return False
+
+def check_14d_hau_kiem_violation(
+    target_record,
+    all_records,
+    min_violations=BYPASS_VIOLATION_MIN_CONTRACTS,
+    window_days=BYPASS_VIOLATION_WINDOW_DAYS
+):
+    """
+    Kiểm tra nếu Email NVKT trong vòng 14N tính từ Today-1 (khoảng [Today - 14, Today - 1])
+    có từ min_violations (2) HĐ trở lên có Hậu Kiểm = Không Đạt
+    (Nếu Không Đạt Mất Tín Hiệu tạm bỏ qua không tính vào)
+    thì từ chối thực hiện Bypass và trả về thông báo:
+    'Trong 14N vi phạm N Hợp đồng ( cụ thể:... ) Nhân sự thực hiện xử lý lại Suy Hao để được mở quyền Bypass'
+    """
+    if not isinstance(target_record, dict) or not all_records:
+        return False, 0, [], ""
+
+    # Rule: Nhân sự có Roles = Admin không bị giới hạn bất kỳ quyền hoặc chức năng nào (bỏ qua 14N vi phạm)
+    if is_admin_staff(target_record):
+        return False, 0, [], ""
+
+    target_email = normalize_nfc(target_record.get("Email", "")).strip().lower()
+    target_acc = normalize_nfc(target_record.get("Account Inside", "")).strip().lower()
+    target_id = str(target_record.get("ID", "")).strip()
+    if not target_email and not target_acc:
+        return False, 0, [], ""
+
+    today = datetime.datetime.now().date()
+    end_date = today - datetime.timedelta(days=1)
+    start_date = today - datetime.timedelta(days=window_days)
+
+    violating_shds = []
+    seen_shds = set()
+
+    for rec in reversed(all_records):
+        if not isinstance(rec, dict):
+            continue
+        rec_id = str(rec.get("ID", "")).strip()
+        if target_id and rec_id and rec_id == target_id:
+            continue
+
+        rec_email = normalize_nfc(rec.get("Email", "")).strip().lower()
+        rec_acc = normalize_nfc(rec.get("Account Inside", "")).strip().lower()
+        same_staff = (target_email and rec_email == target_email) or (target_acc and rec_acc == target_acc)
+        if not same_staff:
+            continue
+
+        raw_date = (
+            rec.get("Ngày Cập Nhật")
+            or rec.get("Ngày Cập Nhật")
+            or rec.get("Ngày cập nhật")
+            or rec.get("Thời gian")
+            or ""
+        )
+        rec_date = parse_bypass_date(raw_date)
+        if not rec_date or not (start_date <= rec_date <= end_date):
+            continue
+
+        hk_raw = normalize_nfc(rec.get("Hậu kiểm") or rec.get("Hậu Kiểm") or "")
+        hk_clean = remove_accents(hk_raw)
+        if "khong dat" not in hk_clean:
+            continue
+
+        suy_hao_raw = normalize_nfc(rec.get("Suy Hao Hậu Kiểm") or rec.get("Suy hao") or "")
+        combined_clean = remove_accents(f"{hk_raw} {suy_hao_raw}")
+        if "mat tin hieu" in combined_clean:
+            continue
+
+        rec_shd = normalize_nfc(rec.get("SHD") or rec.get("Số Hợp Đồng") or "").strip()
+        if rec_shd:
+            shd_key = rec_shd.upper()
+            if shd_key not in seen_shds:
+                seen_shds.add(shd_key)
+                violating_shds.append(rec_shd)
+
+    v_count = len(violating_shds)
+    if v_count >= min_violations:
+        shd_list_str = ", ".join(violating_shds)
+        msg = (
+            f"Không thành công : Trong 14N vi phạm {v_count} Hợp đồng ( cụ thể: {shd_list_str} ) "
+            f"Nhân sự thực hiện xử lý lại Suy Hao để được mở quyền Bypass"
+        )
+        return True, v_count, violating_shds, msg
+
+    return False, v_count, violating_shds, ""
 
 def fetch_sheet_data(sheet_id=DEFAULT_SHEET_ID, gid=GID_BYPASS):
     """
@@ -66,8 +310,50 @@ def fetch_sheet_data(sheet_id=DEFAULT_SHEET_ID, gid=GID_BYPASS):
                     rec["Account Inside"] = norm_v
                 elif k_lower == "id":
                     rec["ID"] = norm_v
+                elif "hậu kiểm" in k_lower and "suy hao" not in k_lower:
+                    rec["Hậu kiểm"] = norm_v
+                    rec["Hậu Kiểm"] = norm_v
+                elif "suy hao" in k_lower:
+                    rec["Suy Hao Hậu Kiểm"] = norm_v
+                    rec["Suy hao"] = norm_v
+                elif "ghi chú" in k_lower or "ghi chu" in k_lower or "note" in k_lower:
+                    rec["Ghi Chú"] = norm_v
 
             standard_records.append(rec)
+
+        # Khắc phục việc Apps Script cũ ghi đè cùng 1 Ngày Cập Nhật / Thao Tác lên các dòng cũ trùng SHD:
+        # Chỉ giữ Ngày Cập Nhật & Thao Tác mới nhất ở dòng có ID lớn nhất (dòng cuối cùng),
+        # các dòng lịch sử cũ trước đó được khôi phục Ngày Cập Nhật theo dòng liền kề trên Sheet.
+        shd_ts_groups = {}
+        for idx, rec in enumerate(standard_records):
+            shd_u = str(rec.get("SHD", "")).strip().upper()
+            ngay_s = str(rec.get("Ngày Cập Nhật", "")).strip()
+            if shd_u and ngay_s and ngay_s.lower() not in ("nan", "chưa cập nhật", "chưa xử lý"):
+                shd_ts_groups.setdefault((shd_u, ngay_s), []).append(idx)
+
+        overwritten_old_indices = set()
+        for (_, _), idxs in shd_ts_groups.items():
+            if len(idxs) > 1:
+                for old_i in idxs[:-1]:
+                    overwritten_old_indices.add(old_i)
+
+        if overwritten_old_indices:
+            for old_i in sorted(overwritten_old_indices):
+                restored_date = ""
+                for step in range(1, len(standard_records)):
+                    for cand in (old_i - step, old_i + step):
+                        if 0 <= cand < len(standard_records) and cand not in overwritten_old_indices:
+                            cand_d = str(standard_records[cand].get("Ngày Cập Nhật", "")).strip()
+                            if cand_d and cand_d.lower() not in ("nan", "chưa cập nhật", "chưa xử lý"):
+                                restored_date = cand_d
+                                break
+                    if restored_date:
+                        break
+                if restored_date:
+                    standard_records[old_i]["Ngày Cập Nhật"] = restored_date
+                    standard_records[old_i]["Ngày Cập Nhật"] = restored_date
+                if str(standard_records[old_i].get("Hậu kiểm", "")).strip():
+                    standard_records[old_i]["Thao Tác"] = "Đã xử lý"
 
         cols = [normalize_nfc(c) for c in df.columns]
         return {
@@ -692,24 +978,42 @@ class InsideBypassAutomation:
             self.log(f"⚠️ Đã bấm Save HĐ [{shd}], kiểm tra không thấy lỗi phát sinh.", "info")
             return True, "Đã gửi lưu thành công"
 
-    def process_bypass_queue(self, records, update_sheet_cb=None):
+    def process_bypass_queue(self, records, update_sheet_cb=None, all_sheet_records=None):
         """
         Xử lý toàn bộ danh sách bản ghi ByPass từ Google Sheet.
         """
         results = []
+        ref_records = all_sheet_records if all_sheet_records is not None else records
+        driver_ready = False
         try:
-            self.init_driver()
-            self.navigate_to_bypass_page()
-            self.open_import_tab_and_dismiss_help()
-
             for idx, r in enumerate(records):
                 shd = str(r.get("SHD", "")).strip()
                 current_status = str(r.get("Thao Tác", "")).strip()
 
-                if current_status == "Đã xử lý":
-                    self.log(f"⏩ Bỏ qua HĐ [{shd}] vì đã có trạng thái 'Đã xử lý'.", "info")
-                    results.append({"shd": shd, "status": "Đã xử lý", "message": "Đã hoàn tất trước đó"})
+                if is_bypass_final_status(current_status):
+                    self.log(f"⏩ Bỏ qua HĐ [{shd}] vì đã có trạng thái '{current_status}'.", "info")
+                    results.append({"shd": shd, "status": current_status, "message": "Đã hoàn tất trước đó"})
                     continue
+
+                is_violated, v_count, v_shds, reject_msg = check_14d_hau_kiem_violation(r, ref_records)
+                if is_violated:
+                    self.log(f"⛔ Từ chối ByPass HĐ [{shd}] ({r.get('Email', '')}): {reject_msg}", "warning")
+                    r["Thao Tác"] = reject_msg
+                    results.append({"shd": shd, "status": reject_msg, "message": reject_msg})
+                    if update_sheet_cb:
+                        try:
+                            update_sheet_cb(r, reject_msg)
+                        except TypeError:
+                            update_sheet_cb(r)
+                        except Exception as ex_cb:
+                            self.log(f"Lỗi callback cập nhật sheet: {ex_cb}", "warning")
+                    continue
+
+                if not driver_ready:
+                    self.init_driver()
+                    self.navigate_to_bypass_page()
+                    self.open_import_tab_and_dismiss_help()
+                    driver_ready = True
 
                 self.log(f"▶ Bắt đầu xử lý {idx + 1}/{len(records)}: HĐ [{shd}]...", "info")
                 try:

@@ -34,6 +34,8 @@ const autoClearSignalModeText       = document.getElementById('autoClearSignalMo
 const autoClearSignalModeDot        = document.getElementById('autoClearSignalModeDot');
 const clearSignalLogTerminal        = document.getElementById('clearSignalLogTerminal');
 const btnClearClearSignalLogs       = document.getElementById('btnClearClearSignalLogs');
+const selectDateFilterClearSignal   = document.getElementById('selectDateFilterClearSignal');
+const btnClearClearSignalCache      = document.getElementById('btnClearClearSignalCache');
 
 let currentClearSignalRecords  = [];
 let selectedClearSignalShds    = new Set();
@@ -210,13 +212,32 @@ function updateClearSignalKPIs() {
   if (badgeClearSignalPending)badgeClearSignalPending.textContent= `${pending} chờ xử lý`;
 }
 
+let currentClearSignalPage = 1;
+
 function renderClearSignalTable() {
   if (!tbodyClearSignalList) return;
 
+  const dateFilter = selectDateFilterClearSignal ? selectDateFilterClearSignal.value : 'today';
   const keyword = inputSearchClearSignal ? inputSearchClearSignal.value.trim().toLowerCase() : '';
   const filterStatus = selectClearSignalFilterStatus ? selectClearSignalFilterStatus.value : 'all';
 
-  const filtered = currentClearSignalRecords.filter(r => {
+  // Apply unified date filtering first
+  let dateFiltered = currentClearSignalRecords;
+  if (window.UnifiedWorkTabs && typeof window.UnifiedWorkTabs.filterRecords === 'function') {
+    dateFiltered = window.UnifiedWorkTabs.filterRecords(currentClearSignalRecords, dateFilter);
+  }
+
+  // Render Charts & Top Staff
+  if (window.UnifiedWorkTabs) {
+    if (typeof window.UnifiedWorkTabs.updateDailyChart === 'function') {
+      window.UnifiedWorkTabs.updateDailyChart('clearSignalDailyChart', currentClearSignalRecords, dateFilter);
+    }
+    if (typeof window.UnifiedWorkTabs.updateTopStaff === 'function') {
+      window.UnifiedWorkTabs.updateTopStaff('clearSignalTopStaffContainer', currentClearSignalRecords, dateFilter);
+    }
+  }
+
+  const filtered = dateFiltered.filter(r => {
     if (filterStatus === 'pending' && _isClearSignalFinalDone(r)) return false;
     if (filterStatus === 'done' && !String(r['Kết Quả'] || '').toLowerCase().includes('thành công') && !String(r['Kết Quả'] || '').toLowerCase().includes('đã xử lý')) return false;
     if (filterStatus === 'error' && !String(r['Kết Quả'] || '').toLowerCase().includes('lỗi') && !String(r['Kết Quả'] || '').toLowerCase().includes('thất bại')) return false;
@@ -226,27 +247,43 @@ function renderClearSignalTable() {
     const ten = String(r['Họ và Tên'] || '').toLowerCase();
     const mail= String(r['Email'] || '').toLowerCase();
     const mac = String(r['MAC'] || '').toLowerCase();
-    return shd.includes(keyword) || ten.includes(keyword) || mail.includes(keyword) || mac.includes(keyword);
+    const auto= String(r['Auto Cấp Lại'] || r['Auto Cap Lai'] || '').toLowerCase();
+    return shd.includes(keyword) || ten.includes(keyword) || mail.includes(keyword) || mac.includes(keyword) || auto.includes(keyword);
   });
 
+  // Đảm bảo luôn sắp xếp từ gần nhất đến xa nhất (mới nhất lên đầu)
+  const sortedFiltered = (window.UnifiedWorkTabs && typeof window.UnifiedWorkTabs.sortRecordsNewestFirst === 'function')
+    ? window.UnifiedWorkTabs.sortRecordsNewestFirst(filtered)
+    : filtered;
+
   if (clearSignalTableFooterText) {
-    clearSignalTableFooterText.textContent = `Hiển thị ${filtered.length} / ${currentClearSignalRecords.length} bản ghi`;
+    clearSignalTableFooterText.textContent = `Hiển thị ${sortedFiltered.length} / ${currentClearSignalRecords.length} bản ghi`;
   }
   if (clearSignalSelectedCountText) {
     clearSignalSelectedCountText.textContent = `(${selectedClearSignalShds.size} HĐ đã chọn)`;
   }
 
-  if (filtered.length === 0) {
+  if (sortedFiltered.length === 0) {
     tbodyClearSignalList.innerHTML = `
       <tr>
-        <td colspan="9" class="text-center py-8 text-slate-400">
+        <td colspan="10" class="text-center py-8 text-slate-400">
           Không tìm thấy hợp đồng Clear Tín Hiệu phù hợp
         </td>
       </tr>`;
+    if (window.UnifiedWorkTabs) {
+      window.UnifiedWorkTabs.renderPagination('clearSignalPagination', { total: 0 });
+    }
     return;
   }
 
-  tbodyClearSignalList.innerHTML = filtered.map((r, idx) => {
+  // Phân trang 10 dòng 1 trang
+  const pageState = window.UnifiedWorkTabs
+    ? window.UnifiedWorkTabs.paginate(sortedFiltered, currentClearSignalPage, 10)
+    : { items: sortedFiltered.slice(0, 10), currentPage: 1, totalPages: Math.ceil(sortedFiltered.length / 10), total: sortedFiltered.length, startIdx: 0, endIdx: Math.min(10, sortedFiltered.length) };
+  currentClearSignalPage = pageState.currentPage;
+
+  tbodyClearSignalList.innerHTML = pageState.items.map((r, idx) => {
+    const globalIdx = pageState.startIdx + idx;
     const shd = r['SHD'] || '';
     const isChecked = selectedClearSignalShds.has(shd) ? 'checked' : '';
     const kq = r['Kết Quả'] || '';
@@ -261,17 +298,34 @@ function renderClearSignalTable() {
       badgeClass = 'bg-rose-50 text-rose-700 border-rose-200';
     }
 
+    const autoCapLai = r['Auto Cấp Lại'] || r['Auto Cap Lai'] || '';
+    let autoBadgeClass = 'bg-slate-50 text-slate-600 border-slate-200';
+    let autoIcon = '⏳';
+    if (autoCapLai.includes('Bình Thường') || autoCapLai.includes('Tồn:')) {
+      autoBadgeClass = 'bg-teal-50 text-teal-700 border-teal-200 font-medium';
+      autoIcon = '🟢';
+    } else if (autoCapLai.includes('Auto Cấp Lại')) {
+      autoBadgeClass = 'bg-purple-100 text-purple-800 border-purple-300 font-bold';
+      autoIcon = '🤖';
+    }
+
     return `
       <tr class="hover:bg-teal-50/40 transition-colors border-b border-slate-100">
         <td class="p-3 text-center">
           <input type="checkbox" class="chk-clear-signal-row rounded text-teal-600" data-shd="${shd}" ${isChecked}>
         </td>
-        <td class="p-3 text-center font-semibold text-slate-500">${idx + 1}</td>
+        <td class="p-3 text-center font-semibold text-slate-500">${globalIdx + 1}</td>
         <td class="p-3 font-semibold text-slate-800">${r['Họ và Tên'] || '-'}</td>
         <td class="p-3 text-slate-600 text-xs">${r['Email'] || '-'}</td>
         <td class="p-3 font-mono font-bold text-teal-700">${shd || '-'}</td>
         <td class="p-3 font-mono text-xs text-slate-700 bg-slate-50 px-2 py-1 rounded inline-block my-2 border border-slate-200">${r['MAC'] || '-'}</td>
         <td class="p-3 text-slate-500 text-xs">${r['Ngày Cập Nhật'] || '-'}</td>
+        <td class="p-3 text-center">
+          <span class="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] rounded-full border ${autoBadgeClass}">
+            <span>${autoIcon}</span>
+            <span>${autoCapLai || '-'}</span>
+          </span>
+        </td>
         <td class="p-3 text-center">
           <span class="inline-block px-2.5 py-1 text-[11px] font-semibold rounded-full border ${badgeClass}">
             ${badgeText}
@@ -285,6 +339,14 @@ function renderClearSignalTable() {
       </tr>
     `;
   }).join('');
+
+  // Render pagination controls
+  if (window.UnifiedWorkTabs) {
+    window.UnifiedWorkTabs.renderPagination('clearSignalPagination', pageState, (newPage) => {
+      currentClearSignalPage = newPage;
+      renderClearSignalTable();
+    });
+  }
 
   // Row selection handler
   tbodyClearSignalList.querySelectorAll('.chk-clear-signal-row').forEach(cb => {
@@ -319,12 +381,24 @@ if (chkClearSignalSelectAll) {
   });
 }
 
-if (inputSearchClearSignal) inputSearchClearSignal.addEventListener('input', renderClearSignalTable);
-if (selectClearSignalFilterStatus) selectClearSignalFilterStatus.addEventListener('change', renderClearSignalTable);
+if (inputSearchClearSignal) inputSearchClearSignal.addEventListener('input', () => { currentClearSignalPage = 1; renderClearSignalTable(); });
+if (selectClearSignalFilterStatus) selectClearSignalFilterStatus.addEventListener('change', () => { currentClearSignalPage = 1; renderClearSignalTable(); });
+if (selectDateFilterClearSignal)   selectDateFilterClearSignal.addEventListener('change',   () => { currentClearSignalPage = 1; renderClearSignalTable(); });
 if (btnRefreshClearSignalSheetData) {
   btnRefreshClearSignalSheetData.addEventListener('click', () => {
     showSnackbar('🔄 Đang tải lại dữ liệu Clear Tín Hiệu từ Google Sheet...');
     loadClearSignalSheetData();
+  });
+}
+if (btnClearClearSignalCache) {
+  btnClearClearSignalCache.addEventListener('click', async () => {
+    try {
+      await fetch('/api/clear-signal/clear-cache', { method: 'POST' });
+      showSnackbar('🧹 Đã xóa bộ nhớ đệm Clear Tín Hiệu!');
+      loadClearSignalSheetData();
+    } catch (e) {
+      showSnackbar('Không thể xóa cache Clear Tín Hiệu');
+    }
   });
 }
 

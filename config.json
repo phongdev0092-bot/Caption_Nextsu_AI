@@ -21,11 +21,23 @@
     "use_otp": false,
     "account_name": ""
   },
+  "am_account": {
+    "username": "phuongnam.phongnh5@fpt.net",
+    "password": "Benngo@@20262027",
+    "account_name": "phuongnam.phongnh5@fpt.net"
+  },
+  "am_username": "phuongnam.phongnh5@fpt.net",
+  "am_password": "Benngo@@20262027",
+  "radius_username": "phuongnam.phongnh5@fpt.net",
+  "radius_password": "Benngo@@20262027",
   "active_account": "default",
   "use_otp": true,
   "google_sheet_webhook_url": "https://script.google.com/macros/s/AKfycbz66OgDwskEuYIn_FDlwSEMrkzJRy3V_s4pJzMu-bKrzs3iNkSN9yNycIZe3TF6UxL2pw/exec",
   "cls_webhook_url": "https://script.google.com/macros/s/AKfycbyX7gEztw78VM71U8HDFh1iUJAvkqV2fzlpUe5kAgrV9Io-R-kZuEeDYXwntlHkdr-M/exec",
   "clear_signal_webhook_url": "https://script.google.com/macros/s/AKfycbyX7gEztw78VM71U8HDFh1iUJAvkqV2fzlpUe5kAgrV9Io-R-kZuEeDYXwntlHkdr-M/exec",
   "reset_signal_webhook_url": "https://script.google.com/macros/s/AKfycbyX7gEztw78VM71U8HDFh1iUJAvkqV2fzlpUe5kAgrV9Io-R-kZuEeDYXwntlHkdr-M/exec",
-  "assign_webhook_url": "https://script.google.com/macros/s/AKfycbyX7gEztw78VM71U8HDFh1iUJAvkqV2fzlpUe5kAgrV9Io-R-kZuEeDYXwntlHkdr-M/exec"
-}
+  "assign_webhook_url": "https://script.google.com/macros/s/AKfycbz66OgDwskEuYIn_FDlwSEMrkzJRy3V_s4pJzMu-bKrzs3iNkSN9yNycIZe3TF6UxL2pw/exec",
+  "mybae_webhook_url": "https://script.google.com/macros/s/AKfycbyX7gEztw78VM71U8HDFh1iUJAvkqV2fzlpUe5kAgrV9Io-R-kZuEeDYXwntlHkdr-M/exec",
+  "spampool_webhook_url": "https://script.google.com/macros/s/AKfycbyX7gEztw78VM71U8HDFh1iUJAvkqV2fzlpUe5kAgrV9Io-R-kZuEeDYXwntlHkdr-M/exec",
+  "bypass_nat_webhook_url": "https://script.google.com/macros/s/AKfycbyX7gEztw78VM71U8HDFh1iUJAvkqV2fzlpUe5kAgrV9Io-R-kZuEeDYXwntlHkdr-M/exec"
+}

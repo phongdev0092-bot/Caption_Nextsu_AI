@@ -169,3 +169,9 @@ let autoClearSignalCountdownTimer = null;
 let autoResetSignalMode = localStorage.getItem('autoResetSignalMode') !== 'false'; // Mặc định Auto là BẬT
 let autoResetSignalCountdown = 0;
 let autoResetSignalCountdownTimer = null;
+let autoSpamPoolMode = localStorage.getItem('autoSpamPoolMode') !== 'false'; // Mặc định Auto là BẬT
+let autoSpamPoolCountdown = 0;
+let autoSpamPoolCountdownTimer = null;
+let isSpamPoolRunning = false;
+let currentSpamPoolRecords = [];
+

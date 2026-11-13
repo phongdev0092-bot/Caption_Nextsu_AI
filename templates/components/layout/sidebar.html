@@ -75,35 +75,31 @@
         </button>
 
         <!-- TAB 3: AUTO BYPASS -->
-        <button type="button" class="sidebar-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-[13.5px] transition-all text-slate-600 hover:bg-slate-100 group relative" id="tabBtn3" role="tab" aria-selected="false" data-tab="tab-tasks">
+        <button type="button" class="sidebar-nav-item w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl font-medium text-[13.5px] transition-all text-slate-600 hover:bg-slate-100 group relative" id="tabBtn3" role="tab" aria-selected="false" data-tab="tab-tasks">
           <svg class="nav-icon shrink-0 text-amber-500" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
           </svg>
           <span class="nav-label flex-1 text-left font-medium">Auto Bypass</span>
+          <span id="navPendingBadgeBypass" class="hidden px-2 py-0.5 text-[10.5px] font-bold text-white bg-amber-500 rounded-full shadow-sm animate-pulse ml-auto" title="Số hợp đồng ByPass đang chờ xử lý">0</span>
           <span id="sidebarAutoBypassBadge" class="hidden px-1.5 py-0.5 text-[9.5px] font-bold text-amber-700 bg-amber-100 rounded-md border border-amber-300 animate-pulse">
             🤖 AUTO
-          </span>
-          <span class="nav-badge-hot px-1.5 py-0.5 text-[10px] font-bold text-amber-700 bg-amber-100 rounded-md border border-amber-200">
-            HOT
           </span>
         </button>
 
         <!-- TAB 4: AUTO CLEAR CLS CÓ SR -->
-        <button type="button" class="sidebar-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-[13.5px] transition-all text-slate-600 hover:bg-slate-100 group relative" id="tabBtn4" role="tab" aria-selected="false" data-tab="tab-clear-cls">
+        <button type="button" class="sidebar-nav-item w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl font-medium text-[13.5px] transition-all text-slate-600 hover:bg-slate-100 group relative" id="tabBtn4" role="tab" aria-selected="false" data-tab="tab-clear-cls">
           <svg class="nav-icon shrink-0 text-indigo-500" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
           </svg>
           <span class="nav-label flex-1 text-left font-medium">Auto Clear Cls có SR</span>
+          <span id="navPendingBadgeCls" class="hidden px-2 py-0.5 text-[10.5px] font-bold text-white bg-indigo-500 rounded-full shadow-sm animate-pulse ml-auto" title="Số hợp đồng Clear Cls đang chờ xử lý">0</span>
           <span id="sidebarAutoClsBadge" class="hidden px-1.5 py-0.5 text-[9.5px] font-bold text-indigo-700 bg-indigo-100 rounded-md border border-indigo-300 animate-pulse">
             🤖 AUTO
-          </span>
-          <span class="px-1.5 py-0.5 text-[10px] font-bold text-indigo-700 bg-indigo-50 rounded-md border border-indigo-200">
-            DEV
           </span>
         </button>
 
         <!-- TAB 5: AUTO PHÂN CÔNG TAY -->
-        <button type="button" class="sidebar-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-[13.5px] transition-all text-slate-600 hover:bg-slate-100 group relative" id="tabBtn5" role="tab" aria-selected="false" data-tab="tab-manual-assign">
+        <button type="button" class="sidebar-nav-item w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl font-medium text-[13.5px] transition-all text-slate-600 hover:bg-slate-100 group relative" id="tabBtn5" role="tab" aria-selected="false" data-tab="tab-manual-assign">
           <svg class="nav-icon shrink-0 text-sky-500" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="8" r="4"></circle>
             <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"></path>
@@ -111,16 +107,14 @@
             <line x1="22" y1="2" x2="18" y2="6"></line>
           </svg>
           <span class="nav-label flex-1 text-left font-medium">Auto Phân Công Tay</span>
+          <span id="navPendingBadgeAssign" class="hidden px-2 py-0.5 text-[10.5px] font-bold text-white bg-sky-500 rounded-full shadow-sm animate-pulse ml-auto" title="Số hợp đồng Phân Công Tay đang chờ xử lý">0</span>
           <span id="sidebarAutoAssignBadge" class="hidden px-1.5 py-0.5 text-[9.5px] font-bold text-sky-700 bg-sky-100 rounded-md border border-sky-300 animate-pulse">
             🤖 AUTO
-          </span>
-          <span class="px-1.5 py-0.5 text-[10px] font-bold text-sky-700 bg-sky-50 rounded-md border border-sky-200">
-            NEW
           </span>
         </button>
 
         <!-- TAB 6: AUTO CLEAR TÍN HIỆU -->
-        <button type="button" class="sidebar-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-[13.5px] transition-all text-slate-600 hover:bg-slate-100 group relative" id="tabBtnClearSignal" role="tab" aria-selected="false" data-tab="tab-clear-signal" data-title="Auto Clear Tín Hiệu">
+        <button type="button" class="sidebar-nav-item w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl font-medium text-[13.5px] transition-all text-slate-600 hover:bg-slate-100 group relative" id="tabBtnClearSignal" role="tab" aria-selected="false" data-tab="tab-clear-signal" data-title="Auto Clear Tín Hiệu">
           <svg class="nav-icon shrink-0 text-teal-500" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M4.93 4.93a10 10 0 0 1 14.14 0"></path>
             <path d="M7.76 7.76a6 6 0 0 1 8.48 0"></path>
@@ -128,27 +122,63 @@
             <line x1="12" y1="14" x2="12" y2="22"></line>
           </svg>
           <span class="nav-label flex-1 text-left font-medium">Clear Tín Hiệu</span>
+          <span id="navPendingBadgeClearSignal" class="hidden px-2 py-0.5 text-[10.5px] font-bold text-white bg-teal-500 rounded-full shadow-sm animate-pulse ml-auto" title="Số hợp đồng Clear Tín Hiệu đang chờ xử lý">0</span>
           <span id="sidebarAutoClearSignalBadge" class="hidden px-1.5 py-0.5 text-[9.5px] font-bold text-teal-700 bg-teal-100 rounded-md border border-teal-300 animate-pulse">
             🤖 AUTO
-          </span>
-          <span class="px-1.5 py-0.5 text-[10px] font-bold text-teal-700 bg-teal-50 rounded-md border border-teal-200">
-            GID 0
           </span>
         </button>
 
         <!-- TAB 7: AUTO CẤP LẠI TÍN HIỆU -->
-        <button type="button" class="sidebar-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-[13.5px] transition-all text-slate-600 hover:bg-slate-100 group relative" id="tabBtnResetSignal" role="tab" aria-selected="false" data-tab="tab-reset-signal" data-title="Auto Cấp Lại Tín Hiệu">
+        <button type="button" class="sidebar-nav-item w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl font-medium text-[13.5px] transition-all text-slate-600 hover:bg-slate-100 group relative" id="tabBtnResetSignal" role="tab" aria-selected="false" data-tab="tab-reset-signal" data-title="Auto Cấp Lại Tín Hiệu">
           <svg class="nav-icon shrink-0 text-purple-500" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="23 4 23 10 17 10"></polyline>
             <polyline points="1 20 1 14 7 14"></polyline>
             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
           </svg>
           <span class="nav-label flex-1 text-left font-medium">Cấp Lại Tín Hiệu</span>
+          <span id="navPendingBadgeResetSignal" class="hidden px-2 py-0.5 text-[10.5px] font-bold text-white bg-purple-500 rounded-full shadow-sm animate-pulse ml-auto" title="Số hợp đồng Cấp Lại Tín Hiệu đang chờ xử lý">0</span>
           <span id="sidebarAutoResetSignalBadge" class="hidden px-1.5 py-0.5 text-[9.5px] font-bold text-purple-700 bg-purple-100 rounded-md border border-purple-300 animate-pulse">
             🤖 AUTO
           </span>
-          <span class="px-1.5 py-0.5 text-[10px] font-bold text-purple-700 bg-purple-50 rounded-md border border-purple-200">
-            NEW
+        </button>
+
+        <!-- TAB 8: AUTO BYPASS MYBAE -->
+        <button type="button" class="sidebar-nav-item w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl font-medium text-[13.5px] transition-all text-slate-600 hover:bg-slate-100 group relative" id="tabBtn6" role="tab" aria-selected="false" data-tab="tab-bypass-mybae" data-title="Auto Bypass MyBAE">
+          <span class="nav-icon shrink-0 text-[17px] leading-none w-[19px] text-center">⚡</span>
+          <span class="nav-label flex-1 text-left font-medium">Auto Bypass MyBAE</span>
+          <span id="navPendingBadgeMyBae" class="hidden px-2 py-0.5 text-[10.5px] font-bold text-white bg-orange-500 rounded-full shadow-sm animate-pulse ml-auto" title="Số hợp đồng Bypass MyBAE đang chờ xử lý">0</span>
+          <span id="sidebarAutoMyBaeBadge" class="hidden px-1.5 py-0.5 text-[9.5px] font-bold text-orange-700 bg-orange-100 rounded-md border border-orange-300 animate-pulse">
+            🤖 AUTO
+          </span>
+        </button>
+
+        <!-- TAB 9: AUTO SPAMPOOL & IPV6 -->
+        <button type="button" class="sidebar-nav-item w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl font-medium text-[13.5px] transition-all text-slate-600 hover:bg-slate-100 group relative" id="tabBtnSpamPool" role="tab" aria-selected="false" data-tab="tab-spampool" data-title="Auto SpamPool &amp; IPv6">
+          <span class="nav-icon shrink-0 text-[17px] leading-none w-[19px] text-center">🌐</span>
+          <span class="nav-label flex-1 text-left font-medium">SpamPool &amp; IPv6</span>
+          <span id="navPendingBadgeSpamPool" class="hidden px-2 py-0.5 text-[10.5px] font-bold text-white bg-emerald-500 rounded-full shadow-sm animate-pulse ml-auto" title="Số hợp đồng SpamPool đang chờ xử lý">0</span>
+          <span id="sidebarAutoSpamPoolBadge" class="hidden px-1.5 py-0.5 text-[9.5px] font-bold text-teal-700 bg-teal-100 rounded-md border border-teal-300 animate-pulse">
+            🤖 AUTO
+          </span>
+        </button>
+
+        <!-- TAB 10: AUTO BYPASS NAT -->
+        <button type="button" class="sidebar-nav-item w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl font-medium text-[13.5px] transition-all text-slate-600 hover:bg-slate-100 group relative" id="tabBtnBypassNat" role="tab" aria-selected="false" data-tab="tab-bypass-nat" data-title="Auto Bypass NAT">
+          <span class="nav-icon shrink-0 text-[17px] leading-none w-[19px] text-center">🛡️</span>
+          <span class="nav-label flex-1 text-left font-medium">Bypass NAT</span>
+          <span id="navPendingBadgeBypassNat" class="hidden px-2 py-0.5 text-[10.5px] font-bold text-white bg-indigo-500 rounded-full shadow-sm animate-pulse ml-auto" title="Số hợp đồng Bypass NAT đang chờ xử lý">0</span>
+          <span id="sidebarAutoBypassNatBadge" class="hidden px-1.5 py-0.5 text-[9.5px] font-bold text-indigo-700 bg-indigo-100 rounded-md border border-indigo-300 animate-pulse">
+            🤖 AUTO
+          </span>
+        </button>
+
+        <!-- TAB 11: AUTO CẤP/THU HỒI PORT -->
+        <button type="button" class="sidebar-nav-item w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl font-medium text-[13.5px] transition-all text-slate-600 hover:bg-slate-100 group relative" id="tabBtnPort" role="tab" aria-selected="false" data-tab="tab-port" data-title="Cấp/Thu Hồi Port">
+          <span class="nav-icon shrink-0 text-[17px] leading-none w-[19px] text-center">🔌</span>
+          <span class="nav-label flex-1 text-left font-medium">Cấp/Thu Hồi Port</span>
+          <span id="navPendingBadgePort" class="hidden px-2 py-0.5 text-[10.5px] font-bold text-white bg-cyan-500 rounded-full shadow-sm animate-pulse ml-auto" title="Số hợp đồng Cấp/Thu Hồi Port đang chờ xử lý">0</span>
+          <span id="sidebarAutoPortBadge" class="hidden px-1.5 py-0.5 text-[9.5px] font-bold text-cyan-700 bg-cyan-100 rounded-md border border-cyan-300 animate-pulse">
+            🤖 AUTO
           </span>
         </button>
 

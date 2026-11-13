@@ -280,10 +280,18 @@ class InsideClearClsAutomation:
         self.log("Phiên đăng nhập Inside FPT mới đã sẵn sàng!", "success")
 
     def close(self):
-        """Khi hoàn tất 1 tác vụ: Đóng trình duyệt và xóa sạch toàn bộ session cũ."""
+        """Khi hoàn tất 1 tác vụ: Đóng trình duyệt (nếu _session_broken thì xóa sạch phiên lỗi)."""
         if self.driver:
-            self.log("Hoàn tất tác vụ: Đang đóng trình duyệt và xóa sạch toàn bộ session cũ...", "info")
-            core_login.close_driver_and_clear_session(self.driver, log_cb=self.log_cb)
+            if getattr(self, "_session_broken", False):
+                self.log("Phát hiện phiên có lỗi giao diện/đăng nhập -> Hủy phiên để lần sau đăng nhập mới sạch 100%.", "warning")
+                try:
+                    self.driver.quit()
+                except Exception:
+                    pass
+                core_login.invalidate_session(log_cb=self.log_cb)
+            else:
+                self.log("Hoàn tất tác vụ: Đang đóng trình duyệt và xóa sạch toàn bộ session cũ...", "info")
+                core_login.close_driver_and_clear_session(self.driver, log_cb=self.log_cb)
             self.driver = None
 
     def navigate_to_general_info_page(self):

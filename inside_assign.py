@@ -23,6 +23,12 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import (
+    StaleElementReferenceException,
+    NoSuchElementException,
+    NoSuchWindowException,
+    WebDriverException,
+)
 
 from inside_cls import (
     InsideClearClsAutomation,
@@ -901,7 +907,14 @@ class InsideAssignAutomation(InsideClearClsAutomation):
         end = time.time() + timeout
         while time.time() < end:
             items = self._visible(self.driver.find_elements(By.XPATH, items_xp))
-            real = [it for it in items if (it.text or "").strip() and "loading" not in it.text.lower()]
+            real = []
+            for it in items:
+                try:
+                    txt = (it.text or "").strip()
+                    if txt and "loading" not in txt.lower():
+                        real.append(it)
+                except Exception:
+                    continue
             if real:
                 return real
             time.sleep(0.4)
@@ -978,37 +991,56 @@ class InsideAssignAutomation(InsideClearClsAutomation):
         matched = None
         # Ưu tiên 1: Khớp chính xác (clean)
         for it in items:
-            t_it = clean_str(it.text)
-            if t_it == target_clean:
-                matched = it
-                break
+            try:
+                t_it = clean_str(it.text)
+                if t_it == target_clean:
+                    matched = it
+                    break
+            except Exception:
+                continue
 
         # Ưu tiên 2: Khớp một phần
         if not matched:
             for it in items:
-                t_it = clean_str(it.text)
-                if t_it and (target_clean in t_it or t_it in target_clean):
-                    matched = it
-                    break
+                try:
+                    t_it = clean_str(it.text)
+                    if t_it and (target_clean in t_it or t_it in target_clean):
+                        matched = it
+                        break
+                except Exception:
+                    continue
 
         # Ưu tiên 3: Đối với Nguyên nhân phân công
         if not matched and key == "nguyen_nhan":
             for it in items:
-                t_it = clean_str(it.text)
-                if "khongdungdoituong" in t_it or "doituong" in t_it:
-                    matched = it
-                    break
+                try:
+                    t_it = clean_str(it.text)
+                    if "khongdungdoituong" in t_it or "doituong" in t_it:
+                        matched = it
+                        break
+                except Exception:
+                    continue
 
         # Ưu tiên 4: Fallback theo từ khóa đầu tiên
         if not matched and " " in value:
             w1 = clean_str(value.split()[0])
             for it in items:
-                if w1 in clean_str(it.text):
-                    matched = it
-                    break
+                try:
+                    if w1 in clean_str(it.text):
+                        matched = it
+                        break
+                except Exception:
+                    continue
 
         if not matched:
-            avail = [it.text.strip() for it in items[:10] if (it.text or "").strip()]
+            avail = []
+            for it in items[:10]:
+                try:
+                    t = (it.text or "").strip()
+                    if t:
+                        avail.append(t)
+                except Exception:
+                    pass
             try:
                 self.driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
             except Exception:
@@ -1019,7 +1051,11 @@ class InsideAssignAutomation(InsideClearClsAutomation):
             )
 
         # 6. Click chọn item
-        matched_text = matched.text.strip()
+        matched_text = ""
+        try:
+            matched_text = matched.text.strip()
+        except Exception:
+            matched_text = value
         self._click_element(matched)
         time.sleep(0.5)
 
@@ -1106,24 +1142,76 @@ class InsideAssignAutomation(InsideClearClsAutomation):
         end = time.time() + 20
         last_msg = ""
         while time.time() < end:
-            time.sleep(1)
-            snacks = self._visible(self.driver.find_elements(By.XPATH, "//div[contains(@class,'mud-snackbar')]"))
-            for s in snacks:
-                txt = (s.text or "").strip()
-                if not txt:
-                    continue
-                last_msg = txt
-                low = norm_lower(txt)
-                cls = (s.get_attribute("class") or "").lower()
-                if "error" in cls or "warning" in cls or any(k in low for k in ("lỗi", "thất bại", "không thành công", "không thể")):
-                    return False, txt
-            dialogs = self._visible(self.driver.find_elements(By.XPATH, "//div[contains(@class,'mud-dialog')]"))
-            if not dialogs:
+            time.sleep(0.8)
+            try:
+                # 1. Kiểm tra snackbars (thông báo nổi của MudBlazor) an toàn với StaleElement
+                try:
+                    snacks = self.driver.find_elements(By.XPATH, "//div[contains(@class,'mud-snackbar')]")
+                    for s in self._visible(snacks):
+                        try:
+                            txt = (s.text or "").strip()
+                            cls = (s.get_attribute("class") or "").lower()
+                            if txt:
+                                last_msg = txt
+                                low = norm_lower(txt)
+                                # Nếu snackbar báo thành công -> xác nhận thành công ngay
+                                if any(k in low for k in ("thành công", "thanh cong", "hoàn tất", "hoan tat", "đã cập nhật", "da cap nhat")) or "success" in cls:
+                                    self.log(f"Phát hiện thông báo thành công: '{txt}'", "success")
+                                    return True, txt or "Cập nhật thành công!"
+                                # Nếu snackbar báo lỗi thực sự từ hệ thống
+                                if ("error" in cls or "warning" in cls or any(k in low for k in ("lỗi", "thất bại", "không thành công", "không thể"))) and not any(k in low for k in ("thành công", "thanh cong")):
+                                    return False, txt
+                        except (StaleElementReferenceException, Exception):
+                            continue
+                except (StaleElementReferenceException, Exception):
+                    pass
+
+                # 2. Kiểm tra popup mud-dialog đã đóng chưa
+                # Trong MudBlazor: Popup CHỈ đóng khi Cập nhật thành công! (Nếu lỗi, popup luôn giữ nguyên để người dùng sửa)
+                dialogs = []
+                try:
+                    d_found = self.driver.find_elements(By.XPATH, "//div[contains(@class,'mud-dialog')]")
+                    dialogs = self._visible(d_found)
+                except (StaleElementReferenceException, Exception):
+                    # Nếu gặp lỗi DOM khi tìm dialog (popup đang bị gỡ bỏ khỏi DOM) -> coi như dialog đã đóng
+                    dialogs = []
+
+                if not dialogs:
+                    self.log(f"Popup Phân tuyến đã đóng (Cập nhật thành công). Phản hồi: '{last_msg or 'Cập nhật thành công!'}'", "success")
+                    return True, last_msg or "Cập nhật thành công!"
+
+                # 3. Nếu popup vẫn mở -> kiểm tra xem có helper text báo lỗi nhập liệu không
+                try:
+                    err_els = self.driver.find_elements(
+                        By.XPATH, "//div[contains(@class,'mud-dialog')]//*[contains(@class,'mud-input-helper-text') and contains(@class,'mud-input-error')]"
+                    )
+                    err_msgs = []
+                    for e in self._visible(err_els):
+                        try:
+                            t = (e.text or "").strip()
+                            if t:
+                                err_msgs.append(t)
+                        except (StaleElementReferenceException, Exception):
+                            pass
+                    if err_msgs:
+                        return False, " | ".join(err_msgs)
+                except (StaleElementReferenceException, Exception):
+                    pass
+
+            except StaleElementReferenceException:
+                # Stale element reference trong khi theo dõi kết quả là dấu hiệu DOM đang re-render/hủy popup
+                continue
+            except Exception:
+                continue
+
+        # Hết timeout 20s -> kiểm tra lại lần cuối
+        try:
+            d_found = self.driver.find_elements(By.XPATH, "//div[contains(@class,'mud-dialog')]")
+            if not self._visible(d_found):
                 return True, last_msg or "Cập nhật thành công!"
-            errs = self._visible(self.driver.find_elements(
-                By.XPATH, "//div[contains(@class,'mud-dialog')]//*[contains(@class,'mud-input-helper-text') and contains(@class,'mud-input-error')]"))
-            if errs:
-                return False, " | ".join(e.text.strip() for e in errs if e.text.strip()) or "Popup báo lỗi nhập liệu"
+        except Exception:
+            return True, last_msg or "Cập nhật thành công!"
+
         return False, last_msg or "Hết thời gian chờ phản hồi sau khi bấm Cập nhật"
 
     # ------------------------------------------------------------------ public
@@ -1155,43 +1243,106 @@ class InsideAssignAutomation(InsideClearClsAutomation):
 
         self.ptc_handle = None  # reset
         ok, msg = False, "Chưa xử lý"
+        last_err_str = ""
 
         try:
-            # Dọn dẹp các cửa sổ phụ còn mở từ lần trước
-            if len(self.driver.window_handles) > 1:
-                self._return_to_main_form()
-            else:
-                self.driver.switch_to.window(self.main_handle)
-                self._switch_to_frame1()
+            for attempt in (1, 2):
+                try:
+                    # Dọn dẹp các cửa sổ phụ còn mở từ lần trước
+                    if len(self.driver.window_handles) > 1:
+                        self._return_to_main_form()
+                    else:
+                        self.driver.switch_to.window(self.main_handle)
+                        self._switch_to_frame1()
 
-            if is_bao_tri:
-                self.log(f"--- BẮT ĐẦU QUY TRÌNH BẢO TRÌ HĐ {shd} ---", "info")
-                self._click_tab_bao_tri()
-                self._fill_nhap_hop_dong(shd)
-                self._open_cl_window()
-            else:
-                self.log(f"--- BẮT ĐẦU QUY TRÌNH TRIỂN KHAI HĐ {shd} ---", "info")
-                self._click_tab_trien_khai()
-                self._fill_dieu_kien_nhap(shd)
-                self._open_ptc_window()
+                    if is_bao_tri:
+                        self.log(f"--- BẮT ĐẦU QUY TRÌNH BẢO TRÌ HĐ {shd} ---", "info")
+                        self._click_tab_bao_tri()
+                        self._fill_nhap_hop_dong(shd)
+                        self._open_cl_window()
+                    else:
+                        self.log(f"--- BẮT ĐẦU QUY TRÌNH TRIỂN KHAI HĐ {shd} ---", "info")
+                        self._click_tab_trien_khai()
+                        self._fill_dieu_kien_nhap(shd)
+                        self._open_ptc_window()
 
-            # Cả hai loại tác vụ đều có nút Phân Tuyến và popup điền thông tin
-            self._click_phan_tuyen()
+                    # Cả hai loại tác vụ đều có nút Phân Tuyến và popup điền thông tin
+                    self._click_phan_tuyen()
 
-            # Điền đủ form 4 trường và kiểm tra trước khi bấm Cập nhật
-            self._fill_and_verify_popup(record)
+                    # Điền đủ form 4 trường và kiểm tra trước khi bấm Cập nhật
+                    self._fill_and_verify_popup(record)
 
-            # Bấm cập nhật và đọc kết quả
-            ok, msg = self._click_cap_nhat_and_read_result()
-            self.log(
-                f"Kết quả Phân tuyến HĐ {shd}: {'OK' if ok else 'LỖI'} - {msg}",
-                "success" if ok else "warning"
-            )
-            return ok, format_assign_thao_tac(ok, msg)
+                    # Bấm cập nhật và đọc kết quả
+                    ok, msg = self._click_cap_nhat_and_read_result()
+                    self._session_broken = False
+                    self.log(
+                        f"Kết quả Phân tuyến HĐ {shd}: {'OK' if ok else 'LỖI'} - {msg}",
+                        "success" if ok else "warning"
+                    )
+                    return ok, format_assign_thao_tac(ok, msg)
+
+                except Exception as e_attempt:
+                    err_str = str(e_attempt)
+                    last_err_str = err_str
+                    err_low = err_str.lower()
+
+                    # Chốt chặn dự phòng: Nếu gặp lỗi stale element reference (do DOM thay đổi sau khi bấm Cập nhật),
+                    # kiểm tra xem popup đã đóng chưa. Nếu popup đã đóng thì ca vụ đã được chuyển thành công!
+                    if "stale element" in err_low:
+                        try:
+                            time.sleep(1)
+                            d_found = self.driver.find_elements(By.XPATH, "//div[contains(@class,'mud-dialog')]")
+                            if not self._visible(d_found):
+                                self.log(f"Phát hiện popup đã đóng sau lỗi stale element -> Xác nhận Phân công thành công cho HĐ {shd}!", "success")
+                                ok = True
+                                msg = "Cập nhật thành công!"
+                                self._session_broken = False
+                                return True, format_assign_thao_tac(True, msg)
+                        except Exception:
+                            pass
+
+                    # Nhận diện lỗi do phiên con Inside New V5 (partner.fpt.net) hết hạn ngầm hoặc chưa tải được form
+                    is_session_ui_err = any(k in err_low for k in (
+                        "không tìm thấy ô 'nhập hợp đồng'",
+                        "khong tim thay o nhap shd",
+                        "không tìm thấy tab",
+                        "không thể click tab",
+                        "không tìm thấy nút 'xem cl'",
+                        "khong tim thay nut 'phieu thi cong'",
+                        "no such frame",
+                        "unable to switch to frame",
+                    ))
+
+                    if is_session_ui_err and attempt == 1:
+                        self.log(
+                            f"🔄 Phát hiện phiên Inside New V5 hết hạn ngầm hoặc chưa tải giao diện ({err_str[:80]}). "
+                            f"Đang làm mới đăng nhập SSO và thử lại ngay cho HĐ {shd}...",
+                            "warning"
+                        )
+                        try:
+                            import core_login as _cl
+                            _cl.invalidate_session(log_cb=self.log_cb)
+                        except Exception:
+                            pass
+                        try:
+                            self._perform_auto_login()
+                            self.navigate_to_assign_page()
+                            continue
+                        except Exception as e_relogin:
+                            self.log(f"Không thể đăng nhập lại tự động: {e_relogin}", "error")
+                            self._session_broken = True
+                            break
+                    else:
+                        if is_session_ui_err:
+                            self._session_broken = True
+                        raise e_attempt
+
+            return False, format_assign_thao_tac(False, last_err_str[:80])
 
         except Exception as e:
-            self.log(f"Lỗi Phân Công Tay HĐ {shd}: {e}", "error")
-            return False, format_assign_thao_tac(False, str(e)[:80])
+            err_str = str(e)
+            self.log(f"Lỗi Phân Công Tay HĐ {shd}: {err_str}", "error")
+            return False, format_assign_thao_tac(False, err_str[:80])
 
         finally:
             if ok:

@@ -1,0 +1,20 @@
+========================================================================
+   HƯỚNG DẪN SỬ DỤNG CAPTION NEXTSU AI TRÊN MÁY TÍNH KHÁC (PORTABLE)
+========================================================================
+
+1. YÊU CẦU DUY NHẤT:
+   - Máy tính cần có trình duyệt Google Chrome (bản thông thường).
+   - KHÔNG cần cài Python hay bất kỳ thư viện nào khác.
+
+2. CÁCH SỬ DỤNG:
+   - Giải nén hoặc sao chép thư mục này (hoặc file FPT_Data_Retrieval_Tool.exe) sang máy PC mới.
+   - Nhấp đúp chuột vào file: FPT_Data_Retrieval_Tool.exe
+   - Màn hình đen khởi động sẽ mở ra và tự động bật trình duyệt web với địa chỉ:
+     http://localhost:5000 (hoặc 5001 nếu cổng 5000 bận).
+   - Bạn có thể thao tác bình thường trên giao diện web.
+
+3. LƯU Ý VỀ CẤU HÌNH & TÀI KHOẢN:
+   - File 'config.json' lưu trữ thông tin tài khoản đăng nhập Inside FPT. Bạn có thể sửa trực tiếp hoặc lưu trên giao diện web của ứng dụng.
+   - File 'Template_Danh_Sach_Hop_Dong.xlsx' là file Excel mẫu để bạn nhập danh sách số hợp đồng khi cần chạy hàng loạt.
+   - Khi muốn tắt ứng dụng: chỉ cần đóng cửa sổ console (Command Prompt) của FPT_Data_Retrieval_Tool.exe.
+========================================================================

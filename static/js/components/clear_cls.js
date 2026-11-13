@@ -189,14 +189,30 @@ function updateClsStats(records) {
   if (badgeClsPending) badgeClsPending.textContent = `${pending} chờ xử lý`;
 }
 
+let currentClsPage = 1;
+
 function renderClsTable(records) {
   if (!tbodyClsList) return;
 
   const query = inputSearchCls ? inputSearchCls.value.trim().toLowerCase() : '';
   const statusFilter = selectClsFilterStatus ? selectClsFilterStatus.value : 'all';
   const reasonFilter = selectClsFilterReason ? selectClsFilterReason.value : 'all';
+  const dateFilter = document.getElementById('selectDateFilterCls')?.value || 'today';
+
+  // Update Charts & Top 5
+  if (window.UnifiedWorkTabs) {
+    window.UnifiedWorkTabs.updateDailyChart('clsDailyChart', records, dateFilter);
+    window.UnifiedWorkTabs.updateTopStaff('clsTopStaffContainer', records, dateFilter);
+  }
 
   let filtered = records.filter(r => {
+    // Date filter
+    if (dateFilter !== 'all' && window.UnifiedWorkTabs) {
+      if (!window.UnifiedWorkTabs.filterRecords([r], { dateRange: dateFilter }).length) {
+        return false;
+      }
+    }
+
     const shd = String(r['SHD'] || '').toLowerCase();
     const email = String(r['Email'] || '').toLowerCase();
     const tacVu = String(r['Tác Vụ'] || r['Tác Vụ'] || '').toLowerCase();
@@ -227,14 +243,32 @@ function renderClsTable(records) {
     return true;
   });
 
+  // Đảm bảo luôn sắp xếp từ gần nhất đến xa nhất (mới nhất lên đầu)
+  if (window.UnifiedWorkTabs && typeof window.UnifiedWorkTabs.sortRecordsNewestFirst === 'function') {
+    filtered = window.UnifiedWorkTabs.sortRecordsNewestFirst(filtered);
+  }
+
+  if (clsTableFooterText) {
+    clsTableFooterText.textContent = `Hiển thị ${filtered.length} bản ghi`;
+  }
+
   if (filtered.length === 0) {
     tbodyClsList.innerHTML = '<tr><td colspan="10" class="text-center py-8 text-slate-400">Không có bản ghi nào phù hợp với bộ lọc</td></tr>';
-    if (clsTableFooterText) clsTableFooterText.textContent = 'Hiển thị 0 bản ghi';
+    if (window.UnifiedWorkTabs) {
+      window.UnifiedWorkTabs.renderPagination('clsPagination', { total: 0 });
+    }
     return;
   }
 
+  // Phân trang 10 dòng 1 trang
+  const pageState = window.UnifiedWorkTabs
+    ? window.UnifiedWorkTabs.paginate(filtered, currentClsPage, 10)
+    : { items: filtered.slice(0, 10), currentPage: 1, totalPages: Math.ceil(filtered.length / 10), total: filtered.length, startIdx: 0, endIdx: Math.min(10, filtered.length) };
+  currentClsPage = pageState.currentPage;
+
   tbodyClsList.innerHTML = '';
-  filtered.forEach((r, idx) => {
+  pageState.items.forEach((r, idx) => {
+    const globalIdx = pageState.startIdx + idx;
     const tr = document.createElement('tr');
     tr.className = 'hover:bg-slate-50 transition-colors';
 
@@ -270,7 +304,7 @@ function renderClsTable(records) {
       <td class="p-3 text-center">
         <input type="checkbox" class="cls-row-checkbox rounded text-indigo-600" data-shd="${escapeHtml(shd)}" ${isChecked ? 'checked' : ''}>
       </td>
-      <td class="p-3 text-center text-slate-500 font-mono">${idx + 1}</td>
+      <td class="p-3 text-center text-slate-500 font-mono">${globalIdx + 1}</td>
       <td class="p-3 font-medium text-slate-700">${escapeHtml(tacVu)}</td>
       <td class="p-3"><strong class="font-mono text-indigo-700 text-xs">${escapeHtml(shd)}</strong></td>
       <td class="p-3 font-mono text-[11px] text-slate-600">${escapeHtml(email)}</td>
@@ -287,6 +321,14 @@ function renderClsTable(records) {
 
     tbodyClsList.appendChild(tr);
   });
+
+  // Render pagination controls
+  if (window.UnifiedWorkTabs) {
+    window.UnifiedWorkTabs.renderPagination('clsPagination', pageState, (newPage) => {
+      currentClsPage = newPage;
+      renderClsTable(currentClsRecords);
+    });
+  }
 
   if (clsTableFooterText) {
     clsTableFooterText.textContent = `Hiển thị ${filtered.length}/${records.length} bản ghi`;
@@ -337,9 +379,9 @@ if (chkClsSelectAll) {
   });
 }
 
-if (inputSearchCls) inputSearchCls.addEventListener('input', () => renderClsTable(currentClsRecords));
-if (selectClsFilterStatus) selectClsFilterStatus.addEventListener('change', () => renderClsTable(currentClsRecords));
-if (selectClsFilterReason) selectClsFilterReason.addEventListener('change', () => renderClsTable(currentClsRecords));
+if (inputSearchCls) inputSearchCls.addEventListener('input', () => { currentClsPage = 1; renderClsTable(currentClsRecords); });
+if (selectClsFilterStatus) selectClsFilterStatus.addEventListener('change', () => { currentClsPage = 1; renderClsTable(currentClsRecords); });
+if (selectClsFilterReason) selectClsFilterReason.addEventListener('change', () => { currentClsPage = 1; renderClsTable(currentClsRecords); });
 if (btnRefreshClsSheetData) {
   btnRefreshClsSheetData.addEventListener('click', () => {
     showSnackbar('Đang làm mới dữ liệu từ Google Sheet (GID: 987552880)...');
@@ -478,6 +520,18 @@ if (btnExportClsData) {
     window.location.href = `/api/cls/export?gid=987552880&status=all`;
   });
 }
+
+// Filter by date & clear cache
+document.getElementById('selectDateFilterCls')?.addEventListener('change', () => { currentClsPage = 1; renderClsTable(currentClsRecords); });
+document.getElementById('btnClearClsCache')?.addEventListener('click', async () => {
+  try {
+    await fetch('/api/cls/clear-cache', { method: 'POST' });
+    showSnackbar('🧹 Đã xóa cache trạng thái Clear Cls!');
+    loadClsSheetData();
+  } catch (e) {
+    showSnackbar('Không thể xóa cache Clear Cls');
+  }
+});
 
 registerTab('tab-clear-cls', {
   title: 'Auto Clear Cls có SR',

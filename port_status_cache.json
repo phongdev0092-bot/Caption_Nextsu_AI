@@ -1,0 +1,72 @@
+{
+  "_3": {
+    "thao_tac": "Không thành công : Hệ thống hiện chỉ hỗ trợ thu hồi Port theo Số Hợp Đồng (SHD). Tính năng thu hồi theo Thông số thi công (Tập điểm/Port) đang được phát triển, vui lòng cung cấp SHD để được xử lý.",
+    "ket_qua": "Không thành công",
+    "tap_diem": "HCMP569.0460/HO",
+    "port": "4",
+    "time": "08/11/2026 09:06:54",
+    "timestamp_epoch": 1794103614.7693086,
+    "force_override": true
+  },
+  "ROW_3": {
+    "thao_tac": "Không thành công : Hệ thống hiện chỉ hỗ trợ thu hồi Port theo Số Hợp Đồng (SHD). Tính năng thu hồi theo Thông số thi công (Tập điểm/Port) đang được phát triển, vui lòng cung cấp SHD để được xử lý.",
+    "ket_qua": "Không thành công",
+    "tap_diem": "HCMP569.0460/HO",
+    "port": "4",
+    "time": "08/11/2026 09:06:54",
+    "timestamp_epoch": 1794103614.7693086,
+    "force_override": true
+  },
+  "_1": {
+    "thao_tac": "Không thành công : Hệ thống hiện chỉ hỗ trợ thu hồi Port theo Số Hợp Đồng (SHD). Tính năng thu hồi theo Thông số thi công (Tập điểm/Port) đang được phát triển, vui lòng cung cấp SHD để được xử lý.",
+    "ket_qua": "Không thành công",
+    "tap_diem": "HCMP378.0775/HO",
+    "port": "4",
+    "time": "08/11/2026 09:07:19",
+    "timestamp_epoch": 1794103639.798798,
+    "force_override": true
+  },
+  "ROW_1": {
+    "thao_tac": "Không thành công : Hệ thống hiện chỉ hỗ trợ thu hồi Port theo Số Hợp Đồng (SHD). Tính năng thu hồi theo Thông số thi công (Tập điểm/Port) đang được phát triển, vui lòng cung cấp SHD để được xử lý.",
+    "ket_qua": "Không thành công",
+    "tap_diem": "HCMP378.0775/HO",
+    "port": "4",
+    "time": "08/11/2026 09:07:19",
+    "timestamp_epoch": 1794103639.798798,
+    "force_override": true
+  },
+  "_5": {
+    "thao_tac": "Không thành công : Hệ thống hiện chỉ hỗ trợ thu hồi Port theo Số Hợp Đồng (SHD). Tính năng thu hồi theo Thông số thi công (Tập điểm/Port) đang được phát triển, vui lòng cung cấp SHD để được xử lý.",
+    "ket_qua": "Không thành công",
+    "tap_diem": "HCMP414.0003/HO,HO",
+    "port": "2",
+    "time": "08/11/2026 09:11:46",
+    "timestamp_epoch": 1794103906.108861,
+    "force_override": true
+  },
+  "ROW_5": {
+    "thao_tac": "Không thành công : Hệ thống hiện chỉ hỗ trợ thu hồi Port theo Số Hợp Đồng (SHD). Tính năng thu hồi theo Thông số thi công (Tập điểm/Port) đang được phát triển, vui lòng cung cấp SHD để được xử lý.",
+    "ket_qua": "Không thành công",
+    "tap_diem": "HCMP414.0003/HO,HO",
+    "port": "2",
+    "time": "08/11/2026 09:11:46",
+    "timestamp_epoch": 1794103906.108861,
+    "force_override": true
+  },
+  "SGAFQ3358": {
+    "thao_tac": "Đã xử lý",
+    "ket_qua": "Đã xử lý",
+    "tap_diem": "HCMP378.0362/HO",
+    "port": "3",
+    "time": "08/11/2026 14:45:16",
+    "timestamp_epoch": 1794123916.5324643
+  },
+  "SGAFQ3358_6": {
+    "thao_tac": "Đã xử lý",
+    "ket_qua": "Đã xử lý",
+    "tap_diem": "HCMP378.0362/HO",
+    "port": "3",
+    "time": "08/11/2026 14:45:16",
+    "timestamp_epoch": 1794123916.5324643
+  }
+}

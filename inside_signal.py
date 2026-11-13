@@ -42,11 +42,89 @@ def save_cache(cache_file, data):
     except Exception as e:
         print(f"[CACHE ERROR] {e}")
 
-def fetch_sheet_data(sheet_id=DEFAULT_SHEET_ID, gid=GID_CLEAR_SIGNAL, signal_type="clear"):
+_reset_user_cache_time = 0
+_cached_reset_user_shds = set()
+
+def parse_vn_datetime(s):
+    from datetime import datetime
+    s = str(s or "").strip()
+    for fmt in ("%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%d/%m/%Y", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.strptime(s, fmt)
+        except Exception:
+            pass
+    return None
+
+def is_clear_success(kq):
+    k = normalize_nfc(kq).lower()
+    if not k or any(x in k for x in ["không", "lỗi", "thất bại", "chưa", "cấp lại"]):
+        return False
+    return any(x in k for x in ["thành công", "đã clear", "đã xử lý", "hoàn tất"])
+
+def _is_auto_reset_cache_entry(val):
+    """Kiểm tra một entry trong reset cache có phải do Auto >72H không (bao gồm cả dữ liệu cũ)."""
+    if not isinstance(val, dict):
+        return False
+    # Kiểm tra field hiện tại
+    if val.get("_is_auto_72h") or val.get("source") == "auto_72h":
+        return True
+    # Kiểm tra field nguon (fix mới)
+    nguon = str(val.get("nguon", "")).lower()
+    if nguon and ("auto" in nguon or "72h" in nguon or "72 h" in nguon):
+        return True
+    # Nhận diện dữ liệu cũ qua status text
+    status = str(val.get("status", "")).lower()
+    if "tự động" in status or "72h" in status or "auto" in status:
+        return True
+    return False
+
+def get_reset_user_shds(sheet_id=DEFAULT_SHEET_ID, max_age_seconds=15):
+    global _reset_user_cache_time, _cached_reset_user_shds
+    now_ts = time.time()
+    if _cached_reset_user_shds and (now_ts - _reset_user_cache_time < max_age_seconds):
+        return _cached_reset_user_shds
+
+    user_shds = set()
+    rcache = load_cache(RESET_SIGNAL_CACHE_FILE)
+    for shd, val in rcache.items():
+        # Chỉ thêm vào user_shds nếu KHÔNG phải bản ghi auto
+        if not _is_auto_reset_cache_entry(val):
+            user_shds.add(str(shd).strip())
+
+    try:
+        url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&gid={GID_RESET_SIGNAL}&_t={int(now_ts * 1000)}"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        content = urllib.request.urlopen(req, timeout=10).read().decode('utf-8', errors='ignore')
+        import io
+        df = pd.read_csv(io.StringIO(content)).fillna("")
+        for raw in df.to_dict(orient="records"):
+            r_shd = ""
+            r_nguon = ""
+            for k, v in raw.items():
+                norm_k = normalize_nfc(k).lower()
+                norm_v = normalize_nfc(v) if isinstance(v, str) else v
+                if "shd" in norm_k or "hợp đồng" in norm_k:
+                    r_shd = str(norm_v).strip()
+                elif "nguon" in norm_k or "nguồn" in norm_k:
+                    r_nguon = str(norm_v).strip().lower()
+            if r_shd:
+                # Chỉ coi là user nếu nguồn KHÔNG phải auto
+                if not r_nguon or ("auto" not in r_nguon and "72h" not in r_nguon):
+                    user_shds.add(r_shd)
+    except Exception:
+        pass
+
+    _cached_reset_user_shds = user_shds
+    _reset_user_cache_time = now_ts
+    return user_shds
+
+
+def fetch_sheet_data(sheet_id=DEFAULT_SHEET_ID, gid=GID_CLEAR_SIGNAL, signal_type="clear", include_clear_overdue=True):
     """
     Đọc dữ liệu từ Google Sheet qua gviz/tq CSV.
     signal_type: 'clear' hoặc 'reset'
     """
+    from datetime import datetime
     url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&gid={gid}&_t={int(time.time() * 1000)}"
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -80,6 +158,10 @@ def fetch_sheet_data(sheet_id=DEFAULT_SHEET_ID, gid=GID_CLEAR_SIGNAL, signal_typ
                     rec["Kết Quả"] = norm_v
                 elif "ngay" in k_lower:
                     rec["Ngày Cập Nhật"] = norm_v
+                elif "auto" in k_lower or "cap lai" in k_lower or "cấp lại" in k_lower:
+                    rec["Auto Cấp Lại"] = norm_v
+                elif "nguon" in k_lower or "nguồn" in k_lower:
+                    rec["Nguồn"] = norm_v
                 else:
                     rec[norm_k] = norm_v
 
@@ -87,15 +169,134 @@ def fetch_sheet_data(sheet_id=DEFAULT_SHEET_ID, gid=GID_CLEAR_SIGNAL, signal_typ
             shd = str(rec.get("SHD", "")).strip()
             if shd and shd in cache:
                 c_item = cache[shd]
-                c_st = c_item.get("status", "") if isinstance(c_item, dict) else str(c_item)
+                c_st   = c_item.get("status", "") if isinstance(c_item, dict) else str(c_item)
                 c_time = c_item.get("time", "") if isinstance(c_item, dict) else ""
+                c_auto = c_item.get("auto_cap_lai", "") if isinstance(c_item, dict) else ""
+                c_nguon = c_item.get("nguon", "") if isinstance(c_item, dict) else ""
                 raw_kq = str(rec.get("Kết Quả", "")).strip().lower()
                 if not rec.get("Kết Quả") or raw_kq in ["nan", "chưa xử lý", ""]:
                     rec["Kết Quả"] = c_st
                 if c_time and (not rec.get("Ngày Cập Nhật") or str(rec.get("Ngày Cập Nhật")).lower() in ["nan", ""]):
                     rec["Ngày Cập Nhật"] = c_time
+                # Restore Auto Cấp Lại / Nguồn từ cache nếu sheet chưa có
+                if c_auto and not rec.get("Auto Cấp Lại"):
+                    rec["Auto Cấp Lại"] = c_auto
+                    rec["Auto Cap Lai"] = c_auto
+                if c_nguon and not rec.get("Nguồn"):
+                    rec["Nguồn"] = c_nguon
+                    rec["Nguon"] = c_nguon
 
             records.append(rec)
+
+        # Xử lý quy tắc nghiệp vụ theo signal_type:
+        if signal_type == "clear":
+            reset_user_shds = get_reset_user_shds(sheet_id=sheet_id)
+            now = datetime.now()
+            for rec in records:
+                shd = str(rec.get("SHD", "")).strip()
+                kq = str(rec.get("Kết Quả", "")).strip()
+                dt = parse_vn_datetime(rec.get("Ngày Cập Nhật", ""))
+                if dt and is_clear_success(kq):
+                    hours = int((now - dt).total_seconds() // 3600)
+                    if hours < 0:
+                        hours = 0
+                    if hours < 72:
+                        rec["Auto Cấp Lại"] = f"Bình Thường ( Tồn: {hours}H )"
+                    else:
+                        if shd in reset_user_shds:
+                            rec["Auto Cấp Lại"] = "Bình Thường"
+                        else:
+                            rec["Auto Cấp Lại"] = "Auto Cấp Lại"
+                else:
+                    if not rec.get("Auto Cấp Lại"):
+                        rec["Auto Cấp Lại"] = ""
+                rec["Auto Cap Lai"] = rec["Auto Cấp Lại"]
+
+        elif signal_type == "reset":
+            reset_shd_set = set()
+            for rec in records:
+                shd = str(rec.get("SHD", "")).strip()
+                if shd:
+                    reset_shd_set.add(shd)
+                if not rec.get("Nguồn"):
+                    rec["Nguồn"] = "User"
+                rec["Nguon"] = rec["Nguồn"]
+
+            # Nếu bật include_clear_overdue: tổng hợp các HĐ >72h từ sheet Clear chưa có hành vi cấp lại từ User
+            if include_clear_overdue:
+                try:
+                    clear_data = fetch_sheet_data(sheet_id=sheet_id, gid=GID_CLEAR_SIGNAL, signal_type="clear", include_clear_overdue=False)
+                    if clear_data.get("status") == "ok":
+                        reset_cache = load_cache(RESET_SIGNAL_CACHE_FILE)
+                        reset_user_shds = get_reset_user_shds(sheet_id=sheet_id)
+                        now = datetime.now()
+
+                        # Xây dựng map SHD → record từ Clear sheet để tra cứu nhanh
+                        clear_rec_map = {str(c.get("SHD", "")).strip(): c for c in clear_data.get("records", []) if c.get("SHD")}
+
+                        # 1. Tổng hợp HĐ >72H từ Clear sheet chưa được cấp lại
+                        for c_rec in clear_data.get("records", []):
+                            c_shd = str(c_rec.get("SHD", "")).strip()
+                            if not c_shd or c_shd in reset_shd_set or c_shd in reset_user_shds:
+                                continue
+                            c_kq = str(c_rec.get("Kết Quả", "")).strip()
+                            c_dt = parse_vn_datetime(c_rec.get("Ngày Cập Nhật", ""))
+                            if c_dt and is_clear_success(c_kq):
+                                hours = int((now - c_dt).total_seconds() // 3600)
+                                if hours >= 72:
+                                    c_cached = reset_cache.get(c_shd)
+                                    # Nếu chưa có trong cache → Chưa cập nhật (chờ xử lý)
+                                    # Nếu đã có trong cache → lấy status từ cache
+                                    if c_cached:
+                                        c_st = c_cached.get("status", "Đã xử lý") if isinstance(c_cached, dict) else str(c_cached)
+                                        c_time = c_cached.get("time", "") if isinstance(c_cached, dict) else ""
+                                    else:
+                                        c_st = "Chưa cập nhật"
+                                        c_time = c_rec.get("Ngày Cập Nhật", "")
+                                    auto_row = {
+                                        "ID": c_rec.get("ID", len(records) + 1),
+                                        "Họ và Tên": c_rec.get("Họ và Tên", ""),
+                                        "Email": c_rec.get("Email", ""),
+                                        "SHD": c_shd,
+                                        "Kết Quả": c_st,
+                                        "Ngày Cập Nhật": c_time,
+                                        "Nguồn": "Auto >72H",
+                                        "Nguon": "Auto >72H",
+                                        "_is_auto_72h": True
+                                    }
+                                    records.append(auto_row)
+                                    reset_shd_set.add(c_shd)
+
+                        # 2. Phục hồi bản ghi Auto >72H từ cache cũ chưa có trên Sheet Reset
+                        #    (những HĐ được cấp tự động trước đây nhưng không được append lên sheet)
+                        for c_shd, c_cached in reset_cache.items():
+                            c_shd = str(c_shd).strip()
+                            if not c_shd or c_shd in reset_shd_set:
+                                continue
+                            if not _is_auto_reset_cache_entry(c_cached):
+                                continue
+                            # Đây là bản ghi auto cũ chưa có trong sheet → hiển thị lại
+                            c_st  = c_cached.get("status", "Đã Cấp Lại (Tự Động 72H)") if isinstance(c_cached, dict) else str(c_cached)
+                            c_time = c_cached.get("time", "") if isinstance(c_cached, dict) else ""
+                            # Lấy thông tin từ Clear sheet nếu có
+                            c_clear = clear_rec_map.get(c_shd, {})
+                            auto_row = {
+                                "ID": c_clear.get("ID", ""),
+                                "Họ và Tên": c_clear.get("Họ và Tên", ""),
+                                "Email": c_clear.get("Email", ""),
+                                "SHD": c_shd,
+                                "Kết Quả": c_st,
+                                "Ngày Cập Nhật": c_time,
+                                "Nguồn": "Auto >72H",
+                                "Nguon": "Auto >72H",
+                                "_is_auto_72h": True
+                            }
+                            records.append(auto_row)
+                            reset_shd_set.add(c_shd)
+
+                except Exception as ex_merge:
+                    print(f"[MERGE OVERDUE ERROR] {ex_merge}")
+
 
         cols = [normalize_nfc(c) for c in df.columns]
         return {
@@ -116,17 +317,26 @@ def is_final_status(kq_str):
     if not kq_str:
         return False
     k = normalize_nfc(kq_str).lower()
-    return any(x in k for x in ["thành công", "đã xử lý", "đã clear", "đã cấp", "hoàn tất", "lỗi", "không thành công", "thất bại"])
+    return any(x in k for x in [
+        "thành công", "đã xử lý", "đã clear", "đã cấp", "hoàn tất",
+        "cấp lại", "tự động",
+        "lỗi", "không thành công", "thất bại"
+    ])
 
-def update_cache_record(signal_type, shd, status, update_time=None):
+def update_cache_record(signal_type, shd, status, update_time=None, auto_cap_lai=None, nguon=None):
     cache_file = CLEAR_SIGNAL_CACHE_FILE if signal_type == "clear" else RESET_SIGNAL_CACHE_FILE
     cache = load_cache(cache_file)
     if not update_time:
         update_time = time.strftime("%d/%m/%Y %H:%M:%S")
-    cache[shd] = {
+    entry = {
         "status": status,
         "time": update_time
     }
+    if auto_cap_lai is not None:
+        entry["auto_cap_lai"] = auto_cap_lai
+    if nguon is not None:
+        entry["nguon"] = nguon
+    cache[shd] = entry
     save_cache(cache_file, cache)
     return cache
 
@@ -398,6 +608,13 @@ class InsideSignalAutomation:
             time.sleep(0.5)
 
         if not inp_shd:
+            self.log("🔄 Không thấy ô nhập SHD trong Reset Mac (phiên Frame 1 có thể đã hết hạn). Đang làm mới đăng nhập và mở lại Reset Mac...", "warning")
+            core_login.invalidate_session(log_cb=self.log_cb)
+            self.check_and_ensure_login()
+            self.navigate_to_left_menu("Reset Mac")
+            self.driver.switch_to.default_content()
+            wait.until(EC.frame_to_be_available_and_switch_to_it(1))
+            time.sleep(1)
             inp_shd = wait.until(EC.visibility_of_element_located((By.XPATH, "//input[@id='fAgentName'] | //input[@placeholder='Nhập nội dung...']")))
 
         self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", inp_shd)
@@ -577,20 +794,22 @@ class InsideSignalAutomation:
 
         time.sleep(1)
 
-    def update_google_sheet(self, shd, record, kq_str="Đã xử lý", now_str=None):
+    def update_google_sheet(self, shd, record, kq_str="Đã xử lý", now_str=None, target_gid=None, auto_cap_lai=None, nguon=None, action=None):
         """
-        Đẩy kết quả 'Đã xử lý' trực tiếp lên Google Sheet tương ứng qua Webhook Google Apps Script.
+        Đẩy kết quả trực tiếp lên Google Sheet tương ứng qua Webhook Google Apps Script.
         """
         if not now_str:
             now_str = time.strftime("%d/%m/%Y %H:%M:%S")
         try:
             cfg = core_login.load_config()
+            is_clear_target = (target_gid == GID_CLEAR_SIGNAL or (target_gid is None and self.signal_type == "clear"))
+            sig_type = "clear" if is_clear_target else "reset"
             webhook_url = (
-                cfg.get(f"{self.signal_type}_signal_webhook_url", "")
+                cfg.get(f"{sig_type}_signal_webhook_url", "")
                 or cfg.get("google_sheet_webhook_url", "")
                 or "https://script.google.com/macros/s/AKfycbyX7gEztw78VM71U8HDFh1iUJAvkqV2fzlpUe5kAgrV9Io-R-kZuEeDYXwntlHkdr-M/exec"
             )
-            gid = GID_CLEAR_SIGNAL if self.signal_type == "clear" else GID_RESET_SIGNAL
+            gid = target_gid or (GID_CLEAR_SIGNAL if self.signal_type == "clear" else GID_RESET_SIGNAL)
             payload = {
                 "sheet_id": DEFAULT_SHEET_ID,
                 "gid": gid,
@@ -601,13 +820,38 @@ class InsideSignalAutomation:
                 "thao_tac": kq_str,
                 "timestamp": now_str
             }
+
+            if isinstance(record, dict):
+                if record.get("Họ và Tên"): payload["ho_ten"] = record.get("Họ và Tên")
+                if record.get("Email"): payload["email"] = record.get("Email")
+                if record.get("MAC"): payload["mac"] = record.get("MAC")
+
+            if sig_type == "clear":
+                val_auto = auto_cap_lai or (record.get("Auto Cấp Lại") if isinstance(record, dict) else None)
+                if val_auto:
+                    payload["auto_cap_lai"] = val_auto
+                    payload["col_auto_cap_lai"] = 7
+                    payload["col_thao_tac"] = 7
+                    payload["status"] = val_auto
+            else:
+                final_nguon = nguon or (record.get("Nguồn") if isinstance(record, dict) else None)
+                if not final_nguon:
+                    final_nguon = "Auto >72H" if (isinstance(record, dict) and record.get("_is_auto_72h")) else "User"
+                payload["nguon"] = final_nguon
+                payload["col_nguon"] = 6
+                payload["col_thao_tac"] = 6
+                payload["status"] = final_nguon
+
+            if action:
+                payload["action"] = action
+
             req = urllib.request.Request(
                 webhook_url,
                 data=json.dumps(payload).encode("utf-8"),
                 headers={"Content-Type": "application/json"}
             )
             resp = urllib.request.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")
-            self.log(f"Đã cập nhật trạng thái '{kq_str}' lên Google Sheet cho HĐ {shd} ({resp.strip()})", "success")
+            self.log(f"Đã cập nhật Webhook Google Sheet cho HĐ {shd} (GID {gid}) ({resp.strip()})", "success")
             return True
         except Exception as e:
             self.log(f"Không thể đẩy Webhook cập nhật Google Sheet cho HĐ {shd}: {e}", "warning")
@@ -637,10 +881,19 @@ class InsideSignalAutomation:
             self.execute_kill_session(shd)
 
             status_str = "Đã xử lý"
-            update_cache_record("clear", shd, status_str, now_str)
-            # Cập nhật kết quả 'Đã xử lý' lên Google Sheet qua Webhook
-            self.update_google_sheet(shd, record, status_str, now_str)
-            self.log(f"🎉 HOÀN TẤT CLEAR TÍN HIỆU HĐ {shd}!", "success")
+
+            # Tính Auto Cấp Lại ngay sau khi clear thành công (dựa trên thời điểm hiện tại)
+            from datetime import datetime
+            now_dt = datetime.now()
+            # Mới clear xong => giờ tồn là 0 => Bình Thường ( Tồn: 0H )
+            auto_cap_lai_val = "Bình Thường ( Tồn: 0H )"
+
+            # Lưu vào cache kèm auto_cap_lai
+            update_cache_record("clear", shd, status_str, now_str, auto_cap_lai=auto_cap_lai_val)
+
+            # Cập nhật cột Kết Quả lên Google Sheet qua Webhook
+            self.update_google_sheet(shd, record, status_str, now_str, auto_cap_lai=auto_cap_lai_val)
+            self.log(f"🎉 HOÀN TẤT CLEAR TÍN HIỆU HĐ {shd}! Auto Cấp Lại: {auto_cap_lai_val}", "success")
             return True, status_str, now_str
         else:
             # Cấp Lại Tín Hiệu: Thực hiện giống như Clear tín hiệu, nhưng xóa trắng để trống chỗ MAC và bấm reset MAC là kết thúc
@@ -650,11 +903,87 @@ class InsideSignalAutomation:
             self.execute_clear_mac(shd, mac_val="")
 
             status_str = "Đã xử lý"
-            update_cache_record("reset", shd, status_str, now_str)
-            # Cập nhật kết quả 'Đã xử lý' lên Google Sheet qua Webhook
-            self.update_google_sheet(shd, record, status_str, now_str)
-            self.log(f"🎉 HOÀN TẤT CẤP LẠI TÍN HIỆU HĐ {shd}!", "success")
+            final_nguon = record.get("Nguồn") or record.get("Nguon") or ("Auto >72H" if record.get("_is_auto_72h") else "User")
+
+            # Lưu cache kèm nguon
+            update_cache_record("reset", shd, status_str, now_str, nguon=final_nguon)
+
+            # Cập nhật kết quả lên Google Sheet Cấp Lại qua Webhook (GID_RESET_SIGNAL)
+            self.update_google_sheet(shd, record, status_str, now_str, target_gid=GID_RESET_SIGNAL, nguon=final_nguon)
+
+            self.log(f"🎉 HOÀN TẤT CẤP LẠI TÍN HIỆU HĐ {shd}! Nguồn: {final_nguon}", "success")
             return True, status_str, now_str
+
+def update_clear_sheet_auto_cap_lai_cell(shd, record, auto_cap_lai_val="Auto Cấp Lại"):
+    """
+    Cập nhật cột 'Auto Cấp Lại' trên Sheet Clear (GID 0) mà KHÔNG làm thay đổi cột 'Kết Quả'.
+    """
+    try:
+        cfg = core_login.load_config()
+        webhook_url = (
+            cfg.get("clear_signal_webhook_url", "")
+            or cfg.get("google_sheet_webhook_url", "")
+            or "https://script.google.com/macros/s/AKfycbyX7gEztw78VM71U8HDFh1iUJAvkqV2fzlpUe5kAgrV9Io-R-kZuEeDYXwntlHkdr-M/exec"
+        )
+        payload = {
+            "sheet_id": DEFAULT_SHEET_ID,
+            "gid": GID_CLEAR_SIGNAL,
+            "row_id": record.get("ID") if isinstance(record, dict) else None,
+            "shd": shd,
+            "col_auto_cap_lai": 7,
+            "col_thao_tac": 7,
+            "status": auto_cap_lai_val,
+            "auto_cap_lai": auto_cap_lai_val,
+            "col_ket_qua": 5,
+            "ket_qua": "Đã xử lý"
+        }
+        req = urllib.request.Request(
+            webhook_url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"}
+        )
+        resp = urllib.request.urlopen(req, timeout=8).read().decode("utf-8", errors="ignore")
+        return True, resp
+    except Exception as e:
+        return False, str(e)
+
+def transfer_contract_to_reset_sheet(record, nguon="Auto >72H"):
+    """
+    Gửi thông tin SHD từ Clear qua phần Cấp Lại Tín Hiệu (Sheet Cấp Lại GID 1100152201).
+    """
+    try:
+        cfg = core_login.load_config()
+        webhook_url = (
+            cfg.get("reset_signal_webhook_url", "")
+            or cfg.get("google_sheet_webhook_url", "")
+            or "https://script.google.com/macros/s/AKfycbyX7gEztw78VM71U8HDFh1iUJAvkqV2fzlpUe5kAgrV9Io-R-kZuEeDYXwntlHkdr-M/exec"
+        )
+        shd = str(record.get("SHD", "")).strip()
+        payload = {
+            "sheet_id": DEFAULT_SHEET_ID,
+            "gid": GID_RESET_SIGNAL,
+            "action": "append",
+            "row_id": record.get("ID"),
+            "shd": shd,
+            "ho_ten": record.get("Họ và Tên", ""),
+            "email": record.get("Email", ""),
+            "nguon": nguon,
+            "col_nguon": 6,
+            "col_thao_tac": 6,
+            "status": nguon,
+            "col_ket_qua": 4,
+            "ket_qua": "Chưa xử lý",
+            "timestamp": time.strftime("%d/%m/%Y %H:%M:%S")
+        }
+        req = urllib.request.Request(
+            webhook_url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"}
+        )
+        resp = urllib.request.urlopen(req, timeout=8).read().decode("utf-8", errors="ignore")
+        return True, resp
+    except Exception as e:
+        return False, str(e)
 
     def close(self):
         """Khi hoàn tất 1 tác vụ: Đóng trình duyệt và xóa sạch toàn bộ session cũ."""

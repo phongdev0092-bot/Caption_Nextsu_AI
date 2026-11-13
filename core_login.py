@@ -8,6 +8,7 @@ from PIL import Image
 from pyzbar.pyzbar import decode as decode_qr_codes
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -22,14 +23,16 @@ else:
 CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 
 def get_inside_profile_dir():
-    """Lấy đường dẫn thư mục lưu Profile phiên Inside FPT."""
-    if sys.platform.startswith("win"):
-        profile_base = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
-    else:
-        profile_base = os.path.expanduser("~/.config")
-    profile_dir = os.path.join(profile_base, "InsideFPT_SessionProfile")
+    """Lấy đường dẫn thư mục lưu Profile phiên Inside FPT trong thư mục dự án."""
+    profile_dir = os.path.join(BASE_DIR, "InsideFPT_SessionProfile")
     os.makedirs(profile_dir, exist_ok=True)
     return profile_dir
+
+def get_radius_profile_dir():
+    """Lấy đường dẫn thư mục lưu Profile phiên Radius Portal."""
+    radius_dir = os.path.join(BASE_DIR, "RadiusPortal_SessionProfile")
+    os.makedirs(radius_dir, exist_ok=True)
+    return radius_dir
 
 def clear_inside_session(profile_dir=None, log_cb=None):
     """
@@ -77,21 +80,281 @@ def clear_inside_session(profile_dir=None, log_cb=None):
 
     _log("Đã dọn dẹp sạch sẽ toàn bộ phiên session cũ!", "success")
 
-def close_driver_and_clear_session(driver=None, profile_dir=None, log_cb=None):
-    """
-    Khi hoàn tất 1 tác vụ: Đóng trình duyệt và xóa sạch toàn bộ session cũ
-    để lần sau luôn bắt đầu đăng nhập lại từ đầu.
-    """
-    if driver is not None:
+INSIDE_COOKIE_FILE = os.path.join(BASE_DIR, "inside_session_cookies.json")
+INSIDE_SESSION_MAX_HOURS_DEFAULT = 0.75  # Tối đa 45 phút cho 1 Token SSO Inside FPT
+INSIDE_SESSION_IDLE_MAX_MINUTES = 12     # Quá 12 phút không thao tác -> Token Inside New V5 (partner.fpt.net) dễ hết hạn ngầm, cần đăng nhập mới
+
+def _cfg_keep_inside_session():
+    """Mặc định GIỮ phiên Inside. Đặt "keep_inside_session": false trong config.json để quay về xóa phiên mỗi lần."""
+    try:
+        return bool(load_config().get("keep_inside_session", True))
+    except Exception:
+        return True
+
+def _read_cookie_store():
+    try:
+        with open(INSIDE_COOKIE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                return data
+    except Exception:
+        pass
+    return {}
+
+def save_inside_cookies(driver, new_login=False, log_cb=None):
+    """Lưu cookie phiên Inside ra file (gộp cả inside.fpt.net và partner.fpt.net, tránh ghi đè mất cookie gốc khi đang ở cửa sổ phụ)."""
+    old = _read_cookie_store()
+    merged = {}
+    if not new_login:
+        for c in (old.get("cookies") or []):
+            if isinstance(c, dict) and c.get("name"):
+                key = (c.get("domain", ""), c.get("name", ""), c.get("path", "/"))
+                merged[key] = c
+
+    collected_any = False
+    try:
+        handles = list(driver.window_handles)
+    except Exception:
+        handles = []
+
+    if handles:
+        orig_handle = None
         try:
-            driver.delete_all_cookies()
+            orig_handle = driver.current_window_handle
         except Exception:
             pass
+        for h in handles:
+            try:
+                driver.switch_to.window(h)
+                for c in (driver.get_cookies() or []):
+                    if isinstance(c, dict) and c.get("name"):
+                        key = (c.get("domain", ""), c.get("name", ""), c.get("path", "/"))
+                        merged[key] = c
+                        collected_any = True
+            except Exception:
+                continue
+        if orig_handle and orig_handle in handles:
+            try:
+                driver.switch_to.window(orig_handle)
+            except Exception:
+                pass
+    else:
+        try:
+            for c in (driver.get_cookies() or []):
+                if isinstance(c, dict) and c.get("name"):
+                    key = (c.get("domain", ""), c.get("name", ""), c.get("path", "/"))
+                    merged[key] = c
+                    collected_any = True
+        except Exception:
+            pass
+
+    if not collected_any and not merged:
+        return
+
+    now = time.time()
+    login_at = now if (new_login or not old.get("login_at")) else old.get("login_at")
+    try:
+        with open(INSIDE_COOKIE_FILE, "w", encoding="utf-8") as f:
+            json.dump({"login_at": login_at, "saved_at": now, "cookies": list(merged.values())}, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+def restore_inside_cookies(driver):
+    store = _read_cookie_store()
+    cookies = store.get("cookies") or []
+    if not cookies:
+        return False
+    try:
+        driver.get("http://inside.fpt.net/")
+    except Exception:
+        return False
+    ok = 0
+    for c in cookies:
+        c = dict(c)
+        dom = str(c.get("domain") or "").lower().lstrip(".")
+        # Khi đang ở inside.fpt.net chỉ nạp cookie của inside.fpt.net (cookie partner.fpt.net nằm sẵn trong Chrome Profile)
+        if dom and "inside.fpt.net" not in dom:
+            continue
+        if isinstance(c.get("expiry"), float):
+            c["expiry"] = int(c["expiry"])
+        c.pop("sameSite", None)
+        try:
+            driver.add_cookie(c)
+            ok += 1
+        except Exception:
+            try:
+                c.pop("domain", None)
+                driver.add_cookie(c)
+                ok += 1
+            except Exception:
+                pass
+    return ok > 0 or bool(store.get("login_at"))
+
+def invalidate_session(profile_dir=None, log_cb=None):
+    """Hủy phiên đang giữ (khi nghi ngờ phiên chết/đơ) để lần sau đăng nhập mới 100%."""
+    try:
+        if os.path.exists(INSIDE_COOKIE_FILE):
+            os.remove(INSIDE_COOKIE_FILE)
+    except Exception:
+        pass
+    clear_inside_session(profile_dir=profile_dir, log_cb=log_cb)
+
+def inside_session_healthy(driver, log_cb=None):
+    """
+    Kiểm tra phiên Inside còn dùng được, bắt cả 4 dạng lỗi:
+    1) Thời gian không tương tác vượt quá 12 phút (Token SSO Inside New V5 / partner.fpt.net đã hết hạn ngầm dù menu ASP vẫn còn)
+    2) Bị chuyển về login.fpt.net
+    3) Khung đăng nhập nằm lọt trong sidebar/frame của inside.fpt.net
+    4) Trang đơ / không nạp được menu (không mở nổi cửa sổ phiếu bảo trì, triển khai)
+    """
+    def _log(msg, lvl="info"):
+        if log_cb:
+            try:
+                log_cb(msg, lvl)
+            except Exception:
+                pass
+
+    max_h = INSIDE_SESSION_MAX_HOURS_DEFAULT
+    idle_min = INSIDE_SESSION_IDLE_MAX_MINUTES
+    try:
+        cfg_loaded = load_config()
+        max_h = float(cfg_loaded.get("inside_session_max_hours", max_h))
+        idle_min = float(cfg_loaded.get("inside_session_idle_minutes", idle_min))
+    except Exception:
+        pass
+    store = _read_cookie_store()
+    now = time.time()
+    if not store.get("login_at"):
+        _log("Chưa có thông tin mốc đăng nhập hợp lệ -> làm mới đăng nhập.", "info")
+        return False
+    if (now - float(store["login_at"])) > max_h * 3600:
+        _log(f"Phiên đã giữ quá {max_h * 60:.0f} phút -> làm mới đăng nhập.", "info")
+        return False
+    last_active = float(store.get("saved_at") or store.get("login_at") or 0)
+    if last_active and (now - last_active) > idle_min * 60:
+        _log(f"Phiên đã nghỉ {(now - last_active) / 60:.1f} phút (> {idle_min:g} phút, Token Inside V5 có thể đã hết hạn) -> làm mới đăng nhập.", "info")
+        return False
+
+    try:
+        driver.set_page_load_timeout(30)
+        driver.get("http://inside.fpt.net/default.asp")
+    except Exception:
+        _log("Trang Inside đơ/không nạp được trong 30s -> coi như phiên hỏng.", "warning")
+        return False
+    finally:
+        try:
+            driver.set_page_load_timeout(300)
+        except Exception:
+            pass
+
+    time.sleep(2)
+    try:
+        curr = (driver.current_url or "").lower()
+        if "login.fpt.net" in curr or "inside.fpt.net" not in curr:
+            _log("Phiên hết hạn (bị chuyển về trang đăng nhập).", "info")
+            return False
+
+        def _has_login_form():
+            for fid in ("fUserName", "fPassword"):
+                for el in driver.find_elements(By.ID, fid):
+                    try:
+                        if el.is_displayed():
+                            return True
+                    except Exception:
+                        pass
+            return False
+
+        driver.switch_to.default_content()
+        _login_form_detected = _has_login_form()
+        if not _login_form_detected:
+            frames = driver.find_elements(By.TAG_NAME, "iframe") + driver.find_elements(By.TAG_NAME, "frame")
+            for idx in range(len(frames)):
+                try:
+                    driver.switch_to.default_content()
+                    driver.switch_to.frame(idx)
+                    if _has_login_form():
+                        _login_form_detected = True
+                        break
+                except Exception:
+                    continue
+            driver.switch_to.default_content()
+
+        if _login_form_detected:
+            _log("Phiên Inside hết hạn, cần đăng nhập lại (phát hiện khung đăng nhập trong trang).", "warning")
+            return False
+
+        driver.switch_to.default_content()
+        menu_keywords = ("hỗ trợ kỹ thuật", "quản lý hợp đồng")
+
+        def _menu_in_current_frame():
+            try:
+                txt = (driver.find_element(By.TAG_NAME, "body").text or "").lower()
+            except Exception:
+                return False
+            return any(k in txt for k in menu_keywords)
+
+        menu_ok = False
+        deadline = time.time() + 15
+        while time.time() < deadline and not menu_ok:
+            try:
+                driver.switch_to.default_content()
+                if _menu_in_current_frame():
+                    menu_ok = True
+                    break
+                n_fr = len(driver.find_elements(By.TAG_NAME, "iframe") + driver.find_elements(By.TAG_NAME, "frame"))
+                for idx in range(n_fr):
+                    try:
+                        driver.switch_to.default_content()
+                        driver.switch_to.frame(idx)
+                        if _menu_in_current_frame():
+                            menu_ok = True
+                            break
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+            if not menu_ok:
+                time.sleep(1)
+        try:
+            driver.switch_to.default_content()
+        except Exception:
+            pass
+        if not menu_ok:
+            _log("Không thấy menu 'Hỗ trợ kỹ thuật' (trang đơ/chưa nạp đủ) -> phiên hỏng.", "warning")
+            return False
+        return True
+    except Exception as e:
+        _log(f"Lỗi kiểm tra phiên: {e}", "warning")
+        return False
+
+def close_driver_and_clear_session(driver=None, profile_dir=None, log_cb=None):
+    """
+    Khi hoàn tất 1 tác vụ: đóng trình duyệt.
+    - Mặc định GIỮ phiên (lưu cookie + giữ profile) để lần sau không phải đăng nhập lại.
+    - Nếu config "keep_inside_session": false thì xóa sạch phiên như trước.
+    """
+    keep = _cfg_keep_inside_session()
+    if driver is not None:
+        if keep:
+            save_inside_cookies(driver)
+        else:
+            try:
+                driver.delete_all_cookies()
+            except Exception:
+                pass
         try:
             driver.quit()
         except Exception:
             pass
-    clear_inside_session(profile_dir=profile_dir, log_cb=log_cb)
+    if keep:
+        if log_cb:
+            try:
+                log_cb("Đã đóng trình duyệt, GIỮ phiên Inside cho lần chạy sau.", "info")
+            except Exception:
+                pass
+        clean_profile_locks_and_orphans(profile_dir, log_cb=log_cb)
+    else:
+        invalidate_session(profile_dir=profile_dir, log_cb=log_cb)
 
 def clean_profile_locks_and_orphans(profile_dir=None, log_cb=None):
     """
@@ -110,24 +373,31 @@ def clean_profile_locks_and_orphans(profile_dir=None, log_cb=None):
             except Exception:
                 pass
 
+    norm_profile = os.path.normpath(profile_dir).lower()
+
     if sys.platform.startswith("win"):
         try:
             cmd = [
                 'powershell', '-NoProfile', '-Command',
-                'Get-CimInstance Win32_Process | Select-Object ProcessId, CommandLine | ConvertTo-Csv -NoTypeInformation'
+                "Get-CimInstance Win32_Process -Filter \"Name = 'chrome.exe' or Name = 'chromedriver.exe'\" | Select-Object ProcessId, CommandLine | ConvertTo-Csv -NoTypeInformation"
             ]
             res = subprocess.check_output(cmd, text=True, errors='ignore')
-            norm_profile = os.path.normpath(profile_dir).lower()
             for line in res.splitlines():
                 line_lower = line.lower()
-                if ('chromedriver' in line_lower) or ('insidefpt_sessionprofile' in line_lower) or (norm_profile in line_lower):
+                # CHỈ giải phóng các tiến trình đang khóa đúng thư mục profile này
+                if norm_profile in line_lower:
                     parts = line.split(',')
                     if parts and parts[0].replace('"', '').isdigit():
                         pid = parts[0].replace('"', '')
-                        _log(f"Đang giải phóng tiến trình treo PID {pid}...", "warning")
-                        subprocess.run(['taskkill', '/F', '/PID', pid], capture_output=True)
+                        _log(f"Đang giải phóng tiến trình treo PID {pid} cho {os.path.basename(profile_dir)}...", "warning")
+                        subprocess.run(['taskkill', '/F', '/T', '/PID', pid], capture_output=True)
         except Exception as e:
             _log(f"Lưu ý khi dọn dẹp tiến trình cũ: {e}", "warning")
+    else:
+        try:
+            subprocess.run(['pkill', '-f', os.path.basename(profile_dir)], capture_output=True)
+        except Exception:
+            pass
 
     lock_files = [
         "DevToolsActivePort",
@@ -160,8 +430,10 @@ def build_chrome_options(headless=False, profile_dir=None, keep_open=False):
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--disable-gpu')
     options.add_argument('--disable-software-rasterizer')
-    options.add_argument('--remote-debugging-port=0')
-    options.add_argument('--disable-features=RendererCodeIntegrity,Crashpad')
+    options.add_argument('--disable-features=RendererCodeIntegrity,Crashpad,HttpsUpgrades,HttpsFirstBalancedModeAutoEnable')
+    options.add_argument('--ignore-certificate-errors')
+    options.add_argument('--ignore-ssl-errors=yes')
+    options.add_argument('--allow-running-insecure-content')
     options.add_argument('--no-first-run')
     options.add_argument('--no-default-browser-check')
     options.add_argument('--disable-session-crashed-bubble')
@@ -226,6 +498,12 @@ DEFAULT_ACCOUNT = {
     "account_name": "Phuongnam.phongnh5@inside.fpt.net"
 }
 
+DEFAULT_AM_ACCOUNT = {
+    "username": "phuongnam.phongnh5@fpt.net",
+    "password": "Benngo@@20262027",
+    "account_name": "phuongnam.phongnh5@fpt.net"
+}
+
 def load_config():
     cfg = {}
     if os.path.exists(CONFIG_FILE):
@@ -235,7 +513,7 @@ def load_config():
         except Exception:
             cfg = {}
 
-    # Ensure default_account
+    # Ensure default_account (Inside FPT)
     if "default_account" not in cfg or not isinstance(cfg["default_account"], dict):
         cfg["default_account"] = DEFAULT_ACCOUNT.copy()
     else:
@@ -247,6 +525,20 @@ def load_config():
         if not cfg["default_account"].get("totp_secret"):
             cfg["default_account"]["totp_secret"] = DEFAULT_ACCOUNT["totp_secret"]
         cfg["default_account"]["use_otp"] = True
+
+    # Ensure AM account (Radius Portal / SpamPool / Bypass NAT)
+    if "am_account" not in cfg or not isinstance(cfg.get("am_account"), dict):
+        cfg["am_account"] = DEFAULT_AM_ACCOUNT.copy()
+    else:
+        if not cfg["am_account"].get("username"):
+            cfg["am_account"]["username"] = DEFAULT_AM_ACCOUNT["username"]
+        if not cfg["am_account"].get("password"):
+            cfg["am_account"]["password"] = DEFAULT_AM_ACCOUNT["password"]
+
+    cfg["am_username"] = cfg["am_account"]["username"]
+    cfg["am_password"] = cfg["am_account"]["password"]
+    cfg["radius_username"] = cfg["am_account"]["username"]
+    cfg["radius_password"] = cfg["am_account"]["password"]
 
     # Ensure custom_account
     if "custom_account" not in cfg or not isinstance(cfg["custom_account"], dict):
@@ -264,7 +556,7 @@ def load_config():
     active_key = "default_account" if cfg["active_account"] == "default" else "custom_account"
     active_data = cfg[active_key]
 
-    # Backward compatibility fields at root level
+    # Backward compatibility fields at root level (Inside FPT account)
     cfg["username"] = active_data.get("username") or DEFAULT_ACCOUNT["username"]
     cfg["password"] = active_data.get("password") or DEFAULT_ACCOUNT["password"]
     cfg["totp_secret"] = active_data.get("totp_secret", "")
@@ -272,6 +564,17 @@ def load_config():
     cfg["account_name"] = active_data.get("account_name", "")
 
     return cfg
+
+def get_am_account_info(cfg=None):
+    if cfg is None:
+        cfg = load_config()
+    am = cfg.get("am_account") or cfg.get("radius_account") or {}
+    u = am.get("username") or cfg.get("am_username") or cfg.get("radius_username") or DEFAULT_AM_ACCOUNT["username"]
+    p = am.get("password") or cfg.get("am_password") or cfg.get("radius_password") or DEFAULT_AM_ACCOUNT["password"]
+    return {
+        "username": u.strip(),
+        "password": p
+    }
 
 def get_active_account_info(cfg=None):
     if cfg is None:
@@ -437,7 +740,25 @@ def run_fpt_login(username=None, password=None, secret=None, use_otp=None, headl
             raise e
 
     try:
-        # Xóa sạch cookie trước khi đăng nhập để luôn bắt đầu từ đầu 100%
+        # Thử dùng lại phiên đã giữ (nếu bật) -> chỉ đăng nhập lại khi phiên chết/đơ/lỗi khung đăng nhập
+        if _cfg_keep_inside_session():
+            try:
+                driver.get("http://inside.fpt.net/")
+                restored = restore_inside_cookies(driver)
+            except Exception:
+                restored = False
+            log("Đang kiểm tra phiên Inside đã giữ..." if restored else "Chưa có phiên đã lưu, kiểm tra phiên trong profile...", "info")
+            if inside_session_healthy(driver, log_cb=log_callback):
+                log("Phiên Inside còn hoạt động -> dùng lại, không cần đăng nhập!", "success")
+                current_url = driver.current_url
+                page_title = driver.title
+                if created_driver and not keep_open:
+                    save_inside_cookies(driver)
+                    driver.quit()
+                return True, current_url, page_title
+            log("Phiên không dùng được -> đăng nhập mới.", "warning")
+
+        # Xóa sạch cookie trước khi đăng nhập mới
         try:
             driver.delete_all_cookies()
         except Exception:
@@ -464,22 +785,21 @@ def run_fpt_login(username=None, password=None, secret=None, use_otp=None, headl
             p_elem.clear()
             p_elem.send_keys(password)
 
+            otp_code = ""
             if use_otp and secret:
                 log("Tùy chọn: Sử dụng mã OTP Google Authenticator...", "info")
                 try:
+                    driver.execute_script("""
+                        if (window.$) {
+                            $('#cbOTP').prop('checked', true);
+                            if (typeof CheckUseOTP === 'function') CheckUseOTP();
+                        }
+                    """)
                     if not cb_otp.is_selected():
-                        cb_otp.click()
+                        driver.execute_script("arguments[0].click();", cb_otp)
                 except Exception:
-                    driver.execute_script("arguments[0].click();", cb_otp)
-
-                # Ensure spOTP is displayed
-                driver.execute_script("""
-                    var sp = document.getElementById('spOTP');
-                    if (sp) sp.style.display = 'inline-block';
-                    var cb = document.getElementById('cbOTP');
-                    if (cb) cb.checked = true;
-                """)
-                time.sleep(0.3)
+                    pass
+                time.sleep(0.5)
 
                 otp_elem = wait.until(EC.presence_of_element_located((By.ID, "fOTP")))
                 totp = pyotp.TOTP(secret.strip().replace(" ", "").upper())
@@ -488,43 +808,165 @@ def run_fpt_login(username=None, password=None, secret=None, use_otp=None, headl
 
                 otp_elem.clear()
                 otp_elem.send_keys(otp_code)
+                time.sleep(0.3)
             else:
                 log("Tùy chọn: Không sử dụng OTP (bỏ chọn ô OTP)...", "info")
+                try:
+                    driver.execute_script("""
+                        if (window.$) {
+                            $('#cbOTP').prop('checked', false);
+                            if (typeof CheckUseOTP === 'function') CheckUseOTP();
+                        }
+                    """)
+                except Exception:
+                    pass
                 if cb_otp.is_selected():
                     try:
-                        cb_otp.click()
-                    except Exception:
                         driver.execute_script("arguments[0].click();", cb_otp)
+                    except Exception:
+                        pass
                     time.sleep(0.3)
 
-            log("Đang nhấn nút [ĐĂNG NHẬP]...", "info")
-            btn_login = wait.until(EC.presence_of_element_located((By.ID, "btnLogin")))
+            # Đảm bảo chắc chắn dữ liệu đã vào các trường jQuery và DOM trước khi gửi
             try:
-                btn_login.click()
+                driver.execute_script("""
+                    if (window.$) {
+                        $('#fUserName').val(arguments[0]);
+                        $('#fPassword').val(arguments[1]);
+                        if (arguments[2]) {
+                            $('#fOTP').val(arguments[3]);
+                        }
+                    }
+                """, username, password, bool(use_otp and secret), otp_code)
             except Exception:
-                driver.execute_script("arguments[0].click();", btn_login)
+                pass
 
-            # Wait for redirect or alert
-            log("Đang chờ phản hồi xác thực và chuyển hướng vào Inside FPT...", "info")
+            log("Đang gửi yêu cầu xác thực đăng nhập...", "info")
+            login_success = False
+
+            # Thực thi trực tiếp qua API xác thực /Login của login.fpt.net để đảm bảo 100% chính xác
+            login_result = None
             try:
-                WebDriverWait(driver, 20).until(
-                    lambda d: ("inside.fpt.net" in d.current_url.lower() or "default.asp" in d.current_url.lower()) and "login.fpt.net" not in d.current_url.lower()
-                )
-                log("Đăng nhập thành công vào Inside FPT!", "success")
-            except Exception:
-                # Check for alert popup if credentials failed
+                login_result = driver.execute_script("""
+                    var res = null;
+                    try {
+                        $.ajax({
+                            url: '/Login',
+                            type: 'POST',
+                            async: false,
+                            datatype: 'JSON',
+                            data: {
+                                UserName: $('#fUserName').val().trim(),
+                                Password: $('#fPassword').val(),
+                                OTP: $('#fOTP').val(),
+                                Token: '',
+                                IAM: false,
+                                urlReturn: 'http://inside.fpt.net/'
+                            },
+                            success: function (data) {
+                                res = data;
+                            },
+                            error: function (xhr, s, e) {
+                                res = {status: -2, errDescription: (xhr.responseText || e)};
+                            }
+                        });
+                    } catch (ex) {
+                        res = {status: -3, errDescription: ex.toString()};
+                    }
+                    return res;
+                """)
+            except Exception as e_ajax:
+                log(f"Lưu ý gọi API login: {e_ajax}", "warning")
+
+            if login_result and isinstance(login_result, dict):
+                log(f"Kết quả xác thực SSO: {login_result}", "info")
+                if login_result.get("status") == 1:
+                    token = login_result.get("token") or ""
+                    target_url = "http://inside.fpt.net/"
+                    if token:
+                        target_url += f"?Token={token}"
+                    log(f"Xác thực thành công! Đang chuyển hướng vào: {target_url}", "success")
+                    driver.get(target_url)
+                    time.sleep(2)
+                    driver.get("http://inside.fpt.net/default.asp")
+                    time.sleep(2)
+                    login_success = True
+                elif login_result.get("status") == -1:
+                    err_desc = login_result.get("errDescription", "")
+                    if err_desc == "Invalid user credentials":
+                        raise ValueError("Thông tin tài khoản, mật khẩu hoặc mã OTP không chính xác!")
+                    elif err_desc == "Account is not fully set up":
+                        raise ValueError("Tài khoản cần cập nhật mật khẩu mới!")
+                    elif err_desc == "Account disabled":
+                        raise ValueError("Tài khoản đã bị khóa (disabled)!")
+                    else:
+                        raise ValueError(f"Đăng nhập thất bại: {err_desc}")
+
+            if not login_success:
+                log("Đang nhấn nút [ĐĂNG NHẬP]...", "info")
+                # Kích hoạt sự kiện đăng nhập qua jQuery (vì login.fpt.net gắn handler qua $('#btnLogin').click)
+                clicked = False
                 try:
-                    alert = driver.switch_to.alert
-                    alert_text = alert.text
-                    alert.accept()
-                    raise ValueError(f"Đăng nhập thất bại: {alert_text}")
-                except Exception as e_alert:
-                    if "Đăng nhập thất bại" in str(e_alert):
-                        raise e_alert
+                    clicked = bool(driver.execute_script("""
+                        if (window.$ && $('#btnLogin').length) {
+                            $('#btnLogin').click();
+                            return true;
+                        }
+                        return false;
+                    """))
+                except Exception:
+                    pass
 
-            curr_after = driver.current_url.lower()
-            if "login.fpt.net" in curr_after:
-                raise RuntimeError("Hệ thống không chuyển hướng được vào Inside FPT (Sai thông tin đăng nhập hoặc tài khoản bị khóa).")
+                if not clicked:
+                    btn_login = None
+                    for xpath in [
+                        '//*[@id="btnLogin"]//a',
+                        '//*[@id="btnLogin"]',
+                        '//div[contains(@class,"loginBtn")]',
+                        '//button[contains(text(),"ĐĂNG NHẬP")]',
+                    ]:
+                        try:
+                            btn = driver.find_element(By.XPATH, xpath)
+                            if btn.is_displayed():
+                                btn_login = btn
+                                break
+                        except Exception:
+                            pass
+
+                    if btn_login:
+                        try:
+                            btn_login.click()
+                        except Exception:
+                            driver.execute_script("arguments[0].click();", btn_login)
+                    else:
+                        try:
+                            driver.execute_script("$('#btnLogin').click();")
+                        except Exception:
+                            pass
+
+                # Wait for redirect or alert
+                log("Đang chờ phản hồi xác thực và chuyển hướng vào Inside FPT...", "info")
+                for _ in range(25):
+                    time.sleep(1)
+                    try:
+                        alert = driver.switch_to.alert
+                        alert_text = alert.text
+                        alert.accept()
+                        raise ValueError(f"Đăng nhập thất bại: {alert_text}")
+                    except Exception as e_alert:
+                        if "Đăng nhập thất bại" in str(e_alert):
+                            raise e_alert
+
+                    curr = (driver.current_url or "").lower()
+                    if ("inside.fpt.net" in curr or "default.asp" in curr) and "login.fpt.net" not in curr:
+                        login_success = True
+                        log("Đăng nhập thành công vào Inside FPT!", "success")
+                        break
+
+            if not login_success:
+                curr_after = (driver.current_url or "").lower()
+                if "login.fpt.net" in curr_after:
+                    raise RuntimeError("Hệ thống không chuyển hướng được vào Inside FPT (Sai thông tin đăng nhập hoặc tài khoản bị khóa).")
 
         # Kiểm tra Frame 1 sau khi đăng nhập xong
         time.sleep(2)
@@ -577,9 +1019,21 @@ def run_fpt_login(username=None, password=None, secret=None, use_otp=None, headl
             except Exception:
                 pass
 
+        # F5 sau khi đăng nhập để ổn định trang (tránh trạng thái menu bị nhân đôi)
+        try:
+            log("Làm mới trang sau đăng nhập để ổn định giao diện...", "info")
+            driver.switch_to.default_content()
+            driver.refresh()
+            time.sleep(3)
+        except Exception:
+            pass
+
         current_url = driver.current_url
         page_title = driver.title
         log(f"Trang hiện tại: {page_title} ({current_url})", "success")
+
+        if _cfg_keep_inside_session():
+            save_inside_cookies(driver, new_login=True)
 
         if created_driver:
             if keep_open:
@@ -597,3 +1051,222 @@ def run_fpt_login(username=None, password=None, secret=None, use_otp=None, headl
             except Exception:
                 pass
         raise e
+
+def run_radius_login(username=None, password=None, headless=False, keep_open=True, log_callback=None, driver=None, force=False):
+    """
+    Quy trình đăng nhập tự động vào Radius Portal (http://radius-portal.fpt.net/login)
+    qua IAM và Microsoft Azure AD SSO:
+    Bước 1: Truy cập http://radius-portal.fpt.net/login
+    Bước 2: Bấm Đăng nhập bằng IAM
+    Bước 3: Bấm Azure AD
+    Bước 4: Điền email
+    Bước 5: Bấm Next
+    Bước 6: Điền mật khẩu
+    Bước 7: Bấm Next (Sign in)
+    Bước 8: Bấm Yes (Stay signed in)
+    """
+    def log(msg, status="info"):
+        if log_callback:
+            try:
+                log_callback(msg, status)
+            except Exception:
+                pass
+        else:
+            try:
+                print(f"[{status.upper()}] {msg}")
+            except Exception:
+                pass
+
+    config = load_config()
+    am_acc = get_am_account_info(config)
+
+    # Email mặc định cho Radius Portal (Tài khoản AM: phuongnam.phongnh5@fpt.net)
+    username = username or am_acc["username"]
+    if "@" not in username:
+        username = f"{username}@fpt.net"
+
+    password = password or am_acc["password"]
+
+    created_driver = False
+    if driver is None:
+        log("Đang khởi tạo trình duyệt Google Chrome cho Radius Portal...", "info")
+        p_dir = get_radius_profile_dir()
+        try:
+            driver = create_driver_with_retry(
+                headless=headless,
+                profile_dir=p_dir,
+                keep_open=keep_open,
+                max_retries=2,
+                log_cb=log_callback
+            )
+            created_driver = True
+        except Exception as e:
+            log(f"Lỗi khởi động Chrome: {e}", "error")
+            raise e
+
+    try:
+        if force:
+            log("Yêu cầu buộc đăng nhập lại từ đầu (force=True), dọn dẹp cookie và storage...", "info")
+            try:
+                driver.delete_all_cookies()
+                driver.execute_script("try { localStorage.clear(); sessionStorage.clear(); } catch(e){}")
+            except Exception:
+                pass
+
+        log("Bước 1: Điều hướng tới http://radius-portal.fpt.net/login...", "info")
+        driver.get("http://radius-portal.fpt.net/login")
+        time.sleep(2.5)
+
+        curr_url = (driver.current_url or "").lower()
+        if not force and "radius-portal.fpt.net" in curr_url and "login" not in curr_url:
+            log(f"Đã đăng nhập sẵn vào Radius Portal! Trang: {driver.current_url}", "success")
+            return True, driver.current_url, driver.title
+
+        wait = WebDriverWait(driver, 15)
+
+        # Bước 2: Bấm Đăng nhập bằng IAM
+        log("Bước 2: Nhấn nút [Đăng nhập bằng IAM]...", "info")
+        btn_iam = wait.until(EC.element_to_be_clickable((
+            By.XPATH, "//button[contains(., 'Đăng nhập bằng IAM')] | //a[contains(., 'Đăng nhập bằng IAM')] | //*[contains(text(), 'Đăng nhập bằng IAM')]"
+        )))
+        driver.execute_script("arguments[0].click();", btn_iam)
+        time.sleep(2.5)
+
+        # Bước 3: Nếu đang ở trang IAM, bấm Azure AD
+        curr_url = (driver.current_url or "").lower()
+        if "iam.fpt.vn" in curr_url:
+            log("Bước 3: Nhấn chọn phương thức [Azure AD]...", "info")
+            btn_azure = wait.until(EC.element_to_be_clickable((
+                By.XPATH, "//a[contains(., 'Azure AD')] | //button[contains(., 'Azure AD')] | //*[@id='zocial-azure-ad'] | //*[contains(text(), 'Azure AD')]"
+            )))
+            driver.execute_script("arguments[0].click();", btn_azure)
+            time.sleep(2.5)
+
+        # Chờ chuyển sang trang Microsoft hoặc đã vào Radius Portal
+        try:
+            WebDriverWait(driver, 12).until(
+                lambda d: "login.microsoftonline.com" in (d.current_url or "").lower() or ("radius-portal.fpt.net" in (d.current_url or "").lower() and "login" not in (d.current_url or "").lower())
+            )
+        except Exception:
+            pass
+
+        # Microsoft Login flow
+        curr_url = (driver.current_url or "").lower()
+        if "login.microsoftonline.com" in curr_url:
+            base_user = username.split("@")[0].lower()
+            acc_name = (active_acc.get("account_name") or "").lower()
+
+            # Kiểm tra xem có sẵn tài khoản dạng tile picker để click không
+            picker = driver.find_elements(
+                By.XPATH,
+                f"//div[contains(@data-test-id, '{username}') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{base_user}') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{username.lower()}') or contains(@data-username, '{username}')]"
+            )
+            displayed_pickers = [p for p in picker if p.is_displayed()]
+            if displayed_pickers:
+                log(f"Chọn tài khoản đã lưu: {username}", "info")
+                try:
+                    displayed_pickers[0].click()
+                except Exception:
+                    driver.execute_script("arguments[0].click();", displayed_pickers[0])
+                time.sleep(2)
+            else:
+                # Bước 4: Điền email nếu có ô input email
+                emails = driver.find_elements(By.XPATH, "//input[@type='email' or @name='loginfmt' or @id='i0116']")
+                displayed_emails = [e for e in emails if e.is_displayed()]
+                if displayed_emails:
+                    log(f"Bước 4: Điền email tài khoản: {username}", "info")
+                    target_email = displayed_emails[0]
+                    target_email.send_keys(Keys.CONTROL + "a")
+                    target_email.send_keys(Keys.BACKSPACE)
+                    time.sleep(0.2)
+                    target_email.send_keys(username)
+                    time.sleep(0.5)
+
+                    log("Bước 5: Nhấn [Next]...", "info")
+                    btn_next = wait.until(EC.element_to_be_clickable((
+                        By.XPATH, "//input[@type='submit' or @id='idSIButton9' or @value='Next'] | //button[@type='submit' or @id='idSIButton9']"
+                    )))
+                    driver.execute_script("arguments[0].click();", btn_next)
+                    time.sleep(2.5)
+
+            # Chờ một chút để ô mật khẩu hoặc màn hình xác nhận xuất hiện
+            pass_elem = None
+            for _ in range(12):
+                curr = (driver.current_url or "").lower()
+                if "radius-portal.fpt.net" in curr and "login" not in curr:
+                    break
+
+                inps = driver.find_elements(By.XPATH, "//input[@type='password' or @name='passwd' or @id='i0118']")
+                disp_pass = [p for p in inps if p.is_displayed()]
+                if disp_pass:
+                    pass_elem = disp_pass[0]
+                    break
+
+                # Kiểm tra nếu đã chuyển sang màn hình Stay signed in
+                btn_yes = driver.find_elements(By.XPATH, "//input[@id='idSIButton9' or @value='Yes'] | //button[@id='idSIButton9' or contains(text(), 'Yes')]")
+                if any(b.is_displayed() for b in btn_yes):
+                    break
+
+                time.sleep(0.8)
+
+            # Bước 6: Điền mật khẩu nếu có ô nhập
+            if pass_elem:
+                log("Bước 6: Điền mật khẩu tài khoản mới...", "info")
+                pass_elem.send_keys(Keys.CONTROL + "a")
+                pass_elem.send_keys(Keys.BACKSPACE)
+                time.sleep(0.2)
+                pass_elem.send_keys(password)
+                time.sleep(0.5)
+
+                log("Bước 7: Nhấn [Next] / [Sign in]...", "info")
+                btn_signin = wait.until(EC.element_to_be_clickable((
+                    By.XPATH, "//input[@type='submit' or @id='idSIButton9' or @value='Sign in'] | //button[@type='submit' or @id='idSIButton9']"
+                )))
+                driver.execute_script("arguments[0].click();", btn_signin)
+                time.sleep(2.5)
+
+                # Kiểm tra lỗi sai mật khẩu
+                err_boxes = driver.find_elements(By.XPATH, "//*[@id='passwordError'] | //*[contains(@class, 'error') and (contains(text(), 'incorrect') or contains(text(), 'không đúng'))]")
+                for eb in err_boxes:
+                    if eb.is_displayed() and eb.text.strip():
+                        log(f"Cảnh báo Microsoft: {eb.text.strip()}", "error")
+                        raise RuntimeError(f"Sai mật khẩu hoặc tài khoản Microsoft: {eb.text.strip()}")
+
+            # Bước 8: Bấm YES trên màn hình "Stay signed in?" (Duy trì đăng nhập)
+            try:
+                btn_yes = WebDriverWait(driver, 8).until(EC.element_to_be_clickable((
+                    By.XPATH, "//input[@id='idSIButton9' or @value='Yes'] | //button[@id='idSIButton9' or contains(text(), 'Yes')]"
+                )))
+                log("Bước 8: Nhấn [YES] để duy trì trạng thái đăng nhập...", "info")
+                driver.execute_script("arguments[0].click();", btn_yes)
+                time.sleep(3)
+            except Exception:
+                pass
+
+        # Chờ chuyển hướng vào Radius Portal (nếu có 2FA / Authenticator, cho phép chờ tối đa 45 giây)
+        log("Đang chờ chuyển hướng vào trang chủ Radius Portal (tối đa 45s)...", "info")
+        WebDriverWait(driver, 45).until(
+            lambda d: "radius-portal.fpt.net" in (d.current_url or "").lower() and "login" not in (d.current_url or "").lower()
+        )
+
+        final_url = driver.current_url
+        final_title = driver.title
+        log(f"Đăng nhập thành công vào Radius Portal! ({final_url})", "success")
+
+        if created_driver:
+            if keep_open:
+                log("Trình duyệt Chrome vẫn được giữ mở để bạn tiếp tục thao tác.", "success")
+            else:
+                driver.quit()
+
+        return True, final_url, final_title
+
+    except Exception as e:
+        log(f"Đã xảy ra lỗi khi đăng nhập Radius: {e}", "error")
+        if created_driver and not keep_open:
+            try:
+                driver.quit()
+            except Exception:
+                pass
+        raise e
+

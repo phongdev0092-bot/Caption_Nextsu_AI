@@ -136,6 +136,18 @@ function formatDateDataDisplay(r) {
   return raw;
 }
 
+function getLocalDateStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Thiết lập mặc định Hôm Nay cho bộ lọc Date Data
+const initialTodayStr = getLocalDateStr();
+if (retrievalDateFrom && !retrievalDateFrom.value) retrievalDateFrom.value = initialTodayStr;
+if (retrievalDateTo && !retrievalDateTo.value) retrievalDateTo.value = initialTodayStr;
+
+let currentRetrievalPage = 1;
+
 async function loadRetrievalData() {
   const q = encodeURIComponent(retrievalSearchInput.value.trim());
   const st = encodeURIComponent(retrievalStatusSelect.value);
@@ -147,6 +159,12 @@ async function loadRetrievalData() {
     if (res.ok) {
       const data = await res.json();
       currentRecords = data.records || [];
+
+      // Sắp xếp từ gần nhất đến xa nhất
+      if (window.UnifiedWorkTabs && typeof window.UnifiedWorkTabs.sortRecordsNewestFirst === 'function') {
+        currentRecords = window.UnifiedWorkTabs.sortRecordsNewestFirst(currentRecords);
+      }
+
       renderRetrievalTable(currentRecords);
       updateStorageInfo();
 
@@ -199,10 +217,20 @@ function renderRetrievalTable(records) {
   retrievalTableBody.innerHTML = '';
   if (records.length === 0) {
     retrievalTableBody.innerHTML = `<tr><td colspan="16" style="text-align:center; padding: 32px; color: #80868b;">Chưa có dữ liệu phù hợp với bộ lọc. Bấm <strong>Auto Lấy Thông Tin</strong> hoặc chọn lại ngày để xem.</td></tr>`;
+    if (window.UnifiedWorkTabs) {
+      window.UnifiedWorkTabs.renderPagination('retrievalPagination', { total: 0 });
+    }
     return;
   }
 
-  records.forEach((r, idx) => {
+  // Phân trang 10 dòng 1 trang
+  const pageState = window.UnifiedWorkTabs
+    ? window.UnifiedWorkTabs.paginate(records, currentRetrievalPage, 10)
+    : { items: records.slice(0, 10), currentPage: 1, totalPages: Math.ceil(records.length / 10), total: records.length, startIdx: 0, endIdx: Math.min(10, records.length) };
+  currentRetrievalPage = pageState.currentPage;
+
+  pageState.items.forEach((r, idx) => {
+    const globalIdx = pageState.startIdx + idx;
     const tr = document.createElement('tr');
     const isSuccess = r.status === 'Thành công';
     const badgeCls = isSuccess ? 'success' : 'error';
@@ -210,7 +238,7 @@ function renderRetrievalTable(records) {
     const formattedDateData = formatDateDataDisplay(r);
 
     tr.innerHTML = `
-      <td style="color:#80868b; font-weight:500;">${idx + 1}</td>
+      <td style="color:#80868b; font-weight:500;">${globalIdx + 1}</td>
       <td><strong style="color:#1a73e8; font-family:var(--font-mono);">${escapeHtml(r.contract_no)}</strong></td>
       <td><strong>${escapeHtml(r.customer_name || '-')}</strong></td>
       <td style="font-family:var(--font-mono);">${escapeHtml(r.customer_phone || '-')}</td>
@@ -226,7 +254,7 @@ function renderRetrievalTable(records) {
       <td style="white-space:nowrap;"><span class="date-data-badge" title="Thời gian cào Inside FPT: ${escapeHtml(r.timestamp || '')}">📅 ${escapeHtml(formattedDateData)}</span></td>
       <td><span class="badge-status ${badgeCls}">${escapeHtml(statusText)}</span></td>
       <td style="text-align:center;">
-        <button type="button" class="btn-row-action" data-idx="${idx}">Chi tiết</button>
+        <button type="button" class="btn-row-action" data-idx="${globalIdx}">Chi tiết</button>
       </td>
     `;
     retrievalTableBody.appendChild(tr);
@@ -241,19 +269,28 @@ function renderRetrievalTable(records) {
       }
     });
   });
+
+  // Render pagination controls
+  if (window.UnifiedWorkTabs) {
+    window.UnifiedWorkTabs.renderPagination('retrievalPagination', pageState, (newPage) => {
+      currentRetrievalPage = newPage;
+      renderRetrievalTable(currentRecords);
+    });
+  }
 }
 
-retrievalSearchInput.addEventListener('input', () => loadRetrievalData());
-retrievalStatusSelect.addEventListener('change', () => loadRetrievalData());
+retrievalSearchInput.addEventListener('input', () => { currentRetrievalPage = 1; loadRetrievalData(); });
+retrievalStatusSelect.addEventListener('change', () => { currentRetrievalPage = 1; loadRetrievalData(); });
 
-if (retrievalDateFrom) retrievalDateFrom.addEventListener('change', () => loadRetrievalData());
-if (retrievalDateTo) retrievalDateTo.addEventListener('change', () => loadRetrievalData());
+if (retrievalDateFrom) retrievalDateFrom.addEventListener('change', () => { currentRetrievalPage = 1; loadRetrievalData(); });
+if (retrievalDateTo) retrievalDateTo.addEventListener('change', () => { currentRetrievalPage = 1; loadRetrievalData(); });
 
 if (btnFilterToday) {
   btnFilterToday.addEventListener('click', () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getLocalDateStr();
     if (retrievalDateFrom) retrievalDateFrom.value = today;
     if (retrievalDateTo) retrievalDateTo.value = today;
+    currentRetrievalPage = 1;
     showSnackbar(`Đã áp dụng lọc Date Data hôm nay (${today})`);
     loadRetrievalData();
   });
@@ -263,6 +300,7 @@ if (btnClearDateFilter) {
   btnClearDateFilter.addEventListener('click', () => {
     if (retrievalDateFrom) retrievalDateFrom.value = '';
     if (retrievalDateTo) retrievalDateTo.value = '';
+    currentRetrievalPage = 1;
     showSnackbar('Đã xóa bộ lọc ngày (Hiển thị tất cả dữ liệu)');
     loadRetrievalData();
   });

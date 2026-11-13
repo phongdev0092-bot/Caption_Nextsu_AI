@@ -101,6 +101,8 @@ async function pollStatus() {
         if (typeof renderAssignTerminalLogs === 'function') renderAssignTerminalLogs(data.logs);
         if (typeof renderClearSignalTerminalLogs === 'function') renderClearSignalTerminalLogs(data.logs);
         if (typeof renderResetSignalTerminalLogs === 'function') renderResetSignalTerminalLogs(data.logs);
+        if (typeof renderMyBaeTerminalLogs === 'function') renderMyBaeTerminalLogs(data.logs);
+        if (typeof renderSpamPoolTerminalLogs === 'function') renderSpamPoolTerminalLogs(data.logs);
       }
     }
   } catch (err) {}

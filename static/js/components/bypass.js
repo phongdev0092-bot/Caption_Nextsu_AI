@@ -9,7 +9,7 @@
 // ByPass Google Sheet GID 0
 function switchBypassSubTab(gid = '0') {
   currentBypassGid = gid;
-  if (sheetCurrentTabTitle) sheetCurrentTabTitle.textContent = 'ByPass (GID: 0)';
+  if (sheetCurrentTabTitle) sheetCurrentTabTitle.textContent = 'ByPass';
   loadBypassSheetData(gid);
 }
 
@@ -22,7 +22,7 @@ async function loadBypassSheetData(gid = currentBypassGid) {
   if (!sheetDataTableBody) return;
   // Chỉ hiện loading khi bảng rỗng, tránh flicker khi auto-refresh 4s
   if (sheetDataTableBody.children.length === 0 || (sheetDataTableBody.children.length === 1 && sheetDataTableBody.children[0].textContent.includes('Đang tải'))) {
-    sheetDataTableBody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding: 28px; color: #80868b;"><span>⏳ Đang tải dữ liệu từ Google Sheet...</span></td></tr>';
+    sheetDataTableBody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding: 28px; color: #80868b;"><span>⏳ Đang tải dữ liệu từ Google Sheet...</span></td></tr>';
   }
 
   try {
@@ -47,10 +47,10 @@ async function loadBypassSheetData(gid = currentBypassGid) {
         syncEl.textContent = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       }
     } else {
-      sheetDataTableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding: 24px; color: #d93025;">❌ ${escapeHtml(data.message || 'Không thể đọc dữ liệu từ Google Sheet')}</td></tr>`;
+      sheetDataTableBody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding: 24px; color: #d93025;">❌ ${escapeHtml(data.message || 'Không thể đọc dữ liệu từ Google Sheet')}</td></tr>`;
     }
   } catch (err) {
-    sheetDataTableBody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding: 24px; color: #d93025;">❌ Lỗi kết nối khi tải dữ liệu từ Google Sheet</td></tr>';
+    sheetDataTableBody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding: 24px; color: #d93025;">❌ Lỗi kết nối khi tải dữ liệu từ Google Sheet</td></tr>';
   }
 }
 
@@ -59,13 +59,24 @@ function updateBypassStats(records) {
   const total = records.length;
   let pending = 0;
   let done = 0;
+  let hkPass = 0;
+  let hkFail = 0;
 
   records.forEach(r => {
     const st = String(r['Thao Tác'] || r['Thao tác'] || '').trim().toLowerCase();
-    if (st === 'đã xử lý') {
+    if (st === 'đã xử lý' || st.includes('vi phạm') || st.includes('từ chối') || st.includes('không thành công')) {
       done++;
     } else {
       pending++;
+    }
+
+    const hk = (getRecordField(r, 'Hậu kiểm', 'Hậu Kiểm', 'Hau kiem') || '').trim().toUpperCase();
+    const suyHao = (getRecordField(r, 'Suy Hao Hậu Kiểm', 'Suy hao hậu kiểm', 'Suy Hao', 'Suy hao') || '').trim().toLowerCase();
+    const isMatTinHieu = suyHao.includes('mất tín hiệu') || hk.toLowerCase().includes('mất tín hiệu');
+    if (hk === 'ĐẠT') {
+      hkPass++;
+    } else if (hk === 'KHÔNG ĐẠT' && !isMatTinHieu) {
+      hkFail++;
     }
   });
 
@@ -74,6 +85,16 @@ function updateBypassStats(records) {
   if (sheetStatDone) sheetStatDone.textContent = done;
   if (badgeBypassPending) badgeBypassPending.textContent = `${pending} chờ xử lý`;
   if (sheetRecordCountText) sheetRecordCountText.textContent = `${total} dòng (${pending} chờ)`;
+
+  const statFailEl = document.getElementById('sheetStatHauKiemFail');
+  const statPassEl = document.getElementById('sheetStatHauKiemPass');
+  const statFailPctEl = document.getElementById('sheetStatHauKiemFailPct');
+  if (statFailEl) statFailEl.textContent = hkFail;
+  if (statPassEl) statPassEl.textContent = hkPass;
+  if (statFailPctEl) {
+    const pct = total > 0 ? Math.round((hkFail / total) * 100) : 0;
+    statFailPctEl.textContent = `Tỷ lệ không đạt: ${pct}%`;
+  }
 }
 
 function getRecordField(r, ...possibleKeys) {
@@ -85,24 +106,225 @@ function getRecordField(r, ...possibleKeys) {
   return '';
 }
 
-function renderBypassTable(records) {
-  if (!sheetDataTableBody) return;
-  const filter = sheetFilterStatusSelect ? sheetFilterStatusSelect.value : 'all';
+// BẢNG TOP CÁC NHÂN SỰ BYPASS KHÔNG ĐẠT NHIỀU NHẤT - TOP 10
+function renderTopFailedStaff(records) {
+  const container = document.getElementById('topFailedStaffTableBody');
+  const badgeTotal = document.getElementById('badgeTopFailedTotal');
+  if (!container) return;
 
-  let filtered = records.filter(r => {
-    const st = String(r['Thao Tác'] || r['Thao tác'] || '').trim().toLowerCase();
-    if (filter === 'pending') return st !== 'đã xử lý';
-    if (filter === 'done') return st === 'đã xử lý';
-    return true;
+  const dateFilter = document.getElementById('selectDateFilterBypass')?.value || 'all';
+  let targetRecords = records;
+  if (dateFilter && dateFilter !== 'all' && window.UnifiedWorkTabs && typeof window.UnifiedWorkTabs.filterRecords === 'function') {
+    targetRecords = window.UnifiedWorkTabs.filterRecords(records, { dateRange: dateFilter });
+  }
+
+  const staffMap = {};
+  let totalFailedCount = 0;
+
+  targetRecords.forEach(r => {
+    const email = getRecordField(r, 'Email', 'Nhân viên kỹ thuật', 'Nhân viên kỹ thuật');
+    if (!email) return;
+
+    const msnv = getRecordField(r, 'MSNV');
+    const account = getRecordField(r, 'Account Inside', 'Account');
+    const hk = (getRecordField(r, 'Hậu kiểm', 'Hậu Kiểm', 'Hau kiem') || '').trim().toUpperCase();
+    const suyHao = getRecordField(r, 'Suy Hao Hậu Kiểm', 'Suy hao hậu kiểm', 'Suy Hao', 'Suy hao');
+
+    if (!staffMap[email]) {
+      staffMap[email] = {
+        email: email,
+        msnv: msnv,
+        account: account,
+        total: 0,
+        dat: 0,
+        khong_dat: 0,
+        suyHaoCounts: {}
+      };
+    }
+
+    staffMap[email].total++;
+    const isMatTinHieu = (suyHao || '').toLowerCase().includes('mất tín hiệu') || hk.toLowerCase().includes('mất tín hiệu');
+    if (hk === 'KHÔNG ĐẠT' && !isMatTinHieu) {
+      staffMap[email].khong_dat++;
+      totalFailedCount++;
+      if (suyHao) {
+        staffMap[email].suyHaoCounts[suyHao] = (staffMap[email].suyHaoCounts[suyHao] || 0) + 1;
+      }
+    } else if (hk === 'ĐẠT') {
+      staffMap[email].dat++;
+    }
   });
 
-  if (filtered.length === 0) {
-    sheetDataTableBody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding: 28px; color: #80868b;">Không có bản ghi nào phù hợp với bộ lọc</td></tr>';
+  if (badgeTotal) {
+    badgeTotal.textContent = `${totalFailedCount} ca Không Đạt`;
+  }
+
+  // Sắp xếp giảm dần theo số ca Không Đạt, sau đó theo tổng số ca
+  const sortedStaff = Object.values(staffMap)
+    .filter(s => s.khong_dat > 0)
+    .sort((a, b) => {
+      if (b.khong_dat !== a.khong_dat) return b.khong_dat - a.khong_dat;
+      return b.total - a.total;
+    })
+    .slice(0, 10);
+
+  if (sortedStaff.length === 0) {
+    container.innerHTML = `
+      <tr>
+        <td colspan="7" class="text-center py-6 text-slate-400">
+          <div class="flex flex-col items-center justify-center gap-1">
+            <span class="text-2xl">🎉</span>
+            <span class="text-xs font-medium text-emerald-600">Không có nhân sự nào có hợp đồng Bypass "Không Đạt" trong khoảng thời gian đã chọn!</span>
+          </div>
+        </td>
+      </tr>
+    `;
     return;
   }
 
+  const maxFailed = sortedStaff[0].khong_dat || 1;
+
+  container.innerHTML = '';
+  sortedStaff.forEach((s, idx) => {
+    const tr = document.createElement('tr');
+    tr.className = 'hover:bg-rose-50/40 transition-colors';
+
+    const pct = Math.round((s.khong_dat / s.total) * 100);
+    const barWidth = Math.max(10, Math.round((s.khong_dat / maxFailed) * 100));
+
+    // Huy hiệu Hạng 1, 2, 3 và 4-10
+    let rankBadge = `<span class="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold bg-slate-100 text-slate-700">${idx + 1}</span>`;
+    if (idx === 0) {
+      rankBadge = `<span class="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold bg-amber-500 text-white shadow-sm ring-2 ring-amber-200" title="Hạng 1 nhiều Không Đạt nhất">🥇</span>`;
+    } else if (idx === 1) {
+      rankBadge = `<span class="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold bg-slate-400 text-white shadow-sm ring-2 ring-slate-200" title="Hạng 2">🥈</span>`;
+    } else if (idx === 2) {
+      rankBadge = `<span class="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold bg-amber-700 text-white shadow-sm ring-2 ring-amber-100" title="Hạng 3">🥉</span>`;
+    }
+
+    // Liệt kê top nguyên nhân suy hao phổ biến nhất
+    const sortedReasons = Object.entries(s.suyHaoCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([reason, cnt]) => `${reason} (${cnt})`)
+      .slice(0, 2)
+      .join(', ');
+
+    tr.innerHTML = `
+      <td style="text-align: center;">${rankBadge}</td>
+      <td>
+        <div class="flex items-center gap-1.5">
+          <span class="font-mono text-xs font-semibold text-slate-800">${escapeHtml(s.email)}</span>
+        </div>
+      </td>
+      <td>
+        <div class="text-[11px] font-mono text-slate-600">
+          <div class="font-semibold text-slate-700">${escapeHtml(s.account || '—')}</div>
+          ${s.msnv ? `<div class="text-[10px] text-slate-400 font-mono">MS: ${escapeHtml(String(s.msnv))}</div>` : ''}
+        </div>
+      </td>
+      <td style="text-align: center;">
+        <div class="inline-flex flex-col items-center">
+          <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-300">
+            ${s.khong_dat} ca
+          </span>
+          <div class="w-16 h-1.5 bg-slate-200 rounded-full mt-1 overflow-hidden">
+            <div class="h-full bg-rose-500 rounded-full transition-all duration-500" style="width: ${barWidth}%;"></div>
+          </div>
+        </div>
+      </td>
+      <td style="text-align: center;">
+        <div class="text-xs font-medium text-slate-700">
+          <span class="font-bold text-rose-600">${pct}%</span>
+          <span class="text-slate-400 text-[10.5px]">(${s.khong_dat}/${s.total})</span>
+        </div>
+      </td>
+      <td>
+        <span class="text-[11px] text-slate-600 font-mono" title="${escapeHtml(sortedReasons || 'Chưa có thông số suy hao')}">${escapeHtml(sortedReasons || '—')}</span>
+      </td>
+      <td style="text-align: center;">
+        <button type="button" class="btn-filter-staff-bypass px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-rose-50 text-rose-700 hover:bg-rose-100 hover:text-rose-800 transition-colors cursor-pointer border border-rose-200" data-email="${escapeHtml(s.email)}" title="Lọc các hợp đồng của ${escapeHtml(s.email)} trên bảng dưới">
+          🔍 Lọc HĐ
+        </button>
+      </td>
+    `;
+
+    container.appendChild(tr);
+  });
+
+  // Gắn sự kiện click cho nút "Lọc HĐ"
+  container.querySelectorAll('.btn-filter-staff-bypass').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const email = e.currentTarget.dataset.email;
+      filterTableByStaff(email);
+    });
+  });
+}
+
+function filterTableByStaff(email) {
+  const searchInput = document.getElementById('inputSearchBypassSHD');
+  if (searchInput) {
+    searchInput.value = email;
+  }
+  currentBypassPage = 1;
+  renderBypassTable(currentBypassRecords);
+  const tableEl = document.getElementById('sheetDataTable');
+  if (tableEl) {
+    tableEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  showSnackbar(`🔍 Đã lọc danh sách theo nhân sự: ${email}`);
+}
+
+let currentBypassPage = 1;
+
+function renderBypassTable(records) {
+  if (!sheetDataTableBody) return;
+  const filter = sheetFilterStatusSelect ? sheetFilterStatusSelect.value : 'all';
+  const hkFilter = document.getElementById('sheetFilterHauKiemSelect')?.value || 'all';
+  const dateFilter = document.getElementById('selectDateFilterBypass')?.value || 'today';
+  const shdSearch = document.getElementById('inputSearchBypassSHD')?.value || '';
+
+  // Update Charts & Top 5 via UnifiedWorkTabs
+  if (window.UnifiedWorkTabs) {
+    window.UnifiedWorkTabs.updateDailyChart('bypassDailyChart', records, dateFilter);
+    window.UnifiedWorkTabs.updateTopStaff('bypassTopStaffContainer', records, dateFilter);
+  }
+
+  // Cập nhật Bảng TOP 10 Nhân Sự Bypass Không Đạt Nhiều Nhất
+  renderTopFailedStaff(records);
+
+  let filtered = window.UnifiedWorkTabs ? window.UnifiedWorkTabs.filterRecords(records, {
+    dateRange: dateFilter,
+    shdQuery: shdSearch,
+    resultStatus: filter,
+    hauKiemFilter: hkFilter
+  }) : records;
+
+  // Đảm bảo luôn sắp xếp từ gần nhất đến xa nhất (mới nhất lên đầu)
+  if (window.UnifiedWorkTabs && typeof window.UnifiedWorkTabs.sortRecordsNewestFirst === 'function') {
+    filtered = window.UnifiedWorkTabs.sortRecordsNewestFirst(filtered);
+  }
+
+  if (sheetRecordCountText) {
+    sheetRecordCountText.textContent = `${filtered.length}/${records.length} dòng`;
+  }
+
+  if (filtered.length === 0) {
+    sheetDataTableBody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding: 28px; color: #80868b;">Không có bản ghi nào phù hợp với bộ lọc</td></tr>';
+    if (window.UnifiedWorkTabs) {
+      window.UnifiedWorkTabs.renderPagination('bypassPagination', { total: 0 });
+    }
+    return;
+  }
+
+  // Phân trang 10 dòng 1 trang
+  const pageState = window.UnifiedWorkTabs
+    ? window.UnifiedWorkTabs.paginate(filtered, currentBypassPage, 10)
+    : { items: filtered.slice(0, 10), currentPage: 1, totalPages: Math.ceil(filtered.length / 10), total: filtered.length, startIdx: 0, endIdx: Math.min(10, filtered.length) };
+  currentBypassPage = pageState.currentPage;
+
   sheetDataTableBody.innerHTML = '';
-  filtered.forEach((r, idx) => {
+  pageState.items.forEach((r, idx) => {
+    const globalIdx = pageState.startIdx + idx;
     const tr = document.createElement('tr');
     const tacVu = getRecordField(r, 'Tác Vụ', 'Tác Vụ') || 'ByPass';
     const shd = getRecordField(r, 'SHD', 'Số Hợp Đồng', 'Số hợp đồng');
@@ -111,25 +333,59 @@ function renderBypassTable(records) {
     const nn2 = getRecordField(r, 'Nguyên Nhân 2', 'Lý do ByPass', 'Lý do ByPass');
     const ngay = getRecordField(r, 'Ngày Cập Nhật', 'Ngày Cập Nhật');
     const thaoTac = getRecordField(r, 'Thao Tác', 'Thao tác');
+    const hauKiem = (getRecordField(r, 'Hậu kiểm', 'Hậu Kiểm', 'Hau kiem') || '').trim().toUpperCase();
+    const suyHao = getRecordField(r, 'Suy Hao Hậu Kiểm', 'Suy hao hậu kiểm', 'Suy Hao', 'Suy hao');
+
+    tr.dataset.shd = shd;
+
+    // Badge Hậu Kiểm (Cột đầu tiên)
+    let badgeHauKiem = '<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium text-slate-400 bg-slate-100">—</span>';
+    if (hauKiem === 'ĐẠT') {
+      badgeHauKiem = `
+        <div class="flex flex-col items-center">
+          <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-300 shadow-xs">
+            ✓ ĐẠT
+          </span>
+          ${suyHao ? `<span class="text-[10px] text-slate-500 font-mono mt-0.5" title="Suy hao: ${escapeHtml(suyHao)}">${escapeHtml(suyHao)}</span>` : ''}
+        </div>
+      `;
+    } else if (hauKiem === 'KHÔNG ĐẠT') {
+      badgeHauKiem = `
+        <div class="flex flex-col items-center">
+          <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-300 shadow-xs">
+            ✕ KHÔNG ĐẠT
+          </span>
+          ${suyHao ? `<span class="text-[10px] text-rose-600 font-semibold font-mono mt-0.5" title="Suy hao: ${escapeHtml(suyHao)}">${escapeHtml(suyHao)}</span>` : ''}
+        </div>
+      `;
+    } else if (suyHao) {
+      badgeHauKiem = `<span class="text-[11px] text-slate-600 font-mono">${escapeHtml(suyHao)}</span>`;
+    }
 
     let badgeThaoTac = '<span class="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">⏳ Chưa xử lý</span>';
-    if (thaoTac.toLowerCase() === 'đã xử lý') {
+    const ttLower = thaoTac.toLowerCase();
+    if (ttLower === 'đã xử lý') {
       badgeThaoTac = '<span class="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">✓ Đã xử lý</span>';
-    } else if (thaoTac.toLowerCase() === 'lỗi') {
-      badgeThaoTac = '<span class="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">✕ Lỗi</span>';
+    } else if (ttLower.includes('vi phạm') || ttLower.includes('từ chối') || ttLower.includes('không thành công')) {
+      badgeThaoTac = `<span class="inline-block px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200 max-w-[300px] whitespace-normal leading-snug" title="${escapeHtml(thaoTac)}">⛔ ${escapeHtml(thaoTac)}</span>`;
+    } else if (ttLower === 'lỗi' || ttLower.startsWith('lỗi')) {
+      badgeThaoTac = `<span class="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">✕ ${escapeHtml(thaoTac)}</span>`;
+    } else if (thaoTac && !['chưa xử lý', 'chưa cập nhật', 'nan'].includes(ttLower)) {
+      badgeThaoTac = `<span class="inline-block px-2.5 py-0.5 rounded-lg text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">${escapeHtml(thaoTac)}</span>`;
     }
 
     tr.innerHTML = `
-      <td style="color:#5f6368; font-weight:500;">${idx + 1}</td>
+      <td style="text-align: center;" data-col="hau-kiem">${badgeHauKiem}</td>
+      <td style="color:#5f6368; font-weight:500;">${globalIdx + 1}</td>
       <td><span class="font-medium text-slate-700">${escapeHtml(tacVu)}</span></td>
-      <td><strong class="font-mono text-blue-700 text-xs">${escapeHtml(shd)}</strong></td>
-      <td><span class="font-mono text-[11.5px] text-slate-700">${escapeHtml(email)}</span></td>
+      <td><strong class="font-mono text-blue-700 text-xs" data-col="shd">${escapeHtml(shd)}</strong></td>
+      <td><span class="font-mono text-[11.5px] text-slate-700" data-col="email">${escapeHtml(email)}</span></td>
       <td><span class="inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-800 text-[11px] font-medium">${escapeHtml(nn1)}</span></td>
       <td><span class="text-slate-600 text-[11.5px]">${escapeHtml(nn2)}</span></td>
-      <td><span class="text-slate-500 font-mono text-[11px]">${escapeHtml(ngay)}</span></td>
-      <td>${badgeThaoTac}</td>
+      <td><span class="text-slate-500 font-mono text-[11px]" data-col="ngay">${escapeHtml(ngay)}</span></td>
+      <td data-col="thao-tac">${badgeThaoTac}</td>
       <td style="text-align: center;">
-        <button type="button" class="btn-run-single-bypass px-2 py-1 rounded-lg text-[11px] font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors" data-shd="${escapeHtml(shd)}" title="Chạy ByPass chỉ cho hợp đồng này">
+        <button type="button" class="btn-run-single-bypass px-2 py-1 rounded-lg text-[11px] font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors cursor-pointer" data-shd="${escapeHtml(shd)}" data-row-id="${escapeHtml(String(r['ID'] || ''))}" title="Chạy ByPass chỉ cho hợp đồng này">
           ▶ Chạy
         </button>
       </td>
@@ -138,11 +394,21 @@ function renderBypassTable(records) {
     sheetDataTableBody.appendChild(tr);
   });
 
+  // Render pagination bar
+  if (window.UnifiedWorkTabs) {
+    window.UnifiedWorkTabs.renderPagination('bypassPagination', pageState, (newPage) => {
+      currentBypassPage = newPage;
+      renderBypassTable(currentBypassRecords);
+    });
+  }
+
   // Attach click events for single row runs
   sheetDataTableBody.querySelectorAll('.btn-run-single-bypass').forEach(btn => {
     btn.addEventListener('click', (e) => {
       const shd = e.currentTarget.dataset.shd;
-      const targetRecord = currentBypassRecords.find(r => getRecordField(r, 'SHD', 'Số Hợp Đồng', 'Số hợp đồng') === shd);
+      const rowId = e.currentTarget.dataset.rowId;
+      const targetRecord = (rowId && currentBypassRecords.find(r => String(r['ID'] || '') === rowId))
+        || [...currentBypassRecords].reverse().find(r => getRecordField(r, 'SHD', 'Số Hợp Đồng', 'Số hợp đồng') === shd);
       if (targetRecord) {
         runBypassProcess([targetRecord]);
       }
@@ -203,10 +469,12 @@ async function runBypassProcess(specificRecords = null) {
       showSnackbar(`Đã bắt đầu xử lý ${data.count || ''} hợp đồng!`);
     } else {
       setBypassButtonRunning(false);
+      if (bypassProgressTracker) bypassProgressTracker.style.display = 'none';
       showSnackbar(data.message || 'Lỗi khi khởi chạy Auto ByPass');
     }
   } catch (err) {
     setBypassButtonRunning(false);
+    if (bypassProgressTracker) bypassProgressTracker.style.display = 'none';
     showSnackbar('Lỗi kết nối khi gửi lệnh Auto ByPass');
   }
 }
@@ -294,23 +562,25 @@ function updateRowStatusInTable(shd, status, timeStr) {
   if (!sheetDataTableBody) return;
   const allRows = sheetDataTableBody.querySelectorAll('tr');
   allRows.forEach(row => {
-    // Tìm cột SHD trong row
-    const cells = row.querySelectorAll('td');
-    if (cells.length < 4) return;
-    const shdCell = cells[2]; // STT, Tác Vụ, SHD, ...
+    // Tìm bằng data-col="shd" hoặc tr.dataset.shd
+    const shdCell = row.querySelector('[data-col="shd"]');
     if (shdCell && shdCell.textContent.trim() === shd) {
-      // Cập nhật cột Thao Tác (index 7)
-      const thaoTacCell = cells[7];
-      const ngayCell = cells[6]; // Ngày Cập Nhật
+      // Cập nhật cột Thao Tác
+      const thaoTacCell = row.querySelector('[data-col="thao-tac"]');
+      const ngayCell = row.querySelector('[data-col="ngay"]');
       if (thaoTacCell) {
         let badgeHtml = '';
-        if (status === 'Đã xử lý') {
+        const stLower = String(status || '').trim().toLowerCase();
+        if (stLower === 'đã xử lý') {
           badgeHtml = '<span class="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 transition-all">\u2713 Đã xử lý</span>';
           row.style.transition = 'background 0.5s';
           row.style.background = 'rgba(16, 185, 129, 0.06)';
           setTimeout(() => { row.style.background = ''; }, 3000);
-        } else if (status === 'Lỗi') {
-          badgeHtml = '<span class="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">✕ Lỗi</span>';
+        } else if (stLower.includes('vi phạm') || stLower.includes('từ chối') || stLower.includes('không thành công')) {
+          badgeHtml = `<span class="inline-block px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200 max-w-[300px] whitespace-normal leading-snug" title="${escapeHtml(status)}">⛔ ${escapeHtml(status)}</span>`;
+          row.style.background = 'rgba(239, 68, 68, 0.06)';
+        } else if (stLower === 'lỗi' || stLower.startsWith('lỗi')) {
+          badgeHtml = `<span class="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">✕ ${escapeHtml(status)}</span>`;
           row.style.background = 'rgba(239, 68, 68, 0.05)';
         }
         if (badgeHtml) thaoTacCell.innerHTML = badgeHtml;
@@ -554,15 +824,35 @@ if (btnAutoModeToggle) {
   });
 }
 
+// Auto chỉ chạy HĐ chưa từng được Auto thử (lưu 6 giờ) – tránh chạy lại vòng lặp HĐ lỗi. Chạy tay vẫn thử lại được.
+function _bypassAutoKey(r) {
+  const shd = String(r['SHD'] || r['Số Hợp Đồng'] || '').trim();
+  const id = String(r['ID'] || '').trim();
+  return id ? `${shd}_${id}` : shd;
+}
+function _bypassAutoTriedMap() {
+  try { return JSON.parse(localStorage.getItem('bypassAutoTried') || '{}'); } catch (e) { return {}; }
+}
+function _bypassAutoPending(r) {
+  const st = String(r['Thao Tác'] || r['Thao tác'] || '').trim().toLowerCase();
+  if (st === 'đã xử lý' || st.includes('vi phạm') || st.includes('từ chối') || st.includes('không thành công')) return false;
+  const t = _bypassAutoTriedMap()[_bypassAutoKey(r)];
+  return !(t && Date.now() - t < 5 * 60 * 1000);
+}
+function _bypassMarkAutoTried(rows) {
+  const m = _bypassAutoTriedMap();
+  const now = Date.now();
+  Object.keys(m).forEach(k => { if (now - m[k] > 5 * 60 * 1000) delete m[k]; });
+  rows.forEach(r => { m[_bypassAutoKey(r)] = now; });
+  localStorage.setItem('bypassAutoTried', JSON.stringify(m));
+}
+
 // Kiểm tra và tự kích hoạt bypass nếu có dòng chưa xử lý
 function checkAndAutoTriggerBypass() {
   if (!autoBypassMode || isBypassRunning || isClsRunning) return;
 
   // Đếm số dòng chưa xử lý
-  const pendingRows = currentBypassRecords.filter(r => {
-    const st = String(r['Thao Tác'] || r['Thao tác'] || '').trim().toLowerCase();
-    return st !== 'đã xử lý';
-  });
+  const pendingRows = currentBypassRecords.filter(_bypassAutoPending);
 
   if (pendingRows.length === 0) return; // Không có gì để chạy
 
@@ -585,17 +875,41 @@ function checkAndAutoTriggerBypass() {
 
       // Kiểm tra lại lần nữa trước khi chạy
       if (!autoBypassMode || isBypassRunning || isClsRunning) return;
-      const stillPending = currentBypassRecords.filter(r => {
-        const st = String(r['Thao Tác'] || r['Thao tác'] || '').trim().toLowerCase();
-        return st !== 'đã xử lý';
-      });
+      const stillPending = currentBypassRecords.filter(_bypassAutoPending);
       if (stillPending.length > 0) {
+        _bypassMarkAutoTried(stillPending);
         showSnackbar(`🚀 Tự động khởi động ByPass ${stillPending.length} hợp đồng...`);
         runBypassProcess(stillPending);
       }
     }
   }, 1000);
 }
+
+// Filter & Search events for ByPass
+document.getElementById('selectDateFilterBypass')?.addEventListener('change', () => { currentBypassPage = 1; renderBypassTable(currentBypassRecords); });
+document.getElementById('inputSearchBypassSHD')?.addEventListener('input', () => { currentBypassPage = 1; renderBypassTable(currentBypassRecords); });
+document.getElementById('sheetFilterHauKiemSelect')?.addEventListener('change', () => { currentBypassPage = 1; renderBypassTable(currentBypassRecords); });
+document.getElementById('sheetFilterStatusSelect')?.addEventListener('change', () => { currentBypassPage = 1; renderBypassTable(currentBypassRecords); });
+document.getElementById('btnFilterAllFailedRecords')?.addEventListener('click', () => {
+  const sel = document.getElementById('sheetFilterHauKiemSelect');
+  if (sel) sel.value = 'fail';
+  const inp = document.getElementById('inputSearchBypassSHD');
+  if (inp) inp.value = '';
+  currentBypassPage = 1;
+  renderBypassTable(currentBypassRecords);
+  const tableEl = document.getElementById('sheetDataTable');
+  if (tableEl) tableEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  showSnackbar('🔍 Đã lọc hiển thị toàn bộ các hợp đồng Hậu kiểm KHÔNG ĐẠT');
+});
+document.getElementById('btnClearBypassCache')?.addEventListener('click', async () => {
+  try {
+    await fetch('/api/bypass/clear-cache', { method: 'POST' });
+    showSnackbar('🧹 Đã xóa cache trạng thái ByPass!');
+    loadBypassSheetData('0');
+  } catch (e) {
+    showSnackbar('Không thể xóa cache ByPass');
+  }
+});
 
 registerTab('tab-tasks', {
   title: 'Auto Bypass',

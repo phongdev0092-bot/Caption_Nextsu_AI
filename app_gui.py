@@ -154,7 +154,7 @@ class ModernInsideFPTApp:
 
         # Password
         tk.Label(form_frame, text="Mật khẩu:", font=("Segoe UI", 9, "bold"), fg=self.text_color, bg=self.card_bg).grid(row=1, column=0, sticky="w", pady=4)
-        self.pass_var = tk.StringVar(value=self.config.get("password", "Benngo@@2026"))
+        self.pass_var = tk.StringVar(value=self.config.get("password", "Benngo@@20262027"))
         self.pass_entry = tk.Entry(form_frame, textvariable=self.pass_var, show="•", font=("Segoe UI", 10), bg="#0f172a", fg="#ffffff", insertbackground="#ffffff", relief="flat", highlightbackground=self.card_border, highlightthickness=1)
         self.pass_entry.grid(row=1, column=1, sticky="ew", padx=(10, 5), pady=4, ipady=4)
 
