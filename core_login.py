@@ -262,6 +262,16 @@ def inside_session_healthy(driver, log_cb=None):
                             return True
                     except Exception:
                         pass
+            for el in driver.find_elements(
+                By.XPATH,
+                "//button[contains(., 'ĐĂNG NHẬP VỚI IAM') or contains(., 'Đăng nhập với IAM')] | "
+                "//a[contains(., 'ĐĂNG NHẬP VỚI IAM') or contains(., 'Đăng nhập với IAM')]",
+            ):
+                try:
+                    if el.is_displayed():
+                        return True
+                except Exception:
+                    pass
             return False
 
         driver.switch_to.default_content()
@@ -692,6 +702,166 @@ def extract_secret_from_qr_image(image_path):
     else:
         raise ValueError(f"Định dạng QR không nhận diện được: {qr_text}")
 
+def _should_use_iam_login(driver):
+    """Kiem tra trang hien tai co yeu cau dang nhap qua IAM/AM hay khong."""
+    curr = (driver.current_url or "").lower()
+    if "iam.fpt.vn" in curr or "login.microsoftonline.com" in curr:
+        return True
+    iam_btns = driver.find_elements(
+        By.XPATH,
+        "//button[contains(., 'ĐĂNG NHẬP VỚI IAM') or contains(., 'Đăng nhập với IAM')] | "
+        "//a[contains(., 'ĐĂNG NHẬP VỚI IAM') or contains(., 'Đăng nhập với IAM')] | "
+        "//input[contains(@value, 'IAM')]",
+    )
+    if any(b.is_displayed() for b in iam_btns):
+        return True
+    p_elems = driver.find_elements(By.ID, "fPassword")
+    if p_elems and p_elems[0].get_attribute("disabled") is not None:
+        return True
+    return False
+
+
+def _login_inside_via_iam_am(driver, config, log):
+    """Dang nhap Inside bang nut DANG NHAP VOI IAM + tai khoan AM (Azure AD / Microsoft)."""
+    am_acc = get_am_account_info(config)
+    am_user = am_acc["username"]
+    if "@" not in am_user:
+        am_user = f"{am_user}@fpt.net"
+    am_pass = am_acc["password"]
+    wait = WebDriverWait(driver, 15)
+
+    curr_url = (driver.current_url or "").lower()
+    if "login.fpt.net" in curr_url or "inside.fpt.net" in curr_url:
+        iam_btns = [
+            b for b in driver.find_elements(
+                By.XPATH,
+                "//button[contains(., 'ĐĂNG NHẬP VỚI IAM') or contains(., 'Đăng nhập với IAM')] | "
+                "//a[contains(., 'ĐĂNG NHẬP VỚI IAM') or contains(., 'Đăng nhập với IAM')] | "
+                "//input[contains(@value, 'IAM')]",
+            )
+            if b.is_displayed()
+        ]
+        if iam_btns:
+            log("Đang bấm nút [ĐĂNG NHẬP VỚI IAM]...", "info")
+            driver.execute_script("arguments[0].click();", iam_btns[0])
+            time.sleep(2.5)
+
+    curr_url = (driver.current_url or "").lower()
+    if "iam.fpt.vn" in curr_url:
+        azure_btns = [
+            b for b in driver.find_elements(
+                By.XPATH,
+                "//a[contains(., 'Azure AD')] | //button[contains(., 'Azure AD')] | //*[@id='zocial-azure-ad'] | //*[contains(text(), 'Azure AD')]",
+            )
+            if b.is_displayed()
+        ]
+        if azure_btns:
+            log("Đang chọn phương thức [Azure AD] trên IAM...", "info")
+            driver.execute_script("arguments[0].click();", azure_btns[0])
+            time.sleep(2.5)
+        else:
+            u_inps = [e for e in driver.find_elements(By.XPATH, "//input[@id='username' or @name='username' or @type='email']") if e.is_displayed()]
+            p_inps = [e for e in driver.find_elements(By.XPATH, "//input[@type='password']") if e.is_displayed()]
+            if u_inps and p_inps:
+                log("Đang điền tài khoản AM trên trang IAM...", "info")
+                u_inps[0].send_keys(Keys.CONTROL, "a")
+                u_inps[0].send_keys(am_user)
+                p_inps[0].send_keys(Keys.CONTROL, "a")
+                p_inps[0].send_keys(am_pass)
+                sub = driver.find_elements(By.XPATH, "//input[@type='submit'] | //button[@type='submit']")
+                if sub:
+                    driver.execute_script("arguments[0].click();", sub[0])
+                time.sleep(2.5)
+
+    try:
+        WebDriverWait(driver, 15).until(
+            lambda d: "login.microsoftonline.com" in (d.current_url or "").lower()
+            or ("inside.fpt.net" in (d.current_url or "").lower() and "login.fpt.net" not in (d.current_url or "").lower())
+        )
+    except Exception:
+        pass
+
+    curr_url = (driver.current_url or "").lower()
+    if "login.microsoftonline.com" in curr_url:
+        base_user = am_user.split("@")[0].lower()
+        picker = driver.find_elements(
+            By.XPATH,
+            f"//div[contains(@data-test-id, '{am_user}') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{base_user}') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{am_user.lower()}') or contains(@data-username, '{am_user}')]",
+        )
+        displayed_pickers = [p for p in picker if p.is_displayed()]
+        if displayed_pickers:
+            log(f"Chọn tài khoản AM đã lưu: {am_user}", "info")
+            try:
+                displayed_pickers[0].click()
+            except Exception:
+                driver.execute_script("arguments[0].click();", displayed_pickers[0])
+            time.sleep(2.0)
+        else:
+            emails = [e for e in driver.find_elements(By.XPATH, "//input[@type='email' or @name='loginfmt' or @id='i0116']") if e.is_displayed()]
+            if emails:
+                log(f"Điền email tài khoản AM: {am_user}", "info")
+                emails[0].send_keys(Keys.CONTROL, "a")
+                emails[0].send_keys(Keys.BACKSPACE)
+                time.sleep(0.2)
+                emails[0].send_keys(am_user)
+                time.sleep(0.5)
+                btn_next = wait.until(EC.element_to_be_clickable((
+                    By.XPATH, "//input[@type='submit' or @id='idSIButton9' or @value='Next'] | //button[@type='submit' or @id='idSIButton9']"
+                )))
+                driver.execute_script("arguments[0].click();", btn_next)
+                time.sleep(2.5)
+
+        pass_elem = None
+        for _ in range(12):
+            curr = (driver.current_url or "").lower()
+            if "inside.fpt.net" in curr and "login.fpt.net" not in curr:
+                break
+            disp_pass = [p for p in driver.find_elements(By.XPATH, "//input[@type='password' or @name='passwd' or @id='i0118']") if p.is_displayed()]
+            if disp_pass:
+                pass_elem = disp_pass[0]
+                break
+            btn_yes = driver.find_elements(By.XPATH, "//input[@id='idSIButton9' or @value='Yes'] | //button[@id='idSIButton9' or contains(text(), 'Yes')]")
+            if any(b.is_displayed() for b in btn_yes):
+                break
+            time.sleep(0.8)
+
+        if pass_elem is not None:
+            log("Đang điền mật khẩu tài khoản AM...", "info")
+            pass_elem.send_keys(Keys.CONTROL, "a")
+            pass_elem.send_keys(Keys.BACKSPACE)
+            time.sleep(0.2)
+            pass_elem.send_keys(am_pass)
+            time.sleep(0.5)
+            btn_signin = wait.until(EC.element_to_be_clickable((
+                By.XPATH, "//input[@type='submit' or @id='idSIButton9' or @value='Sign in'] | //button[@type='submit' or @id='idSIButton9']"
+            )))
+            driver.execute_script("arguments[0].click();", btn_signin)
+            time.sleep(2.5)
+
+            err_boxes = driver.find_elements(By.XPATH, "//*[@id='passwordError'] | //*[contains(@class, 'error') and (contains(text(), 'incorrect') or contains(text(), 'không đúng'))]")
+            for eb in err_boxes:
+                if eb.is_displayed() and eb.text.strip():
+                    raise RuntimeError(f"Sai mật khẩu hoặc tài khoản Microsoft AM: {eb.text.strip()}")
+
+        try:
+            btn_yes = WebDriverWait(driver, 8).until(EC.element_to_be_clickable((
+                By.XPATH, "//input[@id='idSIButton9' or @value='Yes'] | //button[@id='idSIButton9' or contains(text(), 'Yes')]"
+            )))
+            log("Nhấn [YES] duy trì trạng thái đăng nhập...", "info")
+            driver.execute_script("arguments[0].click();", btn_yes)
+            time.sleep(2.5)
+        except Exception:
+            pass
+
+    log("Đang chờ chuyển hướng vào inside.fpt.net (tối đa 45s)...", "info")
+    WebDriverWait(driver, 45).until(
+        lambda d: "inside.fpt.net" in (d.current_url or "").lower()
+        and "login.fpt.net" not in (d.current_url or "").lower()
+        and "iam.fpt.vn" not in (d.current_url or "").lower()
+        and "login.microsoftonline.com" not in (d.current_url or "").lower()
+    )
+
+
 def run_fpt_login(username=None, password=None, secret=None, use_otp=None, headless=False, keep_open=True, use_custom_profile=True, log_callback=None, driver=None):
     """
     Executes the automated login flow on login.fpt.net / inside.fpt.net.
@@ -769,8 +939,12 @@ def run_fpt_login(username=None, password=None, secret=None, use_otp=None, headl
         time.sleep(2)
 
         curr_url = (driver.current_url or "").lower()
+        used_iam_login = False
         if "inside.fpt.net" in curr_url and "login.fpt.net" not in curr_url:
             log("Trình duyệt đã chuyển thẳng vào Inside FPT thành công!", "success")
+        elif _should_use_iam_login(driver):
+            _login_inside_via_iam_am(driver, config, log)
+            used_iam_login = True
         else:
             # Wait for user input box
             wait = WebDriverWait(driver, 15)
@@ -968,14 +1142,14 @@ def run_fpt_login(username=None, password=None, secret=None, use_otp=None, headl
                 if "login.fpt.net" in curr_after:
                     raise RuntimeError("Hệ thống không chuyển hướng được vào Inside FPT (Sai thông tin đăng nhập hoặc tài khoản bị khóa).")
 
-        # Kiểm tra Frame 1 sau khi đăng nhập xong
+        # Kiểm tra Frame 1 sau khi đăng nhập xong (chi ap dung cho form cu)
         time.sleep(2)
         try:
             driver.switch_to.default_content()
             driver.switch_to.frame(1)
             f_user = driver.find_elements(By.ID, "fUserName")
             f_pass = driver.find_elements(By.ID, "fPassword")
-            if f_user and f_pass:
+            if not used_iam_login and f_user and f_pass and f_pass[0].get_attribute("disabled") is None:
                 log("Hoàn tất xác thực bổ sung bên trong Frame 1...", "info")
                 f_user[0].clear()
                 f_user[0].send_keys(username)
