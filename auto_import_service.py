@@ -125,6 +125,20 @@ def release_db_lock(db_engine, dataset: str, owner_id: str) -> None:
         conn.execute(sql, {"ds": dataset, "owner": owner_id})
 
 
+def force_unlock_db(dataset: str = "tk", db_url: Optional[str] = None) -> Dict[str, Any]:
+    """Xoa lock bi treo trong bang auto_import_locks (chi tac dong bang lock moi)."""
+    cfg = get_dataset_config(dataset)
+    eng = create_readonly_kpi_engine(db_url=db_url)
+    db_engine = eng.get_db_engine()
+    if db_engine is None:
+        raise RuntimeError("Khong ket noi duoc Supabase.")
+    ensure_infra_tables(db_engine)
+    sql = sa_text(f'DELETE FROM "{LOCK_TABLE}" WHERE dataset = :ds')
+    with db_engine.begin() as conn:
+        res = conn.execute(sql, {"ds": cfg["dataset"]})
+    return {"ok": True, "dataset": cfg["dataset"], "released": int(res.rowcount or 0)}
+
+
 def write_audit_log(record: Dict[str, Any], db_engine=None) -> None:
     """Ghi audit log vao ca file JSONL cuc bo va bang Supabase auto_import_logs."""
     LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -493,12 +507,22 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Sao chep du lieu tu bang tk production (read-only) sang bang test.",
     )
+    parser.add_argument(
+        "--unlock",
+        action="store_true",
+        help="Giai phong lock bi treo trong bang auto_import_locks cho dataset.",
+    )
     return parser
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     parser = _build_arg_parser()
     args = parser.parse_args(argv)
+
+    if args.unlock:
+        res = force_unlock_db(dataset=args.dataset)
+        print(json.dumps(res, ensure_ascii=False, indent=2))
+        return 0
 
     if args.seed_test_table:
         res = seed_test_table(dataset=args.dataset, target_table=args.target_table)

@@ -19,7 +19,7 @@ from auto_import_config import (
     get_default_date_range,
     is_auto_import_enabled,
 )
-from auto_import_service import run_auto_import, seed_test_table
+from auto_import_service import force_unlock_db, run_auto_import, seed_test_table
 
 
 auto_import_bp = Blueprint("auto_import_bp", __name__)
@@ -111,6 +111,18 @@ def api_auto_import_seed():
             return jsonify({"ok": False, "error": "Dang co mot luot Auto Import khac dang chay."}), 409
     try:
         res = seed_test_table(dataset="tk", target_table=target_table)
+        return jsonify(res)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@auto_import_bp.route("/api/auto-import/unlock", methods=["POST"])
+def api_auto_import_unlock():
+    with _state_lock:
+        if _run_state["is_running"]:
+            return jsonify({"ok": False, "error": "Tien trinh trong server hien tai dang chay, khong the mo khoa."}), 409
+    try:
+        res = force_unlock_db(dataset="tk")
         return jsonify(res)
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400

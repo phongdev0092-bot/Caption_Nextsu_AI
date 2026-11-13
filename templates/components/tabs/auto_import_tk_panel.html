@@ -46,6 +46,9 @@
     </div>
 
     <div class="flex flex-wrap items-center gap-2">
+      <button type="button" class="mui-btn mui-btn-text" id="btnAiUnlock" title="Giải phóng lock DB nếu lượt chạy trước bị tắt ngang">
+        Mở khóa Lock
+      </button>
       <button type="button" class="mui-btn mui-btn-text" id="btnAiSeedTest" title="Copy read-only từ tk sang bảng test">
         Seed bảng test
       </button>
@@ -247,9 +250,22 @@
     }
   }
 
+  async function unlockDb() {
+    if (!confirm("Xác nhận không có tiến trình Auto Import nào khác đang chạy và muốn giải phóng lock 'tk'?")) return;
+    try {
+      const resp = await fetch("/api/auto-import/unlock", {method: "POST"});
+      const data = await parseJsonSafe(resp);
+      if (!resp.ok || !data.ok) throw new Error(data.error || "Mở khóa thất bại");
+      setBanner(`Đã giải phóng lock cho '${data.dataset}' (${data.released} bản ghi). Bạn có thể chạy lại ngay.`, false);
+    } catch (e) {
+      setBanner("Lỗi mở khóa lock: " + e.message, true);
+    }
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     const map = [
       ["btnAiToggleFlag", toggleFlag],
+      ["btnAiUnlock", unlockDb],
       ["btnAiDryRun", () => runJob(true)],
       ["btnAiRunImport", () => runJob(false)],
       ["btnAiSeedTest", seedTest],
