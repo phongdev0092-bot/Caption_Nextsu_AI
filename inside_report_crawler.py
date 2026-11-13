@@ -77,35 +77,226 @@ def _create_crawler_driver(download_dir: Path, headless: bool = False, log_cb: L
     return driver
 
 
-def _login_inside_with_limit(driver, log_cb: LogFn = None) -> None:
-    """Dang nhap Inside co gioi han so lan thu de tranh khoa tai khoan."""
-    username = os.environ.get("INSIDE_USERNAME") or None
-    password = os.environ.get("INSIDE_PASSWORD") or None
-    secret = os.environ.get("INSIDE_TOTP_SECRET") or None
-    use_otp_env = os.environ.get("INSIDE_USE_OTP")
-    use_otp = _parse_bool(use_otp_env, default=True) if use_otp_env is not None else None
+def _get_am_credentials() -> Tuple[str, str]:
+    """Lay tai khoan AM tu .env hoac config.json (thong qua core_login.get_am_account_info)."""
+    cfg = core_login.load_config()
+    am_acc = core_login.get_am_account_info(cfg)
+    username = (
+        os.environ.get("INSIDE_AM_USERNAME", "").strip()
+        or os.environ.get("AM_USERNAME", "").strip()
+        or am_acc["username"]
+    )
+    if "@" not in username:
+        username = f"{username}@fpt.net"
+    password = (
+        os.environ.get("INSIDE_AM_PASSWORD", "")
+        or os.environ.get("AM_PASSWORD", "")
+        or am_acc["password"]
+    )
+    return username, password
 
+
+def _complete_iam_microsoft_login(driver, username: str, password: str, log_cb: LogFn = None) -> None:
+    """Thuc hien dang nhap IAM / Azure AD / Microsoft nhu chuc nang spampool (run_radius_login)."""
+    wait = WebDriverWait(driver, 15)
+
+    # 1. Neu dang o trang login.fpt.net -> bam nut 'ĐĂNG NHẬP VỚI IAM'
+    curr_url = (driver.current_url or "").lower()
+    if "login.fpt.net" in curr_url or "inside.fpt.net" in curr_url:
+        iam_btns = driver.find_elements(
+            By.XPATH,
+            "//button[contains(., 'ĐĂNG NHẬP VỚI IAM') or contains(., 'Đăng nhập với IAM')] | "
+            "//a[contains(., 'ĐĂNG NHẬP VỚI IAM') or contains(., 'Đăng nhập với IAM')] | "
+            "//input[contains(@value, 'IAM')] | "
+            "//*[self::button or self::a][contains(., 'IAM')]",
+        )
+        vis_iam = [b for b in iam_btns if b.is_displayed()]
+        if vis_iam:
+            _emit_log(log_cb, "Dang bam nut [ĐĂNG NHẬP VỚI IAM]...", "info")
+            driver.execute_script("arguments[0].click();", vis_iam[0])
+            time.sleep(2.5)
+
+    # 2. Neu dang o trang IAM (iam.fpt.vn) -> chon Azure AD hoac dien form IAM neu co
+    curr_url = (driver.current_url or "").lower()
+    if "iam.fpt.vn" in curr_url:
+        azure_btns = driver.find_elements(
+            By.XPATH,
+            "//a[contains(., 'Azure AD')] | //button[contains(., 'Azure AD')] | //*[@id='zocial-azure-ad'] | //*[contains(text(), 'Azure AD')]",
+        )
+        vis_az = [b for b in azure_btns if b.is_displayed()]
+        if vis_az:
+            _emit_log(log_cb, "Dang chon phuong thuc [Azure AD]...", "info")
+            driver.execute_script("arguments[0].click();", vis_az[0])
+            time.sleep(2.5)
+        else:
+            # Fallback neu IAM hien form username/password truc tiep
+            u_inps = [
+                e for e in driver.find_elements(By.XPATH, "//input[@id='username' or @name='username' or @type='email']")
+                if e.is_displayed()
+            ]
+            p_inps = [
+                e for e in driver.find_elements(By.XPATH, "//input[@type='password']")
+                if e.is_displayed()
+            ]
+            if u_inps and p_inps:
+                _emit_log(log_cb, "Dang dien thong tin tai khoan AM tren trang IAM...", "info")
+                u_inps[0].send_keys(Keys.CONTROL, "a")
+                u_inps[0].send_keys(username)
+                p_inps[0].send_keys(Keys.CONTROL, "a")
+                p_inps[0].send_keys(password)
+                sub_btns = driver.find_elements(By.XPATH, "//input[@type='submit'] | //button[@type='submit']")
+                if sub_btns:
+                    driver.execute_script("arguments[0].click();", sub_btns[0])
+                time.sleep(2.5)
+
+    # Cho chuyen sang Microsoft hoac quay ve Inside
+    try:
+        WebDriverWait(driver, 15).until(
+            lambda d: "login.microsoftonline.com" in (d.current_url or "").lower()
+            or (
+                "inside.fpt.net" in (d.current_url or "").lower()
+                and "login.fpt.net" not in (d.current_url or "").lower()
+            )
+        )
+    except Exception:
+        pass
+
+    # 3. Luong Microsoft Login (giong run_radius_login)
+    curr_url = (driver.current_url or "").lower()
+    if "login.microsoftonline.com" in curr_url:
+        base_user = username.split("@")[0].lower()
+        picker = driver.find_elements(
+            By.XPATH,
+            f"//div[contains(@data-test-id, '{username}') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{base_user}') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{username.lower()}') or contains(@data-username, '{username}')]",
+        )
+        displayed_pickers = [p for p in picker if p.is_displayed()]
+        if displayed_pickers:
+            _emit_log(log_cb, "Dang chon tai khoan AM da luu tren Microsoft...", "info")
+            try:
+                displayed_pickers[0].click()
+            except Exception:
+                driver.execute_script("arguments[0].click();", displayed_pickers[0])
+            time.sleep(2.0)
+        else:
+            emails = [
+                e for e in driver.find_elements(By.XPATH, "//input[@type='email' or @name='loginfmt' or @id='i0116']")
+                if e.is_displayed()
+            ]
+            if emails:
+                _emit_log(log_cb, "Dang dien email AM tren Microsoft...", "info")
+                emails[0].send_keys(Keys.CONTROL, "a")
+                emails[0].send_keys(Keys.BACKSPACE)
+                time.sleep(0.2)
+                emails[0].send_keys(username)
+                time.sleep(0.5)
+                btn_next = wait.until(
+                    EC.element_to_be_clickable(
+                        (By.XPATH, "//input[@type='submit' or @id='idSIButton9' or @value='Next'] | //button[@type='submit' or @id='idSIButton9']")
+                    )
+                )
+                driver.execute_script("arguments[0].click();", btn_next)
+                time.sleep(2.5)
+
+        # Cho o mat khau hoac nut Stay signed in
+        pass_elem = None
+        for _ in range(12):
+            curr = (driver.current_url or "").lower()
+            if "inside.fpt.net" in curr and "login.fpt.net" not in curr:
+                break
+            disp_pass = [
+                p for p in driver.find_elements(By.XPATH, "//input[@type='password' or @name='passwd' or @id='i0118']")
+                if p.is_displayed()
+            ]
+            if disp_pass:
+                pass_elem = disp_pass[0]
+                break
+            btn_yes = driver.find_elements(
+                By.XPATH, "//input[@id='idSIButton9' or @value='Yes'] | //button[@id='idSIButton9' or contains(text(), 'Yes')]"
+            )
+            if any(b.is_displayed() for b in btn_yes):
+                break
+            time.sleep(0.8)
+
+        if pass_elem is not None:
+            _emit_log(log_cb, "Dang dien mat khau tai khoan AM...", "info")
+            pass_elem.send_keys(Keys.CONTROL, "a")
+            pass_elem.send_keys(Keys.BACKSPACE)
+            time.sleep(0.2)
+            pass_elem.send_keys(password)
+            time.sleep(0.5)
+            btn_signin = wait.until(
+                EC.element_to_be_clickable(
+                    (By.XPATH, "//input[@type='submit' or @id='idSIButton9' or @value='Sign in'] | //button[@type='submit' or @id='idSIButton9']")
+                )
+            )
+            driver.execute_script("arguments[0].click();", btn_signin)
+            time.sleep(2.5)
+
+            err_boxes = driver.find_elements(
+                By.XPATH,
+                "//*[@id='passwordError'] | //*[contains(@class, 'error') and (contains(text(), 'incorrect') or contains(text(), 'không đúng'))]",
+            )
+            for eb in err_boxes:
+                if eb.is_displayed() and eb.text.strip():
+                    raise RuntimeError(f"Sai mat khau hoac tai khoan Microsoft AM: {eb.text.strip()}")
+
+        # Bam Yes (Stay signed in) neu hien thi
+        try:
+            btn_yes = WebDriverWait(driver, 8).until(
+                EC.element_to_be_clickable(
+                    (By.XPATH, "//input[@id='idSIButton9' or @value='Yes'] | //button[@id='idSIButton9' or contains(text(), 'Yes')]")
+                )
+            )
+            _emit_log(log_cb, "Dang bam [Yes] duy tri dang nhap...", "info")
+            driver.execute_script("arguments[0].click();", btn_yes)
+            time.sleep(2.5)
+        except Exception:
+            pass
+
+    # Cho quay ve inside.fpt.net (toi da 45s neu co 2FA)
+    _emit_log(log_cb, "Dang cho chuyen huong ve inside.fpt.net...", "info")
+    WebDriverWait(driver, 45).until(
+        lambda d: "inside.fpt.net" in (d.current_url or "").lower()
+        and "login.fpt.net" not in (d.current_url or "").lower()
+        and "iam.fpt.vn" not in (d.current_url or "").lower()
+        and "login.microsoftonline.com" not in (d.current_url or "").lower()
+    )
+
+
+def _login_inside_with_limit(driver, log_cb: LogFn = None) -> None:
+    """Dang nhap Inside bang IAM + tai khoan AM (gioi han MAX_LOGIN_ATTEMPTS)."""
+    username, password = _get_am_credentials()
     last_err = None
+
     for attempt in range(1, MAX_LOGIN_ATTEMPTS + 1):
         try:
-            _emit_log(log_cb, f"Dang nhap Inside (lan {attempt}/{MAX_LOGIN_ATTEMPTS})...", "info")
-            ok, url, _ = core_login.run_fpt_login(
-                username=username,
-                password=password,
-                secret=secret,
-                use_otp=use_otp,
-                headless=False,
-                keep_open=True,
-                use_custom_profile=True,
-                log_callback=log_cb,
-                driver=driver,
-            )
-            if ok and "login.fpt.net" not in (url or "").lower():
-                return
-            last_err = RuntimeError("Dang nhap Inside khong thanh cong.")
+            _emit_log(log_cb, f"Dang nhap Inside qua IAM/AM (lan {attempt}/{MAX_LOGIN_ATTEMPTS})...", "info")
+            if core_login._cfg_keep_inside_session():
+                try:
+                    driver.get("http://inside.fpt.net/")
+                    core_login.restore_inside_cookies(driver)
+                except Exception:
+                    pass
+                if core_login.inside_session_healthy(driver, log_cb=log_cb):
+                    _emit_log(log_cb, "Phien Inside con hoat dong -> dung lai.", "success")
+                    return
+
+            try:
+                driver.delete_all_cookies()
+            except Exception:
+                pass
+            driver.get("http://login.fpt.net/?urlreturn=inside.fpt.net")
+            time.sleep(2.0)
+
+            _complete_iam_microsoft_login(driver, username, password, log_cb=log_cb)
+            try:
+                core_login.save_inside_cookies(driver, new_login=True, log_cb=log_cb)
+            except Exception:
+                pass
+            return
         except Exception as exc:
             last_err = exc
-            _emit_log(log_cb, f"Loi dang nhap Inside lan {attempt}: {exc}", "warning")
+            _emit_log(log_cb, f"Loi dang nhap Inside/IAM lan {attempt}: {exc}", "warning")
     raise RuntimeError(f"Vuot qua gioi han dang nhap ({MAX_LOGIN_ATTEMPTS} lan): {last_err}")
 
 
@@ -157,6 +348,8 @@ def _is_login_screen_present(driver) -> bool:
     """Kiem tra xem top-level hoac frame(1)/iframe con co dang hien form dang nhap hay khong."""
     login_xpath = (
         "//*[contains(normalize-space(.), 'Mời bạn điền thông tin để đăng nhập')] | "
+        "//*[contains(normalize-space(.), 'ĐĂNG NHẬP VỚI IAM')] | "
+        "//*[contains(normalize-space(.), 'Vui lòng chọn \"ĐĂNG NHẬP VỚI IAM\"')] | "
         "//input[@type='password' and (preceding::*[contains(., 'Tên đăng nhập')] or following::*[contains(., 'ĐĂNG NHẬP')])]"
     )
     try:
