@@ -116,19 +116,20 @@ def _complete_iam_microsoft_login(driver, username: str, password: str, log_cb: 
             driver.execute_script("arguments[0].click();", vis_iam[0])
             time.sleep(2.5)
 
-    # 2. Neu dang o trang IAM (iam.fpt.vn) -> chon Azure AD hoac dien form IAM neu co
+    # 2. Neu dang o trang IAM (iam.fpt.net / iam.fpt.vn) -> chon Azure AD
     curr_url = (driver.current_url or "").lower()
-    if "iam.fpt.vn" in curr_url:
-        azure_btns = driver.find_elements(
-            By.XPATH,
-            "//a[contains(., 'Azure AD')] | //button[contains(., 'Azure AD')] | //*[@id='zocial-azure-ad'] | //*[contains(text(), 'Azure AD')]",
-        )
-        vis_az = [b for b in azure_btns if b.is_displayed()]
-        if vis_az:
+    if "iam.fpt." in curr_url:
+        try:
+            btn_az = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((
+                    By.XPATH,
+                    "//a[contains(., 'Azure AD')] | //button[contains(., 'Azure AD')] | //*[@id='zocial-azure-ad'] | //*[contains(text(), 'Azure AD')]",
+                ))
+            )
             _emit_log(log_cb, "Dang chon phuong thuc [Azure AD]...", "info")
-            driver.execute_script("arguments[0].click();", vis_az[0])
+            driver.execute_script("arguments[0].click();", btn_az)
             time.sleep(2.5)
-        else:
+        except Exception:
             # Fallback neu IAM hien form username/password truc tiep
             u_inps = [
                 e for e in driver.find_elements(By.XPATH, "//input[@id='username' or @name='username' or @type='email']")
@@ -258,7 +259,7 @@ def _complete_iam_microsoft_login(driver, username: str, password: str, log_cb: 
     WebDriverWait(driver, 45).until(
         lambda d: "inside.fpt.net" in (d.current_url or "").lower()
         and "login.fpt.net" not in (d.current_url or "").lower()
-        and "iam.fpt.vn" not in (d.current_url or "").lower()
+        and "iam.fpt." not in (d.current_url or "").lower()
         and "login.microsoftonline.com" not in (d.current_url or "").lower()
     )
 

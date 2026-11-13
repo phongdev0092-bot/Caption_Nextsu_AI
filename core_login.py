@@ -705,7 +705,7 @@ def extract_secret_from_qr_image(image_path):
 def _should_use_iam_login(driver):
     """Kiem tra trang hien tai co yeu cau dang nhap qua IAM/AM hay khong."""
     curr = (driver.current_url or "").lower()
-    if "iam.fpt.vn" in curr or "login.microsoftonline.com" in curr:
+    if "iam.fpt." in curr or "login.microsoftonline.com" in curr:
         return True
     iam_btns = driver.find_elements(
         By.XPATH,
@@ -747,19 +747,18 @@ def _login_inside_via_iam_am(driver, config, log):
             time.sleep(2.5)
 
     curr_url = (driver.current_url or "").lower()
-    if "iam.fpt.vn" in curr_url:
-        azure_btns = [
-            b for b in driver.find_elements(
-                By.XPATH,
-                "//a[contains(., 'Azure AD')] | //button[contains(., 'Azure AD')] | //*[@id='zocial-azure-ad'] | //*[contains(text(), 'Azure AD')]",
+    if "iam.fpt." in curr_url:
+        try:
+            btn_az = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((
+                    By.XPATH,
+                    "//a[contains(., 'Azure AD')] | //button[contains(., 'Azure AD')] | //*[@id='zocial-azure-ad'] | //*[contains(text(), 'Azure AD')]",
+                ))
             )
-            if b.is_displayed()
-        ]
-        if azure_btns:
             log("Đang chọn phương thức [Azure AD] trên IAM...", "info")
-            driver.execute_script("arguments[0].click();", azure_btns[0])
+            driver.execute_script("arguments[0].click();", btn_az)
             time.sleep(2.5)
-        else:
+        except Exception:
             u_inps = [e for e in driver.find_elements(By.XPATH, "//input[@id='username' or @name='username' or @type='email']") if e.is_displayed()]
             p_inps = [e for e in driver.find_elements(By.XPATH, "//input[@type='password']") if e.is_displayed()]
             if u_inps and p_inps:
@@ -857,7 +856,7 @@ def _login_inside_via_iam_am(driver, config, log):
     WebDriverWait(driver, 45).until(
         lambda d: "inside.fpt.net" in (d.current_url or "").lower()
         and "login.fpt.net" not in (d.current_url or "").lower()
-        and "iam.fpt.vn" not in (d.current_url or "").lower()
+        and "iam.fpt." not in (d.current_url or "").lower()
         and "login.microsoftonline.com" not in (d.current_url or "").lower()
     )
 
