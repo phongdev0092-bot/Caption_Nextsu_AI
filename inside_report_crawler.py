@@ -100,21 +100,28 @@ def _complete_iam_microsoft_login(driver, username: str, password: str, log_cb: 
     """Thuc hien dang nhap IAM / Azure AD / Microsoft nhu chuc nang spampool (run_radius_login)."""
     wait = WebDriverWait(driver, 15)
 
-    # 1. Neu dang o trang login.fpt.net -> bam nut 'ĐĂNG NHẬP VỚI IAM'
+    # 1. Neu dang o trang login.fpt.net -> cho va bam nut 'ĐĂNG NHẬP VỚI IAM'
     curr_url = (driver.current_url or "").lower()
     if "login.fpt.net" in curr_url or "inside.fpt.net" in curr_url:
-        iam_btns = driver.find_elements(
-            By.XPATH,
-            "//button[contains(., 'ĐĂNG NHẬP VỚI IAM') or contains(., 'Đăng nhập với IAM')] | "
-            "//a[contains(., 'ĐĂNG NHẬP VỚI IAM') or contains(., 'Đăng nhập với IAM')] | "
-            "//input[contains(@value, 'IAM')] | "
-            "//*[self::button or self::a][contains(., 'IAM')]",
-        )
-        vis_iam = [b for b in iam_btns if b.is_displayed()]
-        if vis_iam:
+        try:
+            btn_iam = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((
+                    By.XPATH,
+                    "//button[contains(., 'ĐĂNG NHẬP VỚI IAM') or contains(., 'Đăng nhập với IAM')] | "
+                    "//a[contains(., 'ĐĂNG NHẬP VỚI IAM') or contains(., 'Đăng nhập với IAM')] | "
+                    "//input[contains(@value, 'IAM')] | "
+                    "//*[self::button or self::a][contains(., 'IAM')]",
+                ))
+            )
             _emit_log(log_cb, "Dang bam nut [ĐĂNG NHẬP VỚI IAM]...", "info")
-            driver.execute_script("arguments[0].click();", vis_iam[0])
-            time.sleep(2.5)
+            driver.execute_script("arguments[0].click();", btn_iam)
+            WebDriverWait(driver, 10).until(
+                lambda d: "iam.fpt." in (d.current_url or "").lower()
+                or "login.microsoftonline.com" in (d.current_url or "").lower()
+                or ("inside.fpt.net" in (d.current_url or "").lower() and "login.fpt.net" not in (d.current_url or "").lower())
+            )
+        except Exception:
+            pass
 
     # 2. Neu dang o trang IAM (iam.fpt.net / iam.fpt.vn) -> chon Azure AD
     curr_url = (driver.current_url or "").lower()
