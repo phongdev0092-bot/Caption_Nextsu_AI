@@ -100,21 +100,32 @@ def _complete_iam_microsoft_login(driver, username: str, password: str, log_cb: 
     """Thuc hien dang nhap IAM / Azure AD / Microsoft nhu chuc nang spampool (run_radius_login)."""
     wait = WebDriverWait(driver, 15)
 
-    # 1. Neu dang o trang login.fpt.net -> cho va bam nut 'ĐĂNG NHẬP VỚI IAM'
+    # 1. Neu dang o trang login.fpt.net -> cho va bam dung nut 'ĐĂNG NHẬP VỚI IAM' (tranh bam nham link Huong dan .docx)
     curr_url = (driver.current_url or "").lower()
     if "login.fpt.net" in curr_url or "inside.fpt.net" in curr_url:
         try:
+            iam_btn_xpath = (
+                "//*[self::button or self::a or self::div or self::span]"
+                "[(normalize-space(.)='ĐĂNG NHẬP VỚI IAM' or normalize-space(.)='Đăng nhập với IAM' "
+                "or contains(normalize-space(.), 'ĐĂNG NHẬP VỚI IAM') or contains(normalize-space(.), 'Đăng nhập với IAM')) "
+                "and not(contains(., 'Hướng dẫn')) and not(contains(@href, '.docx')) and not(.//button) and not(.//a)] | "
+                "//input[contains(@value, 'ĐĂNG NHẬP VỚI IAM') or contains(@value, 'IAM')]"
+            )
             btn_iam = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable((
-                    By.XPATH,
-                    "//button[contains(., 'ĐĂNG NHẬP VỚI IAM') or contains(., 'Đăng nhập với IAM')] | "
-                    "//a[contains(., 'ĐĂNG NHẬP VỚI IAM') or contains(., 'Đăng nhập với IAM')] | "
-                    "//input[contains(@value, 'IAM')] | "
-                    "//*[self::button or self::a][contains(., 'IAM')]",
-                ))
+                EC.element_to_be_clickable((By.XPATH, iam_btn_xpath))
             )
             _emit_log(log_cb, "Dang bam nut [ĐĂNG NHẬP VỚI IAM]...", "info")
             driver.execute_script("arguments[0].click();", btn_iam)
+            try:
+                WebDriverWait(driver, 4).until(
+                    lambda d: "iam.fpt." in (d.current_url or "").lower()
+                    or "login.microsoftonline.com" in (d.current_url or "").lower()
+                )
+            except Exception:
+                try:
+                    btn_iam.click()
+                except Exception:
+                    pass
             WebDriverWait(driver, 10).until(
                 lambda d: "iam.fpt." in (d.current_url or "").lower()
                 or "login.microsoftonline.com" in (d.current_url or "").lower()
