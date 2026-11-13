@@ -1029,5 +1029,29 @@
     "status": "Đã xử lý",
     "time": "13/11/2026 09:02:59",
     "timestamp_epoch": 1794535379.0902138
+  },
+  "SGAFY2135": {
+    "status": "Đã xử lý",
+    "time": "13/11/2026 12:55:51",
+    "timestamp_epoch": 1794549351.6984284
+  },
+  "SGAFY2135_177": {
+    "status": "Đã xử lý",
+    "time": "13/11/2026 12:55:51",
+    "timestamp_epoch": 1794549351.6984284
+  },
+  "SGAFY2317": {
+    "status": "Không thành công : Trong 14N vi phạm 2 Hợp đồng ( cụ thể: SGAFX3033, SGACV0762 ) Nhân sự thực hiện xử lý lại Suy Hao để được mở quyền Bypass",
+    "time": "13/11/2026 12:55:59",
+    "timestamp_epoch": 1794549359.349399,
+    "force_override": true,
+    "ghi_chu": ""
+  },
+  "SGAFY2317_178": {
+    "status": "Không thành công : Trong 14N vi phạm 2 Hợp đồng ( cụ thể: SGAFX3033, SGACV0762 ) Nhân sự thực hiện xử lý lại Suy Hao để được mở quyền Bypass",
+    "time": "13/11/2026 12:55:59",
+    "timestamp_epoch": 1794549359.349399,
+    "force_override": true,
+    "ghi_chu": ""
   }
 }
