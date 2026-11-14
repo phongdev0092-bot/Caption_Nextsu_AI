@@ -185,7 +185,7 @@ class InsideClearClsAutomation:
         in_frame1 = False
         try:
             self.driver.switch_to.frame(1)
-            if len(self.driver.find_elements(By.ID, "fUserName")) > 0 or len(self.driver.find_elements(By.ID, "fPassword")) > 0:
+            if (len(self.driver.find_elements(By.ID, "fUserName")) > 0 or len(self.driver.find_elements(By.ID, "fPassword")) > 0) and not core_login._should_use_iam_login(self.driver):
                 in_frame1 = True
         except Exception:
             pass

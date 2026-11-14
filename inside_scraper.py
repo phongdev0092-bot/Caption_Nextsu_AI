@@ -150,19 +150,20 @@ class InsideScraper:
         try:
             self.driver.switch_to.default_content()
             curr_url = self.driver.current_url.lower()
-            if "login.fpt.net" in curr_url:
-                return False, "Phiên đã hết hạn (chuyển hướng về login.fpt.net)"
+            if "login.fpt.net" in curr_url or "iam.fpt." in curr_url or "login.microsoftonline.com" in curr_url:
+                return False, "Phiên đã hết hạn (chuyển hướng về cổng đăng nhập)"
             if "inside.fpt.net" in curr_url or "partner.fpt.net" in curr_url:
-                # Kiểm tra xem có form đăng nhập fUserName hay không
-                if len(self.driver.find_elements(By.ID, "fUserName")) > 0:
+                # Kiểm tra xem có form đăng nhập fUserName hoặc nút IAM hay không
+                if len(self.driver.find_elements(By.ID, "fUserName")) > 0 or core_login._should_use_iam_login(self.driver):
                     return False, "Phiên chưa đăng nhập (hiển thị form login)"
                 return True, "Phiên đăng nhập đang khả dụng"
             
             # Thử điều hướng đến default.asp để kiểm tra
             self.driver.get("http://inside.fpt.net/default.asp")
             time.sleep(1.5)
-            if "login.fpt.net" in self.driver.current_url.lower():
-                return False, "Phiên đã hết hạn (chuyển hướng về login.fpt.net)"
+            curr_after = self.driver.current_url.lower()
+            if "login.fpt.net" in curr_after or "iam.fpt." in curr_after or "login.microsoftonline.com" in curr_after or core_login._should_use_iam_login(self.driver):
+                return False, "Phiên đã hết hạn (chuyển hướng về cổng đăng nhập)"
             return True, "Phiên đăng nhập đang khả dụng"
         except Exception as e:
             return False, f"Lỗi kiểm tra phiên: {e}"
@@ -194,9 +195,9 @@ class InsideScraper:
         try:
             self.driver.switch_to.default_content()
             curr = self.driver.current_url.lower()
-            if "login.fpt.net" in curr:
+            if "login.fpt.net" in curr or "iam.fpt." in curr or "login.microsoftonline.com" in curr:
                 return True
-            if len(self.driver.find_elements(By.ID, "fUserName")) > 0:
+            if len(self.driver.find_elements(By.ID, "fUserName")) > 0 or core_login._should_use_iam_login(self.driver):
                 return True
             return False
         except Exception:
@@ -235,100 +236,20 @@ class InsideScraper:
         return False
 
     def login_inside(self):
+        """Đăng nhập Inside qua core_login.run_fpt_login (hỗ trợ đầy đủ IAM / Azure AD / AM)."""
         cfg = core_login.load_config()
         acc = core_login.get_active_account_info(cfg)
-        username = acc["username"]
-        password = acc["password"]
-        secret = acc.get("totp_secret", "")
-        use_otp = acc.get("use_otp", False) and bool(secret)
-
-        self.log(f"Đang điều hướng đến cổng đăng nhập login.fpt.net ({acc['mode'].upper()}: {username})...", "info")
-        self.driver.get("http://login.fpt.net/?urlreturn=inside.fpt.net")
-        time.sleep(2)
-
-        # Check if already on default.asp or inside.fpt.net
-        curr = self.driver.current_url.lower()
-        if ("default.asp" in curr or "inside.fpt.net" in curr) and "login.fpt.net" not in curr:
-            self.log("Đã có phiên đăng nhập trước đó, bỏ qua đăng nhập.", "success")
-            return
-
-        try:
-            wait = WebDriverWait(self.driver, 15)
-            u_inp = wait.until(EC.presence_of_element_located((By.ID, "fUserName")))
-            p_inp = self.driver.find_element(By.ID, "fPassword")
-            cb_otp = self.driver.find_element(By.ID, "cbOTP")
-
-            self.log(f"Đang điền thông tin đăng nhập: {username}...", "info")
-            u_inp.clear()
-            u_inp.send_keys(username)
-            p_inp.clear()
-            p_inp.send_keys(password)
-
-            if use_otp and secret:
-                self.log("Tùy chọn: Sử dụng mã Google OTP...", "info")
-                try:
-                    if not cb_otp.is_selected():
-                        cb_otp.click()
-                except Exception:
-                    self.driver.execute_script("arguments[0].click();", cb_otp)
-
-                # Ensure spOTP is visible
-                self.driver.execute_script("""
-                    var sp = document.getElementById('spOTP');
-                    if (sp) sp.style.display = 'inline-block';
-                    var cb = document.getElementById('cbOTP');
-                    if (cb) cb.checked = true;
-                """)
-                time.sleep(0.3)
-
-                otp_inp = wait.until(EC.presence_of_element_located((By.ID, "fOTP")))
-                totp = pyotp.TOTP(secret.strip().replace(" ", "").upper())
-                otp_code = totp.now()
-                otp_inp.clear()
-                otp_inp.send_keys(otp_code)
-            else:
-                self.log("Tùy chọn: Không sử dụng OTP (bỏ chọn ô OTP)...", "info")
-                if cb_otp.is_selected():
-                    try:
-                        cb_otp.click()
-                    except Exception:
-                        self.driver.execute_script("arguments[0].click();", cb_otp)
-                    time.sleep(0.3)
-
-            btn_login = wait.until(EC.presence_of_element_located((By.ID, "btnLogin")))
-            try:
-                btn_login.click()
-            except Exception:
-                self.driver.execute_script("arguments[0].click();", btn_login)
-            self.log("Đã bấm đăng nhập, chờ hệ thống xác thực và chuyển hướng...", "info")
-
-            # Check alert if any
-            try:
-                time.sleep(1)
-                alert = self.driver.switch_to.alert
-                txt = alert.text
-                alert.accept()
-                if "không chính xác" in txt or "không thành công" in txt:
-                    raise ValueError(f"Đăng nhập thất bại: {txt}")
-            except Exception as e_alert:
-                if "Đăng nhập thất bại" in str(e_alert):
-                    raise e_alert
-
-            # Explicit wait for redirection to inside.fpt.net
-            try:
-                WebDriverWait(self.driver, 20).until(
-                    lambda d: ("inside.fpt.net" in d.current_url.lower() or "default.asp" in d.current_url.lower()) and "login.fpt.net" not in d.current_url.lower()
-                )
-                self.log("Đăng nhập thành công vào Inside FPT!", "success")
-                time.sleep(2)
-            except Exception:
-                curr_after = self.driver.current_url.lower()
-                if "login.fpt.net" in curr_after:
-                    raise RuntimeError("Hết thời gian chờ đăng nhập, vẫn ở trang login.fpt.net")
-
-        except Exception as e:
-            self.log(f"Lỗi đăng nhập: {e}", "error")
-            raise e
+        self.log("Đang đăng nhập Inside FPT qua SSO / IAM...", "info")
+        core_login.run_fpt_login(
+            driver=self.driver,
+            username=acc["username"],
+            password=acc["password"],
+            secret=acc.get("totp_secret", ""),
+            use_otp=acc.get("use_otp", False),
+            log_callback=self.log_cb,
+        )
+        self.driver.switch_to.default_content()
+        self.log("Đăng nhập thành công vào Inside FPT!", "success")
 
     def navigate_to_deployment_search(self):
         self.log("Đang mở menu: Inside New V5 -> Thông tin chung...", "info")
