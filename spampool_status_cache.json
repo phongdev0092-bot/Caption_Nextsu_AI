@@ -60,5 +60,23 @@
     "thao_tac": "thành công kết thúc",
     "time": "11/11/2026 17:22:01",
     "timestamp_epoch": 1794392521.781347
+  },
+  "SGAFW7743": {
+    "ket_qua": "Đã xử lý",
+    "thao_tac": "thành công kết thúc",
+    "time": "14/11/2026 12:12:18",
+    "timestamp_epoch": 1794633138.5698328
+  },
+  "SGAFW7743_11": {
+    "ket_qua": "Đã xử lý",
+    "thao_tac": "thành công kết thúc",
+    "time": "14/11/2026 12:12:18",
+    "timestamp_epoch": 1794633138.5698328
+  },
+  "SGAFW7743_spampool": {
+    "ket_qua": "Đã xử lý",
+    "thao_tac": "thành công kết thúc",
+    "time": "14/11/2026 12:12:18",
+    "timestamp_epoch": 1794633138.5698328
   }
 }

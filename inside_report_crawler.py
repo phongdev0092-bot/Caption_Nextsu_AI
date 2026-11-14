@@ -201,6 +201,15 @@ def _complete_iam_microsoft_login(driver, username: str, password: str, log_cb: 
                 e for e in driver.find_elements(By.XPATH, "//input[@type='email' or @name='loginfmt' or @id='i0116']")
                 if e.is_displayed()
             ]
+            if not emails:
+                other_tiles = [e for e in driver.find_elements(By.XPATH, "//*[@id='otherTile' or @id='otherTileText']") if e.is_displayed()]
+                if other_tiles:
+                    driver.execute_script("arguments[0].click();", other_tiles[0])
+                    time.sleep(1.5)
+                    emails = [
+                        e for e in driver.find_elements(By.XPATH, "//input[@type='email' or @name='loginfmt' or @id='i0116']")
+                        if e.is_displayed()
+                    ]
             if emails:
                 _emit_log(log_cb, "Dang dien email AM tren Microsoft...", "info")
                 emails[0].send_keys(Keys.CONTROL, "a")

@@ -702,17 +702,21 @@ def extract_secret_from_qr_image(image_path):
     else:
         raise ValueError(f"Định dạng QR không nhận diện được: {qr_text}")
 
+_IAM_BTN_XPATH = (
+    "//*[self::button or self::a or self::div or self::span]"
+    "[(normalize-space(.)='ĐĂNG NHẬP VỚI IAM' or normalize-space(.)='Đăng nhập với IAM' "
+    "or contains(normalize-space(.), 'ĐĂNG NHẬP VỚI IAM') or contains(normalize-space(.), 'Đăng nhập với IAM')) "
+    "and not(contains(., 'Hướng dẫn')) and not(contains(@href, '.docx')) and not(.//button) and not(.//a)] | "
+    "//input[contains(@value, 'ĐĂNG NHẬP VỚI IAM') or contains(@value, 'IAM')]"
+)
+
+
 def _should_use_iam_login(driver):
     """Kiem tra trang hien tai co yeu cau dang nhap qua IAM/AM hay khong."""
     curr = (driver.current_url or "").lower()
     if "iam.fpt." in curr or "login.microsoftonline.com" in curr:
         return True
-    iam_btns = driver.find_elements(
-        By.XPATH,
-        "//button[contains(., 'ĐĂNG NHẬP VỚI IAM') or contains(., 'Đăng nhập với IAM')] | "
-        "//a[contains(., 'ĐĂNG NHẬP VỚI IAM') or contains(., 'Đăng nhập với IAM')] | "
-        "//input[contains(@value, 'IAM')]",
-    )
+    iam_btns = driver.find_elements(By.XPATH, _IAM_BTN_XPATH)
     if any(b.is_displayed() for b in iam_btns):
         return True
     p_elems = driver.find_elements(By.ID, "fPassword")
@@ -733,15 +737,8 @@ def _login_inside_via_iam_am(driver, config, log):
     curr_url = (driver.current_url or "").lower()
     if "login.fpt.net" in curr_url or "inside.fpt.net" in curr_url:
         try:
-            iam_btn_xpath = (
-                "//*[self::button or self::a or self::div or self::span]"
-                "[(normalize-space(.)='ĐĂNG NHẬP VỚI IAM' or normalize-space(.)='Đăng nhập với IAM' "
-                "or contains(normalize-space(.), 'ĐĂNG NHẬP VỚI IAM') or contains(normalize-space(.), 'Đăng nhập với IAM')) "
-                "and not(contains(., 'Hướng dẫn')) and not(contains(@href, '.docx')) and not(.//button) and not(.//a)] | "
-                "//input[contains(@value, 'ĐĂNG NHẬP VỚI IAM') or contains(@value, 'IAM')]"
-            )
             btn_iam = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable((By.XPATH, iam_btn_xpath))
+                EC.element_to_be_clickable((By.XPATH, _IAM_BTN_XPATH))
             )
             log("Đang bấm nút [ĐĂNG NHẬP VỚI IAM]...", "info")
             driver.execute_script("arguments[0].click();", btn_iam)
@@ -814,6 +811,12 @@ def _login_inside_via_iam_am(driver, config, log):
             time.sleep(2.0)
         else:
             emails = [e for e in driver.find_elements(By.XPATH, "//input[@type='email' or @name='loginfmt' or @id='i0116']") if e.is_displayed()]
+            if not emails:
+                other_tiles = [e for e in driver.find_elements(By.XPATH, "//*[@id='otherTile' or @id='otherTileText']") if e.is_displayed()]
+                if other_tiles:
+                    driver.execute_script("arguments[0].click();", other_tiles[0])
+                    time.sleep(1.5)
+                    emails = [e for e in driver.find_elements(By.XPATH, "//input[@type='email' or @name='loginfmt' or @id='i0116']") if e.is_displayed()]
             if emails:
                 log(f"Điền email tài khoản AM: {am_user}", "info")
                 emails[0].send_keys(Keys.CONTROL, "a")
@@ -956,7 +959,7 @@ def run_fpt_login(username=None, password=None, secret=None, use_otp=None, headl
 
         curr_url = (driver.current_url or "").lower()
         used_iam_login = False
-        if "inside.fpt.net" in curr_url and "login.fpt.net" not in curr_url:
+        if "inside.fpt.net" in curr_url and "login.fpt.net" not in curr_url and not _should_use_iam_login(driver):
             log("Trình duyệt đã chuyển thẳng vào Inside FPT thành công!", "success")
         elif _should_use_iam_login(driver):
             _login_inside_via_iam_am(driver, config, log)

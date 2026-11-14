@@ -1008,37 +1008,37 @@
   },
   "SGAFY1402": {
     "status": "Không thành công : Trong 14N vi phạm 2 Hợp đồng ( cụ thể: SGAEY6646, SGAES1730 ) Nhân sự thực hiện xử lý lại Suy Hao để được mở quyền Bypass",
-    "time": "13/11/2026 08:42:21",
-    "timestamp_epoch": 1794534141.0330148,
+    "time": "14/11/2026 12:14:23",
+    "timestamp_epoch": 1794633263.2345111,
     "force_override": true,
     "ghi_chu": ""
   },
   "SGAFY1402_175": {
     "status": "Không thành công : Trong 14N vi phạm 2 Hợp đồng ( cụ thể: SGAEY6646, SGAES1730 ) Nhân sự thực hiện xử lý lại Suy Hao để được mở quyền Bypass",
-    "time": "13/11/2026 08:42:21",
-    "timestamp_epoch": 1794534141.0330148,
+    "time": "14/11/2026 12:14:23",
+    "timestamp_epoch": 1794633263.2345111,
     "force_override": true,
     "ghi_chu": ""
   },
   "SGAFY2210": {
     "status": "Đã xử lý",
-    "time": "13/11/2026 09:02:59",
-    "timestamp_epoch": 1794535379.0902138
+    "time": "14/11/2026 12:15:16",
+    "timestamp_epoch": 1794633316.595477
   },
   "SGAFY2210_176": {
     "status": "Đã xử lý",
-    "time": "13/11/2026 09:02:59",
-    "timestamp_epoch": 1794535379.0902138
+    "time": "14/11/2026 12:15:16",
+    "timestamp_epoch": 1794633316.595477
   },
   "SGAFY2135": {
     "status": "Đã xử lý",
-    "time": "13/11/2026 12:55:51",
-    "timestamp_epoch": 1794549351.6984284
+    "time": "14/11/2026 12:13:54",
+    "timestamp_epoch": 1794633234.5597045
   },
   "SGAFY2135_177": {
     "status": "Đã xử lý",
-    "time": "13/11/2026 12:55:51",
-    "timestamp_epoch": 1794549351.6984284
+    "time": "14/11/2026 12:13:54",
+    "timestamp_epoch": 1794633234.5597045
   },
   "SGAFY2317": {
     "status": "Không thành công : Trong 14N vi phạm 2 Hợp đồng ( cụ thể: SGAFX3033, SGACV0762 ) Nhân sự thực hiện xử lý lại Suy Hao để được mở quyền Bypass",
@@ -1053,5 +1053,15 @@
     "timestamp_epoch": 1794549359.349399,
     "force_override": true,
     "ghi_chu": ""
+  },
+  "SGH653630": {
+    "status": "Đã xử lý",
+    "time": "13/11/2026 16:20:24",
+    "timestamp_epoch": 1794561624.758198
+  },
+  "SGH653630_179": {
+    "status": "Đã xử lý",
+    "time": "13/11/2026 16:20:24",
+    "timestamp_epoch": 1794561624.758198
   }
 }
