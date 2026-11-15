@@ -518,16 +518,17 @@ async function pollResetSignalStatus() {
 
 function renderResetSignalTerminalLogs(logs) {
   if (!resetSignalLogTerminal || !logs) return;
-  const filtered = logs.filter(l => l.task_id === 'reset_signal' || (l.text && l.text.toLowerCase().includes('cấp lại tín hiệu')));
+  const filtered = logs.filter(l => l.task_id === 'reset_signal' || l.task_id === 'login' || (l.text && l.text.toLowerCase().includes('cấp lại tín hiệu')));
   if (filtered.length === 0) return;
 
-  resetSignalLogTerminal.innerHTML = filtered.slice(0, 40).map(l => {
+  resetSignalLogTerminal.innerHTML = filtered.slice(-40).map(l => {
     let colorClass = 'text-slate-300';
     if (l.level === 'success') colorClass = 'text-emerald-400 font-semibold';
     else if (l.level === 'error') colorClass = 'text-rose-400 font-semibold';
     else if (l.level === 'warning') colorClass = 'text-amber-300';
-    return `<div class="${colorClass}"><span class="text-slate-500">[${l.time}]</span> ${l.text}</div>`;
+    return `<div class="${colorClass}"><span class="text-slate-500">[${escapeHtml(l.time)}]</span> ${escapeHtml(l.text)}</div>`;
   }).join('');
+  resetSignalLogTerminal.scrollTop = resetSignalLogTerminal.scrollHeight;
 }
 
 if (btnClearResetSignalLogs) {

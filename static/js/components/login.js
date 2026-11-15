@@ -6,6 +6,13 @@
 function setLoginButtonState(state, user = '') {
   currentLoginState = state;
   btnSingleLogin.className = `mui-login-btn ${state}`;
+  const bannerEl = document.getElementById('muiBannerStatus');
+  if (bannerEl) {
+    bannerEl.classList.remove('banner-state-info', 'banner-state-running', 'banner-state-warning', 'banner-state-error', 'banner-state-success');
+    if (state === 'loading') bannerEl.classList.add('banner-state-running');
+    else if (state === 'success') bannerEl.classList.add('banner-state-success');
+    else bannerEl.classList.add('banner-state-info');
+  }
 
   if (state === 'idle') {
     loginSpinner.style.display = 'none';

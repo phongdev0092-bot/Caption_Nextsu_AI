@@ -50,8 +50,11 @@ def _flush_log_to_disk():
     except Exception:
         pass
 
+_log_seq = 0
+
 def _load_log_from_disk(limit=400):
     """Khôi phục các dòng nhật ký gần nhất khi khởi động lại server."""
+    global _log_seq
     if not os.path.exists(LOG_ZST_PATH):
         return
     try:
@@ -60,7 +63,10 @@ def _load_log_from_disk(limit=400):
         lines = data.decode("utf-8", errors="ignore").splitlines()[-limit:]
         for ln in lines:
             try:
-                log_history.append(json.loads(ln))
+                obj = json.loads(ln)
+                _log_seq += 1
+                obj["seq"] = _log_seq
+                log_history.append(obj)
             except Exception:
                 pass
         for it in reversed(log_history[-limit:]):
@@ -74,9 +80,12 @@ def _log_flusher_loop():
         _flush_log_to_disk()
 
 def add_log(message, level="info", task_id="system"):
+    global _log_seq
     timestamp = time.strftime("%H:%M:%S")
     with log_lock:
+        _log_seq += 1
         item = {
+            "seq": _log_seq,
             "time": timestamp,
             "date": time.strftime("%Y-%m-%d"),
             "level": level,
@@ -90,6 +99,76 @@ def add_log(message, level="info", task_id="system"):
         if len(task_logs) > 400:
             task_logs.pop()
         _log_pending.append(item)
+
+
+def make_task_logger(task_state_dict, task_id, label):
+    """
+    Tạo callback log gắn với tiến trình đang chạy:
+    - Tự động cập nhật task_state_dict['current_step'], ['step_time'], ['recent_steps'] và ['message']
+      theo từng bước thực tế của Selenium bot (khởi tạo Chrome, đăng nhập IAM, điều hướng menu, tìm HĐ, lưu...).
+    - Gắn đúng task_id và tiền tố [Tên Tác Vụ] vào nhật ký để Nhật ký Auto và Terminal từng tab hiển thị đầy đủ.
+    """
+    if isinstance(task_state_dict, dict):
+        task_state_dict["current_step"] = ""
+        task_state_dict["step_time"] = time.strftime("%H:%M:%S")
+        task_state_dict["recent_steps"] = []
+
+    def _logger(message, level="info", *args):
+        raw_text = str(message or "").strip()
+        if not raw_text:
+            return
+        step_time = time.strftime("%H:%M:%S")
+        cur_idx = 0
+        total = 0
+        cur_shd = ""
+        if isinstance(task_state_dict, dict):
+            cur_idx = int(task_state_dict.get("current_index") or 0)
+            total = int(task_state_dict.get("total") or 0)
+            cur_shd = str(
+                task_state_dict.get("current_shd")
+                or task_state_dict.get("current_contract")
+                or ""
+            ).strip()
+
+            if not raw_text.startswith("==="):
+                task_state_dict["current_step"] = raw_text
+                task_state_dict["step_time"] = step_time
+                steps = list(task_state_dict.get("recent_steps") or [])
+                steps.append({
+                    "time": step_time,
+                    "step": raw_text,
+                    "level": level,
+                    "shd": cur_shd if cur_idx > 0 else ""
+                })
+                task_state_dict["recent_steps"] = steps[-6:]
+
+                is_active = bool(
+                    task_state_dict.get("is_running")
+                    or task_state_dict.get("status") == "running"
+                )
+                if is_active:
+                    if cur_idx > 0 and total > 0:
+                        if cur_shd and cur_shd not in raw_text:
+                            task_state_dict["message"] = f"[{cur_idx}/{total} • HĐ {cur_shd}] {raw_text}"
+                        else:
+                            task_state_dict["message"] = f"[{cur_idx}/{total}] {raw_text}"
+                    elif total > 0:
+                        task_state_dict["message"] = f"[Chuẩn bị {total} HĐ] {raw_text}"
+                    else:
+                        task_state_dict["message"] = raw_text
+
+        prefix_tag = f"[{label}]"
+        if raw_text.startswith("===") or raw_text.startswith(prefix_tag):
+            formatted = raw_text
+        elif cur_idx > 0 and cur_shd and cur_shd not in raw_text:
+            formatted = f"{prefix_tag} [HĐ {cur_shd}] {raw_text}"
+        else:
+            formatted = f"{prefix_tag} {raw_text}"
+
+        eff_task_id = args[0] if (args and isinstance(args[0], str)) else task_id
+        add_log(formatted, level, eff_task_id)
+
+    return _logger
 
 ZST_STORAGE_PATH = os.path.join(BASE_DIR, "retrieval_history.json.zst")
 JSON_STORAGE_PATH = os.path.join(BASE_DIR, "retrieval_history.json")
@@ -538,7 +617,8 @@ def trigger_login():
 
         task_state["status"] = "running"
         task_state["message"] = f"Đang kết nối Chrome ({active_acc['mode'].upper()}: {username})..."
-        add_log(f"=== BẮT ĐẦU ĐĂNG NHẬP ({active_acc['mode'].upper()}: {username}) ===", "info")
+        task_log = make_task_logger(task_state, "login", "Đăng Nhập Inside")
+        task_log(f"=== BẮT ĐẦU ĐĂNG NHẬP ({active_acc['mode'].upper()}: {username}) ===", "info")
 
         def worker():
             try:
@@ -550,13 +630,13 @@ def trigger_login():
                     headless=headless,
                     keep_open=keep_open,
                     use_custom_profile=True,
-                    log_callback=lambda msg, lvl: add_log(msg, lvl)
+                    log_callback=task_log
                 )
                 task_state["status"] = "success"
                 task_state["message"] = "Đã đăng nhập thành công"
                 task_state["user"] = username
                 task_state["last_login_time"] = time.strftime("%H:%M:%S")
-                add_log(f"Đăng nhập thành công tài khoản {username}", "success")
+                task_log(f"Đăng nhập thành công tài khoản {username}", "success")
             except Exception as e:
                 raw_err = str(e)
                 if "Stacktrace:" in raw_err:
@@ -566,7 +646,7 @@ def trigger_login():
                     display_msg = raw_err
                 task_state["status"] = "error"
                 task_state["message"] = f"Lỗi: {display_msg}"
-                add_log(f"Đăng nhập thất bại: {display_msg}", "error")
+                task_log(f"Đăng nhập thất bại: {display_msg}", "error")
             finally:
                 core_login.release_inside_task("login")
 
@@ -774,8 +854,9 @@ def run_retrieval_process():
         retrieval_task["current_index"] = 0
         retrieval_task["current_contract"] = contracts[0]
         retrieval_task["message"] = f"Bắt đầu xử lý {len(contracts)} hợp đồng..."
+        task_log = make_task_logger(retrieval_task, "retrieval", "Lấy Thông Tin")
 
-        add_log(f"=== BẮT ĐẦU AUTO LẤY DỮ LIỆU {len(contracts)} HỢP ĐỒNG ===", "info")
+        task_log(f"=== BẮT ĐẦU AUTO LẤY DỮ LIỆU {len(contracts)} HỢP ĐỒNG ===", "info")
 
         def worker():
             scraper = None
@@ -788,7 +869,7 @@ def run_retrieval_process():
                     is_cached, cached_record = check_cached_contract_48h(c_no, retrieval_records)
                     if is_cached:
                         skipped_count += 1
-                        add_log(f"⏩ [BỎ QUA 48H] HĐ {c_no} đã có dữ liệu thành công trong 48h (KH: {cached_record.get('customer_name')}). Bỏ qua không cào lại.", "info")
+                        task_log(f"⏩ [BỎ QUA 48H] HĐ {c_no} đã có dữ liệu thành công trong 48h (KH: {cached_record.get('customer_name')}). Bỏ qua không cào lại.", "info")
                         # Đưa bản ghi lên đầu danh sách hiển thị
                         for existing in list(retrieval_records):
                             if existing.get("contract_no") == c_no:
@@ -800,12 +881,12 @@ def run_retrieval_process():
                 # Nếu toàn bộ hợp đồng đều đã được lưu thành công trong vòng 48h
                 if not to_scrape:
                     retrieval_task["message"] = f"Hoàn tất: Toàn bộ {len(contracts)} hợp đồng đều đã có dữ liệu thành công trong 48H (Không cần cào lại)!"
-                    add_log(f"=== HOÀN TẤT TỨC THÌ: TOÀN BỘ {len(contracts)} HỢP ĐỒNG ĐÃ ĐƯỢC LẤY TRONG 48H ===", "success")
+                    task_log(f"=== HOÀN TẤT TỨC THÌ: TOÀN BỘ {len(contracts)} HỢP ĐỒNG ĐÃ ĐƯỢC LẤY TRONG 48H ===", "success")
                     save_records_zstd(retrieval_records)
                     return
 
-                add_log(f"Khởi động Chrome để cào {len(to_scrape)} HĐ (Đã bỏ qua {skipped_count} HĐ có sẵn trong 48h)...", "info")
-                scraper = InsideScraper(headless=True, log_cb=add_log)
+                task_log(f"Khởi động Chrome để cào {len(to_scrape)} HĐ (Đã bỏ qua {skipped_count} HĐ có sẵn trong 48h)...", "info")
+                scraper = InsideScraper(headless=True, log_cb=task_log)
                 scraper.init_driver()
                 scraper.login_inside()
                 scraper.navigate_to_deployment_search()
@@ -831,7 +912,7 @@ def run_retrieval_process():
                     save_records_zstd(retrieval_records)
 
                 retrieval_task["message"] = f"Hoàn tất lấy dữ liệu {len(to_scrape)} hợp đồng (Đã bỏ qua {skipped_count} HĐ trùng 48h)!"
-                add_log(f"=== HOÀN TẤT LẤY DỮ LIỆU {len(to_scrape)} HỢP ĐỒNG ===", "success")
+                task_log(f"=== HOÀN TẤT LẤY DỮ LIỆU {len(to_scrape)} HỢP ĐỒNG ===", "success")
 
             except Exception as e:
                 raw_err = str(e)
@@ -841,7 +922,7 @@ def run_retrieval_process():
                 else:
                     display_msg = raw_err
                 retrieval_task["message"] = f"Lỗi tiến trình: {display_msg}"
-                add_log(f"Tiến trình bị gián đoạn: {display_msg}", "error")
+                task_log(f"Tiến trình bị gián đoạn: {display_msg}", "error")
             finally:
                 retrieval_task["is_running"] = False
                 if scraper:
@@ -1422,8 +1503,9 @@ def run_bypass_process():
     bypass_task_state["sheet_id"] = sheet_id
     bypass_task_state["gid"] = gid
     bypass_task_state["processed_in_session"] = []  # Reset danh sách xử lý phiên mới
+    task_log = make_task_logger(bypass_task_state, "bypass", "Auto Bypass")
 
-    add_log(f"=== BẮT ĐẦU AUTO BYPASS {len(to_process)} HỢP ĐỒNG TRÊN INSIDE FPT ===", "info")
+    task_log(f"=== BẮT ĐẦU AUTO BYPASS {len(to_process)} HỢP ĐỒNG TRÊN INSIDE FPT ===", "info")
 
     def update_sheet_remote(record, status_val="Đã xử lý", ghi_chu=""):
         # Nếu có cấu hình Apps Script Webhook trong config.json thì gửi cập nhật
@@ -1447,9 +1529,9 @@ def run_bypass_process():
                     headers={"Content-Type": "application/json"}
                 )
                 urllib.request.urlopen(req, timeout=5)
-                add_log(f"Đã cập nhật trạng thái '{status_val}' lên Google Sheet cho HĐ {record.get('SHD')}", "success")
+                task_log(f"Đã cập nhật trạng thái '{status_val}' lên Google Sheet cho HĐ {record.get('SHD')}", "success")
             except Exception as e_hook:
-                add_log(f"Không thể đẩy Webhook Google Sheet: {e_hook}", "warning")
+                task_log(f"Không thể đẩy Webhook Google Sheet: {e_hook}", "warning")
 
     def worker():
         global active_bypass_bot
@@ -1458,20 +1540,20 @@ def run_bypass_process():
         try:
             for idx, r in enumerate(to_process):
                 shd = str(r.get("SHD", "")).strip()
-                bypass_task_state["current_index"] = idx + 1
                 bypass_task_state["current_shd"] = shd
-                bypass_task_state["message"] = f"Đang xử lý {idx + 1}/{len(to_process)}: HĐ {shd}..."
 
                 # Kiểm tra điều kiện vi phạm Hậu Kiểm Không Đạt trong 14N tính từ Today-1
                 # Rule: Nếu nhân sự có Roles = Admin thì bỏ qua mọi giới hạn (kể cả 14N vi phạm)
                 if inside_bypass.is_admin_staff(r):
-                    add_log(f"👑 Quyền Admin ({r.get('Email') or r.get('Account Inside')}) – Bỏ qua giới hạn 14N cho HĐ {shd}", "info", "bypass")
+                    task_log(f"👑 Quyền Admin ({r.get('Email') or r.get('Account Inside')}) – Bỏ qua giới hạn 14N cho HĐ {shd}", "info", "bypass")
                     is_violated, v_count, v_shds, reject_msg = False, 0, [], ""
                 else:
                     is_violated, v_count, v_shds, reject_msg = inside_bypass.check_14d_hau_kiem_violation(
                         r, all_sheet_records
                     )
                 if is_violated:
+                    bypass_task_state["current_index"] = idx + 1
+                    bypass_task_state["message"] = f"Đang kiểm tra 14N {idx + 1}/{len(to_process)}: HĐ {shd}..."
                     now_str = time.strftime("%d/%m/%Y %H:%M:%S")
                     row_id = str(r.get("ID", "")).strip()
                     # Cập nhật trực tiếp vào ô Thao Tác: "Không thành công : Trong 14N..."
@@ -1500,17 +1582,21 @@ def run_bypass_process():
                         "nvkt": r.get("Email", ""),
                         "nn1": r.get("Nguyên Nhân 1", "")
                     })
-                    add_log(f"⛔ Vi phạm 14N – HĐ {shd} (NVKT={r.get('Email')}): {reject_msg}", "warning", "bypass")
+                    task_log(f"⛔ Vi phạm 14N – HĐ {shd} (NVKT={r.get('Email')}): {reject_msg}", "warning", "bypass")
                     time.sleep(0.5)
                     continue
 
                 if not driver_ready:
-                    bot = inside_bypass.InsideBypassAutomation(headless=headless, log_cb=add_log)
+                    bypass_task_state["current_index"] = 0
+                    bot = inside_bypass.InsideBypassAutomation(headless=headless, log_cb=task_log)
                     active_bypass_bot = bot
                     bot.init_driver()
                     bot.navigate_to_bypass_page()
                     bot.open_import_tab_and_dismiss_help()
                     driver_ready = True
+
+                bypass_task_state["current_index"] = idx + 1
+                bypass_task_state["message"] = f"Đang xử lý {idx + 1}/{len(to_process)}: HĐ {shd}..."
 
                 try:
                     ok, msg = bot.input_bypass_row(r)
@@ -1541,9 +1627,9 @@ def run_bypass_process():
                         })
 
                         # Ghi nhận vào task_logs và log_history
-                        add_log(f"ByPass thành công HĐ {shd}: NVKT={r.get('Email')} | {r.get('Nguyên Nhân 1')}", "success", "bypass")
+                        task_log(f"ByPass thành công HĐ {shd}: NVKT={r.get('Email')} | {r.get('Nguyên Nhân 1')}", "success", "bypass")
                 except Exception as ex_single:
-                    add_log(f"Lỗi khi ByPass HĐ {shd}: {ex_single}", "error", "bypass")
+                    task_log(f"Lỗi khi ByPass HĐ {shd}: {ex_single}", "error", "bypass")
                     r["Thao Tác"] = "Lỗi"
                     bypass_task_state["processed_in_session"].append({
                         "shd": shd,
@@ -1556,13 +1642,13 @@ def run_bypass_process():
                 time.sleep(2)
 
             bypass_task_state["message"] = f"Hoàn tất xử lý {len(to_process)} hợp đồng ByPass!"
-            add_log(f"=== HOÀN TẤT TIẾN TRÌNH AUTO BYPASS ===", "success")
+            task_log(f"=== HOÀN TẤT TIẾN TRÌNH AUTO BYPASS ===", "success")
 
         except Exception as e:
             raw_err = str(e)
             bypass_task_state["message"] = f"Lỗi ByPass: {raw_err}"
-            add_log(f"Tiến trình Auto ByPass bị dừng: {raw_err}", "error")
-            core_login.invalidate_session(log_cb=add_log)  # phiên nghi ngờ hỏng/đơ -> lần sau đăng nhập mới
+            task_log(f"Tiến trình Auto ByPass bị dừng: {raw_err}", "error")
+            core_login.invalidate_session(log_cb=task_log)  # phiên nghi ngờ hỏng/đơ -> lần sau đăng nhập mới
             clear_auto_attempts("bypass", [r.get("SHD") for r in to_process])
         finally:
             bypass_task_state["is_running"] = False
@@ -1817,9 +1903,10 @@ def run_cls_process():
     cls_task_state["sheet_id"] = sheet_id
     cls_task_state["gid"] = gid
     cls_task_state["processed_in_session"] = []
+    task_log = make_task_logger(cls_task_state, "clear_cls", "Clear Cls")
 
     mode_label = "Chạy ngầm (Headless)" if headless else "Mở Chrome xem trực tiếp (Visible)"
-    add_log(f"=== BẮT ĐẦU AUTO CLEAR CLS {len(to_process)} HỢP ĐỒNG ({mode_label}) ===", "info")
+    task_log(f"=== BẮT ĐẦU AUTO CLEAR CLS {len(to_process)} HỢP ĐỒNG ({mode_label}) ===", "info")
 
     def update_sheet_remote_cls(record, thao_tac_val):
         cfg = core_login.load_config()
@@ -1849,13 +1936,13 @@ def run_cls_process():
                     headers={"Content-Type": "application/json"}
                 )
                 urllib.request.urlopen(req, timeout=8)
-                add_log(f"Đã cập nhật Webhook Google Sheet Clear Cls cho HĐ {record.get('SHD')}: Kết quả='Đã xử lý' | Thao tác='{thao_tac_val}'", "success")
+                task_log(f"Đã cập nhật Webhook Google Sheet Clear Cls cho HĐ {record.get('SHD')}: Kết quả='Đã xử lý' | Thao tác='{thao_tac_val}'", "success")
             except Exception as e_hook:
-                add_log(f"Không thể đẩy Webhook Google Sheet cho HĐ {record.get('SHD')}: {e_hook}", "warning")
+                task_log(f"Không thể đẩy Webhook Google Sheet cho HĐ {record.get('SHD')}: {e_hook}", "warning")
 
     def worker_cls():
         global active_cls_bot
-        bot = inside_cls.InsideClearClsAutomation(headless=headless, keep_open=True, log_cb=add_log)
+        bot = inside_cls.InsideClearClsAutomation(headless=headless, keep_open=True, log_cb=task_log)
         active_cls_bot = bot
         try:
             bot.init_driver()
@@ -1897,12 +1984,12 @@ def run_cls_process():
                     })
 
                     lvl = "success" if is_ok else "warning"
-                    add_log(f"Clear Cls HĐ {shd}: Kết quả='Đã xử lý' | Thao tác='{thao_tac}'", lvl, "clear_cls")
+                    task_log(f"Clear Cls HĐ {shd}: Kết quả='Đã xử lý' | Thao tác='{thao_tac}'", lvl, "clear_cls")
 
                 except Exception as ex_single:
                     clean_ex = re.sub(r"^không\s+thành\s+công\s*[:\-]?", "", str(ex_single).strip(), flags=re.IGNORECASE).strip()
                     err_thao_tac = f"Không thành công : {clean_ex[:60]}"
-                    add_log(f"Lỗi khi Clear Cls HĐ {shd}: {clean_ex[:60]}", "error", "clear_cls")
+                    task_log(f"Lỗi khi Clear Cls HĐ {shd}: {clean_ex[:60]}", "error", "clear_cls")
                     now_str = time.strftime("%d/%m/%Y %H:%M:%S")
                     r["Kết Quả"] = "Đã xử lý"
                     r["Thao Tác"] = err_thao_tac
@@ -1921,13 +2008,13 @@ def run_cls_process():
                 time.sleep(2)
 
             cls_task_state["message"] = f"Hoàn tất xử lý {len(to_process)} hợp đồng Clear Cls có SR!"
-            add_log(f"=== HOÀN TẤT TIẾN TRÌNH AUTO CLEAR CLS CÓ SR ===", "success")
+            task_log(f"=== HOÀN TẤT TIẾN TRÌNH AUTO CLEAR CLS CÓ SR ===", "success")
 
         except Exception as e:
             raw_err = str(e)
             cls_task_state["message"] = f"Lỗi Clear Cls: {raw_err}"
-            add_log(f"Tiến trình Auto Clear Cls bị dừng: {raw_err}", "error")
-            core_login.invalidate_session(log_cb=add_log)  # phiên nghi ngờ hỏng/đơ -> lần sau đăng nhập mới
+            task_log(f"Tiến trình Auto Clear Cls bị dừng: {raw_err}", "error")
+            core_login.invalidate_session(log_cb=task_log)  # phiên nghi ngờ hỏng/đơ -> lần sau đăng nhập mới
             clear_auto_attempts("cls", [r.get("SHD") for r in to_process])
         finally:
             cls_task_state["is_running"] = False
@@ -2092,9 +2179,10 @@ def run_assign_process():
     assign_task_state["sheet_id"]               = sheet_id
     assign_task_state["gid"]                    = gid
     assign_task_state["processed_in_session"]   = []
+    task_log = make_task_logger(assign_task_state, "manual_assign", "Phân Công Tay")
 
     mode_label = "Chạy ngầm (Headless)" if headless else "Mở Chrome xem trực tiếp (Visible)"
-    add_log(f"=== BẮT ĐẦU AUTO PHÂN CÔNG TAY {len(to_process)} HỢP ĐỒNG ({mode_label}) ===", "info")
+    task_log(f"=== BẮT ĐẦU AUTO PHÂN CÔNG TAY {len(to_process)} HỢP ĐỒNG ({mode_label}) ===", "info")
 
     def update_sheet_remote_assign(record, thao_tac_val):
         cfg = core_login.load_config()
@@ -2116,13 +2204,13 @@ def run_assign_process():
                     headers={"Content-Type": "application/json"}
                 )
                 urllib.request.urlopen(req, timeout=8)
-                add_log(f"Đã cập nhật Webhook Phân Công Tay cho HĐ {record.get('SHD')}: '{thao_tac_val}'", "success")
+                task_log(f"Đã cập nhật Webhook Phân Công Tay cho HĐ {record.get('SHD')}: '{thao_tac_val}'", "success")
             except Exception as e_hook:
-                add_log(f"Không thể đẩy Webhook cho HĐ {record.get('SHD')}: {e_hook}", "warning")
+                task_log(f"Không thể đẩy Webhook cho HĐ {record.get('SHD')}: {e_hook}", "warning")
 
     def worker_assign():
         global active_assign_bot
-        bot = inside_assign.InsideAssignAutomation(headless=headless, keep_open=True, log_cb=add_log)
+        bot = inside_assign.InsideAssignAutomation(headless=headless, keep_open=True, log_cb=task_log)
         active_assign_bot = bot
         try:
             bot.init_driver()
@@ -2150,12 +2238,12 @@ def run_assign_process():
                     })
 
                     lvl = "success" if is_ok else "warning"
-                    add_log(f"Phân Công HĐ {shd}: '{thao_tac}'", lvl, "manual_assign")
+                    task_log(f"Phân Công HĐ {shd}: '{thao_tac}'", lvl, "manual_assign")
 
                 except Exception as ex_single:
                     now_str = time.strftime("%d/%m/%Y %H:%M:%S")
                     err_thao_tac = inside_assign.format_assign_thao_tac(False, str(ex_single)[:80])
-                    add_log(f"Lỗi Phân Công Tay HĐ {shd}: {str(ex_single)[:60]}", "error", "manual_assign")
+                    task_log(f"Lỗi Phân Công Tay HĐ {shd}: {str(ex_single)[:60]}", "error", "manual_assign")
                     r["Thao Tác"]       = err_thao_tac
                     r["Ngày Cập Nhật"] = now_str
                     update_sheet_remote_assign(r, err_thao_tac)
@@ -2169,12 +2257,12 @@ def run_assign_process():
                 time.sleep(2)
 
             assign_task_state["message"] = f"Hoàn tất xử lý {len(to_process)} hợp đồng Phân Công Tay!"
-            add_log("=== HOÀN TẤT TIẾN TRÌNH AUTO PHÂN CÔNG TAY ===", "success")
+            task_log("=== HOÀN TẤT TIẾN TRÌNH AUTO PHÂN CÔNG TAY ===", "success")
 
         except Exception as e:
             assign_task_state["message"] = f"Lỗi Phân Công Tay: {e}"
-            add_log(f"Tiến trình Phân Công Tay bị dừng: {e}", "error")
-            core_login.invalidate_session(log_cb=add_log)  # phiên nghi ngờ hỏng/đơ -> lần sau đăng nhập mới
+            task_log(f"Tiến trình Phân Công Tay bị dừng: {e}", "error")
+            core_login.invalidate_session(log_cb=task_log)  # phiên nghi ngờ hỏng/đơ -> lần sau đăng nhập mới
             clear_auto_attempts("assign", [r.get("SHD") for r in to_process])
         finally:
             assign_task_state["is_running"] = False
@@ -2369,7 +2457,8 @@ def run_clear_signal_process():
             core_login.release_inside_task("clear_signal")
 
     mode_label = "Chạy ngầm (Headless)" if headless else "Mở Chrome xem trực tiếp (Visible)"
-    add_log(f"=== BẮT ĐẦU AUTO CLEAR TÍN HIỆU {len(to_process)} HỢP ĐỒNG ({mode_label}) ===", "info")
+    task_log = make_task_logger(clear_signal_task_state, "clear_signal", "Clear Tín Hiệu")
+    task_log(f"=== BẮT ĐẦU AUTO CLEAR TÍN HIỆU {len(to_process)} HỢP ĐỒNG ({mode_label}) ===", "info")
 
     def update_sheet_remote_signal(record, kq_val, sig_type="clear"):
         cfg = core_login.load_config()
@@ -2396,16 +2485,16 @@ def run_clear_signal_process():
                     headers={"Content-Type": "application/json"}
                 )
                 urllib.request.urlopen(req, timeout=8)
-                add_log(f"Đã cập nhật Webhook {sig_type} cho HĐ {record.get('SHD')}: '{kq_val}'", "success")
+                task_log(f"Đã cập nhật Webhook {sig_type} cho HĐ {record.get('SHD')}: '{kq_val}'", "success")
             except Exception as e_hook:
-                add_log(f"Không thể đẩy Webhook cho HĐ {record.get('SHD')}: {e_hook}", "warning")
+                task_log(f"Không thể đẩy Webhook cho HĐ {record.get('SHD')}: {e_hook}", "warning")
 
     def worker_clear_signal():
         global active_clear_signal_bot
         bot = None
         processed_shds = set()
         try:
-            bot = inside_signal.InsideSignalAutomation(signal_type="clear", headless=headless, log_cb=add_log)
+            bot = inside_signal.InsideSignalAutomation(signal_type="clear", headless=headless, log_cb=task_log)
             active_clear_signal_bot = bot
             bot.init_driver()
             if not bot.driver:
@@ -2438,12 +2527,12 @@ def run_clear_signal_process():
                     })
 
                     lvl = "success" if is_ok else "warning"
-                    add_log(f"Clear Tín Hiệu HĐ {shd}: '{kq_str}'", lvl, "clear_signal")
+                    task_log(f"Clear Tín Hiệu HĐ {shd}: '{kq_str}'", lvl, "clear_signal")
                 except Exception as ex_single:
                     processed_shds.add(shd)
                     now_str = time.strftime("%d/%m/%Y %H:%M:%S")
                     err_kq = f"Lỗi: {str(ex_single)[:60]}"
-                    add_log(f"Lỗi Clear Tín Hiệu HĐ {shd}: {str(ex_single)[:60]}", "error", "clear_signal")
+                    task_log(f"Lỗi Clear Tín Hiệu HĐ {shd}: {str(ex_single)[:60]}", "error", "clear_signal")
                     r["Kết Quả"] = err_kq
                     r["Ngày Cập Nhật"] = now_str
                     inside_signal.update_cache_record("clear", shd, err_kq, now_str)
@@ -2460,11 +2549,11 @@ def run_clear_signal_process():
                 time.sleep(1.5)
 
             clear_signal_task_state["message"] = f"Hoàn tất xử lý {len(to_process)} hợp đồng Clear Tín Hiệu!"
-            add_log("=== HOÀN TẤT TIẾN TRÌNH AUTO CLEAR TÍN HIỆU ===", "success")
+            task_log("=== HOÀN TẤT TIẾN TRÌNH AUTO CLEAR TÍN HIỆU ===", "success")
         except Exception as e:
             clear_signal_task_state["message"] = f"Lỗi Clear Tín Hiệu: {e}"
-            add_log(f"Tiến trình Clear Tín Hiệu bị dừng: {e}", "error")
-            core_login.invalidate_session(log_cb=add_log)  # phiên nghi ngờ hỏng/đơ -> lần sau đăng nhập mới
+            task_log(f"Tiến trình Clear Tín Hiệu bị dừng: {e}", "error")
+            core_login.invalidate_session(log_cb=task_log)  # phiên nghi ngờ hỏng/đơ -> lần sau đăng nhập mới
             if not is_manual:
                 remaining_shds = [str(r.get("SHD", "")).strip() for r in to_process if str(r.get("SHD", "")).strip() not in processed_shds]
                 _lock_signal_contracts_for_manual("clear_signal", remaining_shds, reason="login_or_server_error")
@@ -2640,7 +2729,8 @@ def run_reset_signal_process():
 
     mode_label = "Chạy ngầm (Headless)" if headless else "Mở Chrome xem trực tiếp (Visible)"
     auto_tag = " [TỰ ĐỘNG 72H]" if is_auto_72h else ""
-    add_log(f"=== BẮT ĐẦU AUTO CẤP LẠI TÍN HIỆU {len(to_process)} HỢP ĐỒNG{auto_tag} ({mode_label}) ===", "info")
+    task_log = make_task_logger(reset_signal_task_state, "reset_signal", "Cấp Lại Tín Hiệu")
+    task_log(f"=== BẮT ĐẦU AUTO CẤP LẠI TÍN HIỆU {len(to_process)} HỢP ĐỒNG{auto_tag} ({mode_label}) ===", "info")
 
     def update_sheet_remote_signal(record, kq_val, sig_type="reset"):
         cfg = core_login.load_config()
@@ -2672,16 +2762,16 @@ def run_reset_signal_process():
                     headers={"Content-Type": "application/json"}
                 )
                 urllib.request.urlopen(req, timeout=8)
-                add_log(f"Đã cập nhật Webhook {sig_type} cho HĐ {record.get('SHD')} (GID {gid}): '{kq_val}' [Nguồn: {final_nguon}]", "success")
+                task_log(f"Đã cập nhật Webhook {sig_type} cho HĐ {record.get('SHD')} (GID {gid}): '{kq_val}' [Nguồn: {final_nguon}]", "success")
             except Exception as e_hook:
-                add_log(f"Không thể đẩy Webhook cho HĐ {record.get('SHD')}: {e_hook}", "warning")
+                task_log(f"Không thể đẩy Webhook cho HĐ {record.get('SHD')}: {e_hook}", "warning")
 
     def worker_reset_signal():
         global active_reset_signal_bot
         bot = None
         processed_shds = set()
         try:
-            bot = inside_signal.InsideSignalAutomation(signal_type="reset", headless=headless, log_cb=add_log)
+            bot = inside_signal.InsideSignalAutomation(signal_type="reset", headless=headless, log_cb=task_log)
             active_reset_signal_bot = bot
             bot.init_driver()
             if not bot.driver:
@@ -2723,12 +2813,12 @@ def run_reset_signal_process():
                     })
 
                     lvl = "success" if is_ok else "warning"
-                    add_log(f"Cấp Lại Tín Hiệu HĐ {shd}: '{kq_str}'", lvl, "reset_signal")
+                    task_log(f"Cấp Lại Tín Hiệu HĐ {shd}: '{kq_str}'", lvl, "reset_signal")
                 except Exception as ex_single:
                     processed_shds.add(shd)
                     now_str = time.strftime("%d/%m/%Y %H:%M:%S")
                     err_kq = f"Lỗi: {str(ex_single)[:60]}"
-                    add_log(f"Lỗi Cấp Lại Tín Hiệu HĐ {shd}: {str(ex_single)[:60]}", "error", "reset_signal")
+                    task_log(f"Lỗi Cấp Lại Tín Hiệu HĐ {shd}: {str(ex_single)[:60]}", "error", "reset_signal")
                     r["Kết Quả"] = err_kq
                     r["Ngày Cập Nhật"] = now_str
                     inside_signal.update_cache_record("reset", shd, err_kq, now_str)
@@ -2745,11 +2835,11 @@ def run_reset_signal_process():
                 time.sleep(1.5)
 
             reset_signal_task_state["message"] = f"Hoàn tất xử lý {len(to_process)} hợp đồng Cấp Lại Tín Hiệu!"
-            add_log("=== HOÀN TẤT TIẾN TRÌNH AUTO CẤP LẠI TÍN HIỆU ===", "success")
+            task_log("=== HOÀN TẤT TIẾN TRÌNH AUTO CẤP LẠI TÍN HIỆU ===", "success")
         except Exception as e:
             reset_signal_task_state["message"] = f"Lỗi Cấp Lại Tín Hiệu: {e}"
-            add_log(f"Tiến trình Cấp Lại Tín Hiệu bị dừng: {e}", "error")
-            core_login.invalidate_session(log_cb=add_log)  # phiên nghi ngờ hỏng/đơ -> lần sau đăng nhập mới
+            task_log(f"Tiến trình Cấp Lại Tín Hiệu bị dừng: {e}", "error")
+            core_login.invalidate_session(log_cb=task_log)  # phiên nghi ngờ hỏng/đơ -> lần sau đăng nhập mới
             if not is_manual:
                 remaining_shds = [str(r.get("SHD", "")).strip() for r in to_process if str(r.get("SHD", "")).strip() not in processed_shds]
                 _lock_signal_contracts_for_manual("reset_signal", remaining_shds, reason="login_or_server_error")
@@ -3140,7 +3230,8 @@ def run_mybae_process():
             core_login.release_inside_task("mybae")
 
     mode_label = "Chạy ngầm (Headless)" if headless else "Mở Chrome xem trực tiếp (Visible)"
-    add_log(f"=== BẮT ĐẦU AUTO BYPASS MYBAE {len(to_process)} HỢP ĐỒNG ({mode_label}) ===", "info")
+    task_log = make_task_logger(mybae_task_state, "bypass_mybae", "Bypass MyBAE")
+    task_log(f"=== BẮT ĐẦU AUTO BYPASS MYBAE {len(to_process)} HỢP ĐỒNG ({mode_label}) ===", "info")
 
     def update_sheet_remote_mybae(record, is_ok, thao_tac_val):
         cfg = core_login.load_config()
@@ -3171,15 +3262,15 @@ def run_mybae_process():
                 headers={"Content-Type": "application/json"}
             )
             urllib.request.urlopen(req, timeout=8)
-            add_log(f"Đã cập nhật Webhook Bypass MyBAE cho HĐ {record.get('SHD')}: '{thao_tac_val}'", "success")
+            task_log(f"Đã cập nhật Webhook Bypass MyBAE cho HĐ {record.get('SHD')}: '{thao_tac_val}'", "success")
         except Exception as e_hook:
-            add_log(f"Không thể đẩy Webhook Bypass MyBAE cho HĐ {record.get('SHD')}: {e_hook}", "warning")
+            task_log(f"Không thể đẩy Webhook Bypass MyBAE cho HĐ {record.get('SHD')}: {e_hook}", "warning")
 
     def worker_mybae():
         global active_mybae_bot
         bot = None
         try:
-            bot = inside_mybae.InsideMyBaeAutomation(headless=headless, keep_open=True, log_cb=add_log)
+            bot = inside_mybae.InsideMyBaeAutomation(headless=headless, keep_open=True, log_cb=task_log)
             active_mybae_bot = bot
             bot.init_driver()
             bot.navigate_to_assign_page()
@@ -3193,7 +3284,7 @@ def run_mybae_process():
                 try:
                     is_ok, thao_tac = bot.process_row(r)
                 except Exception as ex_single:
-                    add_log(f"Lỗi Bypass MyBAE HĐ {shd}: {ex_single}", "error")
+                    task_log(f"Lỗi Bypass MyBAE HĐ {shd}: {ex_single}", "error")
                     is_ok = False
                     thao_tac = inside_mybae.format_mybae_thao_tac(False, str(ex_single)[:100])
 
@@ -3211,17 +3302,17 @@ def run_mybae_process():
                     "time":       now_str,
                     "reason":     r.get("Nguyên Nhân 1", "")
                 })
-                add_log(f"Bypass MyBAE HĐ {shd}: '{thao_tac}'", "success" if is_ok else "warning", "bypass_mybae")
+                task_log(f"Bypass MyBAE HĐ {shd}: '{thao_tac}'", "success" if is_ok else "warning", "bypass_mybae")
 
                 time.sleep(2)
 
             mybae_task_state["message"] = f"Hoàn tất xử lý {len(to_process)} hợp đồng Bypass MyBAE!"
-            add_log("=== HOÀN TẤT TIẾN TRÌNH AUTO BYPASS MYBAE ===", "success")
+            task_log("=== HOÀN TẤT TIẾN TRÌNH AUTO BYPASS MYBAE ===", "success")
 
         except Exception as e:
             mybae_task_state["message"] = f"Lỗi Bypass MyBAE: {e}"
-            add_log(f"Tiến trình Bypass MyBAE bị dừng: {e}", "error")
-            core_login.invalidate_session(log_cb=add_log)  # phiên nghi ngờ hỏng/đơ -> lần sau đăng nhập mới
+            task_log(f"Tiến trình Bypass MyBAE bị dừng: {e}", "error")
+            core_login.invalidate_session(log_cb=task_log)  # phiên nghi ngờ hỏng/đơ -> lần sau đăng nhập mới
         finally:
             mybae_task_state["is_running"] = False
             if bot:
@@ -3311,15 +3402,23 @@ def spampool_manual_login():
         headless = data.get("headless", False)
         force = data.get("force", False)
 
-        add_log("=== BẮT ĐẦU XÁC THỰC ĐĂNG NHẬP RADIUS PORTAL ===", "info")
+        spampool_task_state["is_running"] = True
+        spampool_task_state["total"] = 0
+        spampool_task_state["current_index"] = 0
+        spampool_task_state["current_shd"] = ""
+        spampool_task_state["message"] = "Đang xác thực đăng nhập Radius Portal..."
+        task_log = make_task_logger(spampool_task_state, "spampool", "SpamPool")
+
+        task_log("=== BẮT ĐẦU XÁC THỰC ĐĂNG NHẬP RADIUS PORTAL ===", "info")
         try:
             ok, final_url, title = core_login.run_radius_login(
                 headless=headless,
                 keep_open=True,
-                log_callback=add_log,
+                log_callback=task_log,
                 force=force
             )
-            add_log(f"Đăng nhập thành công Radius Portal! ({final_url})", "success")
+            spampool_task_state["message"] = f"Đăng nhập thành công Radius Portal ({final_url})"
+            task_log(f"Đăng nhập thành công Radius Portal! ({final_url})", "success")
             return jsonify({
                 "status": "ok",
                 "url": final_url,
@@ -3327,9 +3426,11 @@ def spampool_manual_login():
                 "message": "Đăng nhập Radius Portal thành công!"
             })
         except Exception as e:
-            add_log(f"Đăng nhập Radius Portal thất bại: {e}", "error")
+            spampool_task_state["message"] = f"Đăng nhập Radius Portal thất bại: {e}"
+            task_log(f"Đăng nhập Radius Portal thất bại: {e}", "error")
             return jsonify({"status": "error", "message": str(e)}), 500
     finally:
+        spampool_task_state["is_running"] = False
         with radius_task_lock:
             radius_sync_busy["active"] = False
 
@@ -3381,10 +3482,19 @@ def test_single_spampool():
             pass
 
         task_name = "DEACTIVE IP 0.0.0.0" if inside_spampool.is_deactive_ip_task(tac_vu) else "SPAMPOOL"
-        add_log(f"=== BẮT ĐẦU TEST {task_name} CHO HĐ {shd} (Tác vụ: '{tac_vu}') ===", "info")
-        bot = inside_spampool.InsideSpamPoolAutomation(headless=headless, keep_open=False, log_cb=add_log)
+        spampool_task_state["is_running"] = True
+        spampool_task_state["total"] = 1
+        spampool_task_state["current_index"] = 0
+        spampool_task_state["current_shd"] = shd
+        spampool_task_state["message"] = f"Đang khởi tạo Chrome & đăng nhập cho HĐ {shd}..."
+        task_log = make_task_logger(spampool_task_state, "spampool", "SpamPool")
+
+        task_log(f"=== BẮT ĐẦU TEST {task_name} CHO HĐ {shd} (Tác vụ: '{tac_vu}') ===", "info")
+        bot = inside_spampool.InsideSpamPoolAutomation(headless=headless, keep_open=False, log_cb=task_log)
         bot.init_driver()
         bot.navigate_to_network_connection()
+        spampool_task_state["current_index"] = 1
+        spampool_task_state["message"] = f"Đang xử lý {task_name} 1/1: HĐ {shd}..."
         ok, thao_tac, ket_qua = bot.process_spampool_contract(shd, tac_vu=tac_vu)
 
         now_str = time.strftime("%d/%m/%Y %H:%M:%S")
@@ -3429,10 +3539,11 @@ def test_single_spampool():
                 )
                 with urllib.request.urlopen(req, timeout=10) as resp:
                     resp_text = resp.read().decode("utf-8", errors="ignore")
-                    add_log(f"Đã cập nhật Webhook Google Sheet cho HĐ {shd}: '{thao_tac}' | KQ: '{ket_qua}'", "success")
+                    task_log(f"Đã cập nhật Webhook Google Sheet cho HĐ {shd}: '{thao_tac}' | KQ: '{ket_qua}'", "success")
             except Exception as e_hook:
-                add_log(f"Lỗi gửi Webhook cho HĐ {shd}: {e_hook}", "warning")
+                task_log(f"Lỗi gửi Webhook cho HĐ {shd}: {e_hook}", "warning")
 
+        spampool_task_state["message"] = f"Hoàn tất HĐ {shd}: {thao_tac}"
         return jsonify({
             "status": "ok" if ok else "error",
             "shd": shd,
@@ -3440,9 +3551,11 @@ def test_single_spampool():
             "ket_qua": ket_qua
         })
     except Exception as e:
-        add_log(f"Lỗi test HĐ {shd}: {e}", "error")
+        spampool_task_state["message"] = f"Lỗi test HĐ {shd}: {e}"
+        add_log(f"[SpamPool] Lỗi test HĐ {shd}: {e}", "error", "spampool")
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
+        spampool_task_state["is_running"] = False
         if bot:
             try:
                 bot.close(force=True)
@@ -3483,8 +3596,9 @@ def start_spampool_task():
         spampool_task_state["sheet_id"] = sheet_id
         spampool_task_state["gid"] = gid
         spampool_task_state["processed_in_session"] = []
+        task_log = make_task_logger(spampool_task_state, "spampool", "SpamPool")
 
-        add_log(f"=== BẮT ĐẦU AUTO SPAMPOOL {len(to_process)} HỢP ĐỒNG ===", "info")
+        task_log(f"=== BẮT ĐẦU AUTO SPAMPOOL {len(to_process)} HỢP ĐỒNG ===", "info")
 
     def update_sheet_remote_spampool(record, thao_tac_val, ket_qua_val):
         cfg = core_login.load_config()
@@ -3512,13 +3626,13 @@ def start_spampool_task():
                 )
                 with urllib.request.urlopen(req, timeout=10) as resp:
                     resp_text = resp.read().decode("utf-8", errors="ignore")
-                    add_log(f"Đã cập nhật Webhook SpamPool cho HĐ {record.get('SHD')}: '{thao_tac_val}' | Kết quả='{ket_qua_val}'", "success")
+                    task_log(f"Đã cập nhật Webhook SpamPool cho HĐ {record.get('SHD')}: '{thao_tac_val}' | Kết quả='{ket_qua_val}'", "success")
             except Exception as e_hook:
-                add_log(f"Không thể đẩy Webhook cho HĐ {record.get('SHD')}: {e_hook}", "warning")
+                task_log(f"Không thể đẩy Webhook cho HĐ {record.get('SHD')}: {e_hook}", "warning")
 
     def worker_spampool():
         global active_spampool_bot
-        bot = inside_spampool.InsideSpamPoolAutomation(headless=headless, keep_open=False, log_cb=add_log)
+        bot = inside_spampool.InsideSpamPoolAutomation(headless=headless, keep_open=False, log_cb=task_log)
         active_spampool_bot = bot
         try:
             bot.init_driver()
@@ -3566,10 +3680,10 @@ def start_spampool_task():
                         "thao_tac": thao_tac,
                         "time": now_str
                     })
-                    add_log(f"SpamPool HĐ {shd}: Kết quả='{ket_qua}' | Thao tác='{thao_tac}'", "success", "spampool")
+                    task_log(f"SpamPool HĐ {shd}: Kết quả='{ket_qua}' | Thao tác='{thao_tac}'", "success", "spampool")
                 except Exception as ex_single:
                     err_msg = str(ex_single)[:80]
-                    add_log(f"Lỗi xử lý HĐ {shd}: {err_msg}", "error")
+                    task_log(f"Lỗi xử lý HĐ {shd}: {err_msg}", "error")
                     r["Thao Tác"] = f"Lỗi: {err_msg}"
                     r["Kết Quả"] = "Lỗi"
                     spampool_task_state["processed_in_session"].append({
@@ -3586,10 +3700,10 @@ def start_spampool_task():
                 time.sleep(2)
 
             spampool_task_state["message"] = f"Hoàn tất xử lý {len(to_process)} hợp đồng SpamPool."
-            add_log(f"=== HOÀN TẤT AUTO SPAMPOOL ({len(to_process)} HỢP ĐỒNG) ===", "success")
+            task_log(f"=== HOÀN TẤT AUTO SPAMPOOL ({len(to_process)} HỢP ĐỒNG) ===", "success")
         except Exception as e:
             spampool_task_state["message"] = f"Lỗi SpamPool: {e}"
-            add_log(f"Tiến trình SpamPool bị dừng: {e}", "error")
+            task_log(f"Tiến trình SpamPool bị dừng: {e}", "error")
         finally:
             spampool_task_state["is_running"] = False
             if bot:
@@ -3669,15 +3783,23 @@ def bypass_nat_manual_login():
         headless = data.get("headless", False)
         force = data.get("force", False)
 
-        add_log("=== BẮT ĐẦU XÁC THỰC ĐĂNG NHẬP RADIUS PORTAL (BYPASS NAT) ===", "info")
+        bypass_nat_task_state["is_running"] = True
+        bypass_nat_task_state["total"] = 0
+        bypass_nat_task_state["current_index"] = 0
+        bypass_nat_task_state["current_shd"] = ""
+        bypass_nat_task_state["message"] = "Đang xác thực đăng nhập Radius Portal (Bypass NAT)..."
+        task_log = make_task_logger(bypass_nat_task_state, "bypass_nat", "Bypass NAT")
+
+        task_log("=== BẮT ĐẦU XÁC THỰC ĐĂNG NHẬP RADIUS PORTAL (BYPASS NAT) ===", "info")
         try:
             ok, final_url, title = core_login.run_radius_login(
                 headless=headless,
                 keep_open=True,
-                log_callback=add_log,
+                log_callback=task_log,
                 force=force
             )
-            add_log(f"Đăng nhập thành công Radius Portal! ({final_url})", "success")
+            bypass_nat_task_state["message"] = f"Đăng nhập thành công Radius Portal ({final_url})"
+            task_log(f"Đăng nhập thành công Radius Portal! ({final_url})", "success")
             return jsonify({
                 "status": "ok",
                 "url": final_url,
@@ -3685,9 +3807,11 @@ def bypass_nat_manual_login():
                 "message": "Đăng nhập Radius Portal thành công!"
             })
         except Exception as e:
-            add_log(f"Đăng nhập Radius Portal thất bại: {e}", "error")
+            bypass_nat_task_state["message"] = f"Đăng nhập Radius Portal thất bại: {e}"
+            task_log(f"Đăng nhập Radius Portal thất bại: {e}", "error")
             return jsonify({"status": "error", "message": str(e)}), 500
     finally:
+        bypass_nat_task_state["is_running"] = False
         with radius_task_lock:
             radius_sync_busy["active"] = False
 
@@ -3709,10 +3833,19 @@ def test_single_bypass_nat():
         if not shd:
             return jsonify({"status": "error", "message": "Chưa cung cấp Số Hợp Đồng!"}), 400
 
-        add_log(f"=== BẮT ĐẦU TEST BYPASS NAT CHO HĐ {shd} ===", "info")
-        bot = inside_bypass_nat.InsideBypassNatAutomation(headless=headless, keep_open=False, log_cb=add_log)
+        bypass_nat_task_state["is_running"] = True
+        bypass_nat_task_state["total"] = 1
+        bypass_nat_task_state["current_index"] = 0
+        bypass_nat_task_state["current_shd"] = shd
+        bypass_nat_task_state["message"] = f"Đang khởi tạo Chrome & đăng nhập cho HĐ {shd}..."
+        task_log = make_task_logger(bypass_nat_task_state, "bypass_nat", "Bypass NAT")
+
+        task_log(f"=== BẮT ĐẦU TEST BYPASS NAT CHO HĐ {shd} ===", "info")
+        bot = inside_bypass_nat.InsideBypassNatAutomation(headless=headless, keep_open=False, log_cb=task_log)
         bot.init_driver()
         bot.navigate_to_network_connection()
+        bypass_nat_task_state["current_index"] = 1
+        bypass_nat_task_state["message"] = f"Đang xử lý Bypass NAT 1/1: HĐ {shd}..."
         ok, thao_tac, ket_qua = bot.process_bypass_nat_contract(shd, nguyen_nhan_1)
 
         # Lưu cache
@@ -3750,10 +3883,11 @@ def test_single_bypass_nat():
                 )
                 with urllib.request.urlopen(req, timeout=10) as resp:
                     resp_text = resp.read().decode("utf-8", errors="ignore")
-                    add_log(f"Đã cập nhật Webhook Google Sheet cho HĐ {shd}: '{thao_tac}' | KQ: '{ket_qua}'", "success")
+                    task_log(f"Đã cập nhật Webhook Google Sheet cho HĐ {shd}: '{thao_tac}' | KQ: '{ket_qua}'", "success")
             except Exception as e_hook:
-                add_log(f"Lỗi gửi Webhook cho HĐ {shd}: {e_hook}", "warning")
+                task_log(f"Lỗi gửi Webhook cho HĐ {shd}: {e_hook}", "warning")
 
+        bypass_nat_task_state["message"] = f"Hoàn tất HĐ {shd}: {thao_tac}"
         return jsonify({
             "status": "ok" if ok else "error",
             "shd": shd,
@@ -3761,9 +3895,11 @@ def test_single_bypass_nat():
             "ket_qua": ket_qua
         })
     except Exception as e:
-        add_log(f"Lỗi test HĐ {shd}: {e}", "error")
+        bypass_nat_task_state["message"] = f"Lỗi test HĐ {shd}: {e}"
+        add_log(f"[Bypass NAT] Lỗi test HĐ {shd}: {e}", "error", "bypass_nat")
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
+        bypass_nat_task_state["is_running"] = False
         if bot:
             try:
                 bot.close(force=True)
@@ -3804,8 +3940,9 @@ def start_bypass_nat_task():
         bypass_nat_task_state["sheet_id"] = sheet_id
         bypass_nat_task_state["gid"] = gid
         bypass_nat_task_state["processed_in_session"] = []
+        task_log = make_task_logger(bypass_nat_task_state, "bypass_nat", "Bypass NAT")
 
-        add_log(f"=== BẮT ĐẦU AUTO BYPASS NAT {len(to_process)} HỢP ĐỒNG ===", "info")
+        task_log(f"=== BẮT ĐẦU AUTO BYPASS NAT {len(to_process)} HỢP ĐỒNG ===", "info")
 
     def update_sheet_remote_bypass_nat(record, thao_tac_val, ket_qua_val):
         cfg = core_login.load_config()
@@ -3833,13 +3970,13 @@ def start_bypass_nat_task():
                 )
                 with urllib.request.urlopen(req, timeout=10) as resp:
                     resp_text = resp.read().decode("utf-8", errors="ignore")
-                    add_log(f"Đã cập nhật Webhook Bypass NAT cho HĐ {record.get('SHD')}: '{thao_tac_val}' | Kết quả='{ket_qua_val}'", "success")
+                    task_log(f"Đã cập nhật Webhook Bypass NAT cho HĐ {record.get('SHD')}: '{thao_tac_val}' | Kết quả='{ket_qua_val}'", "success")
             except Exception as e_hook:
-                add_log(f"Không thể đẩy Webhook cho HĐ {record.get('SHD')}: {e_hook}", "warning")
+                task_log(f"Không thể đẩy Webhook cho HĐ {record.get('SHD')}: {e_hook}", "warning")
 
     def worker_bypass_nat():
         global active_bypass_nat_bot
-        bot = inside_bypass_nat.InsideBypassNatAutomation(headless=headless, keep_open=False, log_cb=add_log)
+        bot = inside_bypass_nat.InsideBypassNatAutomation(headless=headless, keep_open=False, log_cb=task_log)
         active_bypass_nat_bot = bot
         try:
             bot.init_driver()
@@ -3880,10 +4017,10 @@ def start_bypass_nat_task():
                         "thao_tac": thao_tac,
                         "time": now_str
                     })
-                    add_log(f"Bypass NAT HĐ {shd}: Kết quả='{ket_qua}' | Thao tác='{thao_tac}'", "success", "bypass_nat")
+                    task_log(f"Bypass NAT HĐ {shd}: Kết quả='{ket_qua}' | Thao tác='{thao_tac}'", "success", "bypass_nat")
                 except Exception as ex_single:
                     err_msg = str(ex_single)[:80]
-                    add_log(f"Lỗi xử lý HĐ {shd}: {err_msg}", "error")
+                    task_log(f"Lỗi xử lý HĐ {shd}: {err_msg}", "error")
                     r["Thao Tác"] = f"Lỗi: {err_msg}"
                     r["Kết Quả"] = "Lỗi"
                     bypass_nat_task_state["processed_in_session"].append({
@@ -3896,10 +4033,10 @@ def start_bypass_nat_task():
                 time.sleep(2)
 
             bypass_nat_task_state["message"] = f"Hoàn tất xử lý {len(to_process)} hợp đồng Bypass NAT."
-            add_log(f"=== HOÀN TẤT AUTO BYPASS NAT ({len(to_process)} HỢP ĐỒNG) ===", "success")
+            task_log(f"=== HOÀN TẤT AUTO BYPASS NAT ({len(to_process)} HỢP ĐỒNG) ===", "success")
         except Exception as e:
             bypass_nat_task_state["message"] = f"Lỗi Bypass NAT: {e}"
-            add_log(f"Tiến trình Bypass NAT bị dừng: {e}", "error")
+            task_log(f"Tiến trình Bypass NAT bị dừng: {e}", "error")
         finally:
             bypass_nat_task_state["is_running"] = False
             if bot:
@@ -4087,10 +4224,19 @@ def test_single_port():
                 "message": thao_tac
             })
 
-        add_log(f"=== BẮT ĐẦU THU HỒI PORT CHO HĐ {shd} ===", "info")
-        bot = inside_port.InsidePortAutomation(headless=headless, keep_open=False, log_cb=add_log)
+        port_task_state["is_running"] = True
+        port_task_state["total"] = 1
+        port_task_state["current_index"] = 0
+        port_task_state["current_shd"] = shd
+        port_task_state["message"] = f"Đang khởi tạo Chrome & đăng nhập cho HĐ {shd}..."
+        task_log = make_task_logger(port_task_state, "port", "Cấp/Thu Hồi Port")
+
+        task_log(f"=== BẮT ĐẦU THU HỒI PORT CHO HĐ {shd} ===", "info")
+        bot = inside_port.InsidePortAutomation(headless=headless, keep_open=False, log_cb=task_log)
         bot.init_driver()
         bot.navigate_to_ftth_new_search()
+        port_task_state["current_index"] = 1
+        port_task_state["message"] = f"Đang xử lý Thu hồi Port 1/1: HĐ {shd}..."
         ok, thao_tac = bot.process_port_contract(shd, tac_vu=tac_vu)
         now_str = time.strftime("%d/%m/%Y %H:%M:%S")
         tap_diem_val = bot.last_tap_diem
@@ -4121,6 +4267,7 @@ def test_single_port():
             ket_qua_val=kq_val
         )
 
+        port_task_state["message"] = f"Hoàn tất HĐ {shd}: {thao_tac}"
         return jsonify({
             "status": "ok" if ok else "error",
             "shd": shd,
@@ -4130,9 +4277,11 @@ def test_single_port():
             "message": thao_tac
         })
     except Exception as e:
-        add_log(f"Lỗi xử lý Thu hồi Port HĐ {shd}: {e}", "error")
+        port_task_state["message"] = f"Lỗi xử lý Thu hồi Port HĐ {shd}: {e}"
+        add_log(f"[Cấp/Thu Hồi Port] Lỗi xử lý Thu hồi Port HĐ {shd}: {e}", "error", "port")
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
+        port_task_state["is_running"] = False
         if bot:
             try:
                 bot.close(force=True)
@@ -4181,8 +4330,9 @@ def start_port_auto():
         port_task_state["sheet_id"] = sheet_id
         port_task_state["gid"] = gid
         port_task_state["processed_in_session"] = []
+        task_log = make_task_logger(port_task_state, "port", "Cấp/Thu Hồi Port")
 
-        add_log(f"=== BẮT ĐẦU AUTO THU HỒI PORT ({len(to_process)} YÊU CẦU) ===", "info")
+        task_log(f"=== BẮT ĐẦU AUTO THU HỒI PORT ({len(to_process)} YÊU CẦU) ===", "info")
 
     def worker_port():
         global active_port_bot
@@ -4199,12 +4349,12 @@ def start_port_auto():
                 tap_diem_in = str(r.get("Tập Điểm", "")).strip()
                 port_in = str(r.get("Port", "")).strip()
 
-                port_task_state["current_index"] = idx + 1
                 port_task_state["current_shd"] = shd or tap_diem_in or f"ID {row_id}"
-                port_task_state["message"] = f"Đang xử lý Thu hồi Port {idx + 1}/{len(to_process)}: {shd or tap_diem_in}..."
 
                 # Trường hợp dòng chỉ có Tập điểm và Port, cột SHD để trống
                 if not shd:
+                    port_task_state["current_index"] = idx + 1
+                    port_task_state["message"] = f"Đang xử lý Thu hồi Port {idx + 1}/{len(to_process)}: {tap_diem_in or row_id}..."
                     now_str = time.strftime("%d/%m/%Y %H:%M:%S")
                     thao_tac = inside_port.PORT_NO_SHD_MSG
                     r["Thao Tác"] = thao_tac
@@ -4244,19 +4394,24 @@ def start_port_auto():
                         "thao_tac": thao_tac,
                         "time": now_str
                     })
-                    add_log(f"⚠️ Dòng ID={row_id} (Tập điểm={tap_diem_in}, Port={port_in}) trống SHD -> {thao_tac}", "warning", "port")
+                    task_log(f"⚠️ Dòng ID={row_id} (Tập điểm={tap_diem_in}, Port={port_in}) trống SHD -> {thao_tac}", "warning", "port")
                     time.sleep(0.5)
                     continue
 
                 try:
                     if not driver_ready:
-                        bot = inside_port.InsidePortAutomation(headless=headless, keep_open=False, log_cb=add_log)
+                        port_task_state["current_index"] = 0
+                        bot = inside_port.InsidePortAutomation(headless=headless, keep_open=False, log_cb=task_log)
                         active_port_bot = bot
                         bot.init_driver()
                         bot.navigate_to_ftth_new_search()
                         driver_ready = True
                     else:
+                        port_task_state["current_index"] = idx + 1
                         bot.navigate_to_ftth_new_search()
+
+                    port_task_state["current_index"] = idx + 1
+                    port_task_state["message"] = f"Đang xử lý Thu hồi Port {idx + 1}/{len(to_process)}: {shd or tap_diem_in}..."
 
                     ok, thao_tac = bot.process_port_contract(shd, tac_vu=tac_vu)
                     now_str = time.strftime("%d/%m/%Y %H:%M:%S")
@@ -4305,10 +4460,10 @@ def start_port_auto():
                         "thao_tac": thao_tac,
                         "time": now_str
                     })
-                    add_log(f"Thu hồi Port HĐ {shd}: Thao tác='{thao_tac}'", "success", "port")
+                    task_log(f"Thu hồi Port HĐ {shd}: Thao tác='{thao_tac}'", "success", "port")
                 except Exception as ex_single:
                     err_msg = str(ex_single)[:80]
-                    add_log(f"Lỗi xử lý Thu hồi Port HĐ {shd}: {err_msg}", "error")
+                    task_log(f"Lỗi xử lý Thu hồi Port HĐ {shd}: {err_msg}", "error")
                     r["Thao Tác"] = f"Lỗi: {err_msg}"
                     port_task_state["processed_in_session"].append({
                         "shd": shd,
@@ -4319,10 +4474,10 @@ def start_port_auto():
                 time.sleep(1.5)
 
             port_task_state["message"] = f"Hoàn tất xử lý {len(to_process)} yêu cầu Thu hồi Port."
-            add_log(f"=== HOÀN TẤT AUTO THU HỒI PORT ({len(to_process)} YÊU CẦU) ===", "success")
+            task_log(f"=== HOÀN TẤT AUTO THU HỒI PORT ({len(to_process)} YÊU CẦU) ===", "success")
         except Exception as e:
             port_task_state["message"] = f"Lỗi Thu hồi Port: {e}"
-            add_log(f"Tiến trình Thu hồi Port bị dừng: {e}", "error")
+            task_log(f"Tiến trình Thu hồi Port bị dừng: {e}", "error")
         finally:
             port_task_state["is_running"] = False
             if bot:
@@ -4453,11 +4608,38 @@ def _auto_task_states():
 def auto_overview_api():
     """Tổng quan: số HĐ xử lý hôm nay (Today) - chờ xử lý từng tab, tiến trình đang chạy, nhật ký Auto gần nhất."""
     running = None
-    for key, label, st in _auto_task_states():
+    all_states = list(_auto_task_states()) + [
+        ("retrieval", "Lấy Thông Tin", retrieval_task),
+    ]
+    for key, label, st in all_states:
         if st.get("is_running"):
-            running = {"tab": key, "label": label, "current": st.get("current_index", 0),
-                       "total": st.get("total", 0), "shd": st.get("current_shd", ""), "message": st.get("message", "")}
+            shd_val = st.get("current_shd") or st.get("current_contract") or ""
+            running = {
+                "tab": key,
+                "label": label,
+                "name": label,
+                "current": st.get("current_index", 0),
+                "total": st.get("total", 0),
+                "shd": shd_val,
+                "message": st.get("message", ""),
+                "step": st.get("current_step") or st.get("message", ""),
+                "step_time": st.get("step_time", ""),
+                "recent_steps": list(st.get("recent_steps") or [])[-5:],
+            }
             break
+    if running is None and task_state.get("status") == "running":
+        running = {
+            "tab": "login",
+            "label": "Đăng Nhập Inside",
+            "name": "Đăng Nhập Inside",
+            "current": 0,
+            "total": 1,
+            "shd": task_state.get("user", ""),
+            "message": task_state.get("message", ""),
+            "step": task_state.get("current_step") or task_state.get("message", ""),
+            "step_time": task_state.get("step_time", ""),
+            "recent_steps": list(task_state.get("recent_steps") or [])[-5:],
+        }
     tabs = AUTO_OVERVIEW["tabs"]
     with log_lock:
         recent = list(log_history[-80:])[::-1]

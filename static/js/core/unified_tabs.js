@@ -164,14 +164,14 @@ window.UnifiedWorkTabs = (function() {
           Hiển thị <strong class="text-slate-800">${startIdx + 1} - ${endIdx}</strong> / <strong class="text-slate-800">${total}</strong> HĐ
           <span class="text-slate-400 text-[11px] ml-1">(Trang ${currentPage}/${totalPages} • 10 dòng/trang)</span>
         </div>
-        <div class="flex items-center gap-1">
-          <button type="button" class="pg-btn pg-first px-2 h-7 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs text-slate-600 font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer" data-page="1" ${currentPage === 1 ? 'disabled' : ''} title="Trang đầu">«</button>
-          <button type="button" class="pg-btn pg-prev px-2.5 h-7 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs text-slate-600 font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer" data-page="${currentPage - 1}" ${currentPage === 1 ? 'disabled' : ''} title="Trang trước">‹ Trước</button>
+        <div class="flex items-center gap-1" role="navigation" aria-label="Phân trang bảng dữ liệu">
+          <button type="button" class="pg-btn pg-first px-2 h-7 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs text-slate-600 font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer" data-page="1" ${currentPage === 1 ? 'disabled' : ''} title="Trang đầu" aria-label="Trang đầu">«</button>
+          <button type="button" class="pg-btn pg-prev px-2.5 h-7 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs text-slate-600 font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer" data-page="${currentPage - 1}" ${currentPage === 1 ? 'disabled' : ''} title="Trang trước" aria-label="Trang trước">‹ Trước</button>
           <div class="flex items-center gap-1 mx-0.5">
             ${pagesHtml}
           </div>
-          <button type="button" class="pg-btn pg-next px-2.5 h-7 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs text-slate-600 font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer" data-page="${currentPage + 1}" ${currentPage === totalPages ? 'disabled' : ''} title="Trang sau">Sau ›</button>
-          <button type="button" class="pg-btn pg-last px-2 h-7 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs text-slate-600 font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer" data-page="${totalPages}" ${currentPage === totalPages ? 'disabled' : ''} title="Trang cuối">»</button>
+          <button type="button" class="pg-btn pg-next px-2.5 h-7 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs text-slate-600 font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer" data-page="${currentPage + 1}" ${currentPage === totalPages ? 'disabled' : ''} title="Trang sau" aria-label="Trang sau">Sau ›</button>
+          <button type="button" class="pg-btn pg-last px-2 h-7 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs text-slate-600 font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer" data-page="${totalPages}" ${currentPage === totalPages ? 'disabled' : ''} title="Trang cuối" aria-label="Trang cuối">»</button>
         </div>
       </div>
     `;
@@ -408,36 +408,72 @@ window.UnifiedWorkTabs = (function() {
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          interaction: {
+            mode: 'index',
+            intersect: false
+          },
           plugins: {
             legend: {
               position: 'top',
               labels: {
-                boxWidth: 10,
-                font: { size: 11, family: "'Google Sans', Roboto, sans-serif" }
+                boxWidth: 12,
+                boxHeight: 12,
+                usePointStyle: true,
+                pointStyle: 'rectRounded',
+                padding: 14,
+                font: { size: 12, weight: '600', family: "'Google Sans', Roboto, sans-serif" }
               }
             },
             tooltip: {
-              backgroundColor: '#1e293b',
-              padding: 10,
+              backgroundColor: '#0f172a',
+              padding: 11,
               cornerRadius: 8,
-              titleFont: { size: 12 },
-              bodyFont: { size: 11 }
+              titleFont: { size: 12, weight: '700' },
+              bodyFont: { size: 12 },
+              footerFont: { size: 11, weight: '600' },
+              callbacks: {
+                title: function(items) {
+                  return items && items.length ? `Ngày: ${items[0].label}` : '';
+                },
+                label: function(ctx) {
+                  const val = ctx.parsed.y || 0;
+                  return ` ${ctx.dataset.label}: ${val} HĐ`;
+                },
+                footer: function(items) {
+                  if (!items || !items.length) return '';
+                  const sum = items.reduce((acc, it) => acc + (it.parsed.y || 0), 0);
+                  return `Tổng trong ngày: ${sum} HĐ`;
+                }
+              }
             }
           },
           scales: {
             x: {
               stacked: true,
               grid: { display: false },
-              ticks: { font: { size: 10 } }
+              title: {
+                display: true,
+                text: 'Ngày cập nhật (DD/MM)',
+                color: '#64748b',
+                font: { size: 11, weight: '600' }
+              },
+              ticks: { font: { size: 11, weight: '500' }, color: '#475569' }
             },
             y: {
               stacked: true,
               beginAtZero: true,
+              title: {
+                display: true,
+                text: 'Số lượng HĐ',
+                color: '#64748b',
+                font: { size: 11, weight: '600' }
+              },
               ticks: {
                 precision: 0,
-                font: { size: 10 }
+                font: { size: 11 },
+                color: '#475569'
               },
-              grid: { color: '#f1f5f9' }
+              grid: { color: '#e2e8f0' }
             }
           }
         }

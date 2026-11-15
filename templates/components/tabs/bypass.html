@@ -93,7 +93,10 @@
             <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
               <div>
                 <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Tổng Dòng Trên Sheet</div>
-                <div class="text-2xl font-bold text-slate-900 mt-1" id="sheetStatTotal">0</div>
+                <div class="flex items-baseline gap-2 mt-1">
+                  <div class="text-2xl font-bold text-slate-900" id="sheetStatTotal">0</div>
+                  <span class="kpi-scope-badge">Toàn Sheet</span>
+                </div>
                 <div class="text-[11px] text-slate-500 mt-0.5">Bản ghi cần theo dõi</div>
               </div>
               <div class="w-11 h-11 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center text-xl shrink-0">
@@ -104,7 +107,10 @@
             <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
               <div>
                 <div class="text-[11px] font-semibold uppercase tracking-wider text-amber-500">Chờ Xử Lý (Chưa Chạy)</div>
-                <div class="text-2xl font-bold text-amber-600 mt-1" id="sheetStatPending">0</div>
+                <div class="flex items-baseline gap-2 mt-1">
+                  <div class="text-2xl font-bold text-amber-600" id="sheetStatPending">0</div>
+                  <span class="kpi-scope-badge">Toàn Sheet</span>
+                </div>
                 <div class="text-[11px] text-amber-600 font-medium mt-0.5">● Cần ByPass trên Inside</div>
               </div>
               <div class="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl shrink-0">
@@ -115,7 +121,10 @@
             <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
               <div>
                 <div class="text-[11px] font-semibold uppercase tracking-wider text-emerald-600">Đã Xử Lý Thành Công</div>
-                <div class="text-2xl font-bold text-emerald-600 mt-1" id="sheetStatDone">0</div>
+                <div class="flex items-baseline gap-2 mt-1">
+                  <div class="text-2xl font-bold text-emerald-600" id="sheetStatDone">0</div>
+                  <span class="kpi-scope-badge">Toàn Sheet</span>
+                </div>
                 <div class="text-[11px] text-emerald-600 font-medium mt-0.5">✓ Đã lưu thành công</div>
               </div>
               <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl shrink-0">
@@ -129,6 +138,7 @@
                 <div class="flex items-baseline gap-2 mt-1">
                   <span class="text-2xl font-bold text-rose-600" id="sheetStatHauKiemFail">0</span>
                   <span class="text-xs text-slate-500 font-medium">/ <span id="sheetStatHauKiemPass" class="text-emerald-600 font-bold">0</span> Đạt</span>
+                  <span class="kpi-scope-badge">Toàn Sheet</span>
                 </div>
                 <div class="text-[11px] text-rose-600 font-medium mt-0.5" id="sheetStatHauKiemFailPct">Tỷ lệ không đạt: 0%</div>
               </div>
@@ -140,7 +150,10 @@
             <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
               <div>
                 <div class="text-[11px] font-semibold uppercase tracking-wider text-blue-600">Phiên Thao Tác Inside</div>
-                <div class="text-sm font-bold text-slate-800 mt-1 truncate max-w-[120px]" id="bypassSessionStatus">Đang kiểm tra...</div>
+                <div class="flex items-center gap-1.5 mt-1">
+                  <div class="text-sm font-bold text-slate-800 truncate max-w-[120px]" id="bypassSessionStatus">Đang kiểm tra...</div>
+                  <span class="kpi-scope-badge">Toàn hệ thống</span>
+                </div>
                 <div class="text-[11px] text-slate-400 mt-0.5">Tài khoản kết nối</div>
               </div>
               <div class="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl shrink-0">
@@ -260,7 +273,7 @@
                     <th style="width: 135px; text-align: center;">Hậu Kiểm</th>
                     <th style="width: 35px;">STT</th>
                     <th>Tác Vụ</th>
-                    <th>Số Hợp Đồng (SHD)</th>
+                    <th class="col-sticky-shd">Số Hợp Đồng (SHD)</th>
                     <th>Email NVKT</th>
                     <th>Tình Trạng (NN 1)</th>
                     <th>Lý Do ByPass (NN 2)</th>

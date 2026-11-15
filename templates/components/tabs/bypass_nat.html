@@ -54,7 +54,7 @@
 
               <!-- Test nhanh 1 HĐ -->
               <div class="hidden sm:flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-xl border border-slate-200">
-                <input type="text" id="inputBypassNatSingleSHD" placeholder="Test 1 HĐ..."
+                <input type="text" id="inputBypassNatSingleSHD" placeholder="Nhập SHD test..." aria-label="Nhập số hợp đồng để test nhanh"
                   class="w-24 px-1.5 py-0.5 bg-transparent border-none text-xs font-mono uppercase focus:outline-none text-slate-700">
                 <button type="button" class="px-2 py-0.5 bg-indigo-100 hover:bg-indigo-200 text-indigo-800 rounded text-[11px] font-semibold cursor-pointer" id="btnTestSingleBypassNat">
                   Test
@@ -116,37 +116,49 @@
           <!-- 1. CÁC CARD THỐNG KÊ NẰM TRÊN ĐẦU (KPI) -->
           <!-- ========================================== -->
           <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
               <div>
                 <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Tổng Số HĐ</div>
-                <div class="text-2xl font-bold text-slate-900 mt-1" id="bypassNatStatTotal">0</div>
+                <div class="flex items-baseline gap-2 mt-1">
+                  <div class="text-2xl font-bold text-slate-900" id="bypassNatStatTotal">0</div>
+                  <span class="kpi-scope-badge">Toàn Sheet</span>
+                </div>
                 <div class="text-[11px] text-slate-500 mt-0.5">Tổng bản ghi trên Sheet</div>
               </div>
               <div class="w-11 h-11 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center text-xl">📑</div>
             </div>
 
-            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
               <div>
                 <div class="text-[11px] font-semibold uppercase tracking-wider text-amber-500">Chờ Xử Lý</div>
-                <div class="text-2xl font-bold text-amber-600 mt-1" id="bypassNatStatPending">0</div>
+                <div class="flex items-baseline gap-2 mt-1">
+                  <div class="text-2xl font-bold text-amber-600" id="bypassNatStatPending">0</div>
+                  <span class="kpi-scope-badge scope-filtered" data-scope-select="selectDateFilterBypassNat">Theo bộ lọc: Hôm nay</span>
+                </div>
                 <div class="text-[11px] text-amber-600 font-medium mt-0.5">● Chưa cập nhật trên Radius</div>
               </div>
               <div class="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl">⏳</div>
             </div>
 
-            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
               <div>
                 <div class="text-[11px] font-semibold uppercase tracking-wider text-emerald-600">Thành Công</div>
-                <div class="text-2xl font-bold text-emerald-600 mt-1" id="bypassNatStatDone">0</div>
+                <div class="flex items-baseline gap-2 mt-1">
+                  <div class="text-2xl font-bold text-emerald-600" id="bypassNatStatDone">0</div>
+                  <span class="kpi-scope-badge scope-filtered" data-scope-select="selectDateFilterBypassNat">Theo bộ lọc: Hôm nay</span>
+                </div>
                 <div class="text-[11px] text-emerald-600 font-medium mt-0.5">✓ ByPass NAT / Đã có trước đó</div>
               </div>
               <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">✅</div>
             </div>
 
-            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
               <div>
                 <div class="text-[11px] font-semibold uppercase tracking-wider text-rose-500">Thất Bại / Lỗi</div>
-                <div class="text-2xl font-bold text-rose-600 mt-1" id="bypassNatStatError">0</div>
+                <div class="flex items-baseline gap-2 mt-1">
+                  <div class="text-2xl font-bold text-rose-600" id="bypassNatStatError">0</div>
+                  <span class="kpi-scope-badge scope-filtered" data-scope-select="selectDateFilterBypassNat">Theo bộ lọc: Hôm nay</span>
+                </div>
                 <div class="text-[11px] text-rose-500 mt-0.5">✕ Lỗi thao tác / Không tìm thấy</div>
               </div>
               <div class="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center text-xl">⚠️</div>
@@ -220,7 +232,7 @@
                     <th class="p-3 w-12 text-center">STT</th>
                     <th class="p-3">Tác Vụ</th>
                     <th class="p-3">Email</th>
-                    <th class="p-3 font-semibold text-slate-800">Số Hợp Đồng (SHD)</th>
+                    <th class="p-3 font-semibold text-slate-800 col-sticky-shd">Số Hợp Đồng (SHD)</th>
                     <th class="p-3">Nguyên Nhân 1</th>
                     <th class="p-3">Ngày Cập Nhật</th>
                     <th class="p-3 text-center">Kết Quả</th>

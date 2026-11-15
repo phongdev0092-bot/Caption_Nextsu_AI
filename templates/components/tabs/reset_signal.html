@@ -100,37 +100,49 @@
           <!-- 1. CÁC CARD THỐNG KÊ NẰM TRÊN ĐẦU (KPI) -->
           <!-- ========================================== -->
           <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
               <div>
                 <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Tổng Số HĐ</div>
-                <div class="text-2xl font-bold text-slate-900 mt-1" id="resetSignalStatTotal">0</div>
+                <div class="flex items-baseline gap-2 mt-1">
+                  <div class="text-2xl font-bold text-slate-900" id="resetSignalStatTotal">0</div>
+                  <span class="kpi-scope-badge">Toàn Sheet</span>
+                </div>
                 <div class="text-[11px] text-slate-500 mt-0.5">Tổng bản ghi trên Sheet</div>
               </div>
               <div class="w-11 h-11 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center text-xl">📑</div>
             </div>
 
-            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
               <div>
                 <div class="text-[11px] font-semibold uppercase tracking-wider text-amber-500">Chờ Xử Lý</div>
-                <div class="text-2xl font-bold text-amber-600 mt-1" id="resetSignalStatPending">0</div>
+                <div class="flex items-baseline gap-2 mt-1">
+                  <div class="text-2xl font-bold text-amber-600" id="resetSignalStatPending">0</div>
+                  <span class="kpi-scope-badge scope-filtered" data-scope-select="selectDateFilterResetSignal">Theo bộ lọc: Hôm nay</span>
+                </div>
                 <div class="text-[11px] text-amber-600 font-medium mt-0.5">● Cần thực hiện</div>
               </div>
               <div class="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl">⏳</div>
             </div>
 
-            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
               <div>
                 <div class="text-[11px] font-semibold uppercase tracking-wider text-emerald-600">Thành Công</div>
-                <div class="text-2xl font-bold text-emerald-600 mt-1" id="resetSignalStatDone">0</div>
+                <div class="flex items-baseline gap-2 mt-1">
+                  <div class="text-2xl font-bold text-emerald-600" id="resetSignalStatDone">0</div>
+                  <span class="kpi-scope-badge scope-filtered" data-scope-select="selectDateFilterResetSignal">Theo bộ lọc: Hôm nay</span>
+                </div>
                 <div class="text-[11px] text-emerald-600 font-medium mt-0.5">✓ Đã cấp tín hiệu</div>
               </div>
               <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">✅</div>
             </div>
 
-            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+            <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
               <div>
                 <div class="text-[11px] font-semibold uppercase tracking-wider text-rose-500">Thất Bại / Lỗi</div>
-                <div class="text-2xl font-bold text-rose-600 mt-1" id="resetSignalStatError">0</div>
+                <div class="flex items-baseline gap-2 mt-1">
+                  <div class="text-2xl font-bold text-rose-600" id="resetSignalStatError">0</div>
+                  <span class="kpi-scope-badge scope-filtered" data-scope-select="selectDateFilterResetSignal">Theo bộ lọc: Hôm nay</span>
+                </div>
                 <div class="text-[11px] text-rose-500 mt-0.5">✕ Cần kiểm tra lại phiếu / SHD</div>
               </div>
               <div class="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center text-xl">⚠️</div>
@@ -202,12 +214,12 @@
                 <thead class="sticky top-0 bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 z-10">
                   <tr>
                     <th class="p-3 w-10 text-center">
-                      <input type="checkbox" id="chkResetSignalSelectAll" class="rounded text-purple-600" checked>
+                      <input type="checkbox" id="chkResetSignalSelectAll" class="rounded text-purple-600" aria-label="Chọn tất cả" checked>
                     </th>
                     <th class="p-3 w-12 text-center">STT</th>
                     <th class="p-3 font-semibold text-slate-800">Họ và Tên</th>
                     <th class="p-3 text-slate-600">Email NVKT</th>
-                    <th class="p-3 font-semibold text-slate-800">Số Hợp Đồng (SHD)</th>
+                    <th class="p-3 font-semibold text-slate-800 col-sticky-shd">Số Hợp Đồng (SHD)</th>
                     <th class="p-3 text-slate-600">Ngày Cập Nhật</th>
                     <th class="p-3 text-center">Nguồn</th>
                     <th class="p-3 text-center">Kết Quả</th>

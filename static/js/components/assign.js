@@ -518,8 +518,9 @@ function renderAssignTerminalLogs(logs) {
   if (!logs || logs.length === 0) return;
 
   const relevant = logs.filter(l => {
+    const tid = (l.task_id || '').toLowerCase();
     const txt = (l.text || '').toLowerCase();
-    return txt.includes('phân công') || txt.includes('assign') || txt.includes('đăng nhập') || txt.includes('phiên') || txt.includes('inside');
+    return tid === 'manual_assign' || tid === 'assign' || tid === 'login' || txt.includes('phân công') || txt.includes('assign') || txt.includes('đăng nhập') || txt.includes('phiên') || txt.includes('inside');
   });
   const displayLogs = (relevant.length > 0 ? relevant : logs).slice(-40);
   assignLogTerminal.innerHTML = '';

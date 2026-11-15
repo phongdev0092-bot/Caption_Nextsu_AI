@@ -26,8 +26,14 @@
   .am-run{margin:10px 12px 0;padding:10px 12px;border-radius:12px;font-size:12px}
   .am-run.on{background:#fff7ed;border:1px solid #fdba74;color:#9a3412}
   .am-run.off{background:#f0fdf4;border:1px solid #86efac;color:#166534}
+  .am-step-box{margin-top:6px;padding:6px 9px;border-radius:8px;background:rgba(255,255,255,.85);border:1px solid #fed7aa;color:#7c2d12;font-size:11.5px;line-height:1.4}
+  .am-step-box .am-step-lbl{font-weight:700;color:#ea580c;text-transform:uppercase;font-size:10px;letter-spacing:.03em;margin-right:4px}
+  .am-step-trail{margin-top:5px;padding-top:4px;border-top:1px dashed #fdba74;font-size:10.5px;color:#9a3412;opacity:.9}
+  .am-step-trail div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:1px 0}
   .am-bar{height:6px;border-radius:6px;background:#fed7aa;margin-top:6px;overflow:hidden}
   .am-bar i{display:block;height:100%;background:#f97316;transition:width .4s}
+  .am-bar i.indeterminate{width:35%!important;animation:amIndet 1.2s infinite ease-in-out}
+  @keyframes amIndet{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}
   .am-tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:10px 12px}
   .am-tab{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:7px 10px;border-radius:10px;background:#f8fafc;border:1px solid #e2e8f0;font-size:11.5px;color:#334155}
   .am-tab .am-counts{display:inline-flex;align-items:center;gap:4px;flex-shrink:0}
@@ -76,13 +82,30 @@
 
   const $ = id => document.getElementById(id);
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  $('autoMonBtn').addEventListener('click', () => $('autoMonPanel').classList.toggle('open'));
+  const logKey = l => l ? (l.seq ? `seq:${l.seq}` : `${l.date || ''}|${l.time || ''}|${l.text || ''}`) : '';
 
-  let logsCleared = false;
+  let latestRawLogs = [];
+  let clearedMarkerKey = '';
+  let lastRenderedNewestKey = '';
+
+  $('autoMonBtn').addEventListener('click', () => {
+    const panel = $('autoMonPanel');
+    panel.classList.toggle('open');
+    if (panel.classList.contains('open')) {
+      const box = $('amLogs');
+      if (box) box.scrollTop = box.scrollHeight;
+    }
+  });
+
   $('amClearLogsBtn')?.addEventListener('click', (e) => {
     e.stopPropagation();
-    logsCleared = true;
-    $('amLogs').innerHTML = '<div style="color:#94a3b8;font-style:italic">Đã làm sạch nhật ký trên màn hình</div>';
+    if (latestRawLogs.length > 0) {
+      clearedMarkerKey = logKey(latestRawLogs[0]);
+    } else {
+      clearedMarkerKey = '__CLEARED_EMPTY__';
+    }
+    lastRenderedNewestKey = '';
+    $('amLogs').innerHTML = '<div style="color:#94a3b8;font-style:italic">Đã làm sạch nhật ký — các bước mới sẽ hiển thị trực tiếp tại đây...</div>';
   });
 
   const ORDER = ['bypass', 'cls', 'assign', 'clear_signal', 'reset_signal', 'mybae', 'spampool', 'bypass_nat', 'port'];
@@ -95,6 +118,9 @@
       const run = d.running;
       const totalToday = d.total_today || 0;
       const totalPending = d.total_pending || 0;
+      // /api/auto/overview trả về d.logs theo thứ tự mới nhất ở đầu (index 0), cũ nhất ở cuối
+      const rawLogsNewestFirst = Array.isArray(d.logs) ? d.logs : [];
+      latestRawLogs = rawLogsNewestFirst;
 
       $('amToday').textContent = `${totalToday} Today`;
       $('amTotal').textContent = `${totalPending} Chờ`;
@@ -103,18 +129,60 @@
 
       const btn = $('autoMonBtn');
       btn.classList.toggle('busy', !!run);
+      const runLabel = run ? (run.label || run.name || 'Tác vụ') : '';
+      const runProgressBadge = run
+        ? (run.current > 0 && run.total > 0 ? `${run.current}/${run.total}` : (run.total > 0 ? `Chuẩn bị ${run.total} HĐ` : 'Đang chạy'))
+        : '';
       $('amBtnText').textContent = run
-        ? `Đang chạy ${run.label} ${run.current}/${run.total} · ${totalToday} Today - ${totalPending} Chờ`
+        ? `⚙️ ${runLabel} (${runProgressBadge}) · ${totalToday} Today - ${totalPending} Chờ`
         : `Auto BOT: ${totalToday} Today - ${totalPending} Chờ`;
 
       const runEl = $('amRun');
       if (run) {
-        const pct = run.total ? Math.round(run.current / run.total * 100) : 0;
+        // Lấy bước thực tế mới nhất từ run.step hoặc trực tiếp từ dòng log mới nhất (d.logs[0])
+        const recentStepLogs = rawLogsNewestFirst.filter(l => l && l.text && !String(l.text).trim().startsWith('==='));
+        const newestLog = recentStepLogs[0] || rawLogsNewestFirst[0] || null;
+        const isGenericStartMsg = !run.step || /^bắt đầu xử lý/i.test(String(run.step).trim());
+        const liveStep = (!isGenericStartMsg && run.step)
+          ? run.step
+          : (newestLog ? newestLog.text : (run.message || 'Đang khởi tạo tiến trình...'));
+        const stepTimeVal = (!isGenericStartMsg && run.step_time)
+          ? run.step_time
+          : (newestLog ? (newestLog.time || '') : '');
+        const stepTime = stepTimeVal ? `[${esc(stepTimeVal)}] ` : '';
+
+        // Phát hiện nếu bot đã bước sang xử lý HĐ thông qua log (kể cả khi server cũ chưa cập nhật current_index)
+        const isPrep = (run.current || 0) === 0 && !recentStepLogs.slice(0, 6).some(l =>
+          (run.shd && String(l.text).includes(run.shd)) || /bước\s*[2-7]|phân tuyến|phiếu thi công|nhập shd|điền số hợp đồng/i.test(String(l.text))
+        );
+        const effCurrent = isPrep ? 0 : Math.max(1, run.current || 1);
+        const pct = (!isPrep && run.total) ? Math.min(100, Math.round(effCurrent / run.total * 100)) : 0;
+
+        let trail = [];
+        if (Array.isArray(run.recent_steps) && run.recent_steps.length > 1) {
+          trail = run.recent_steps.slice(-4, -1).reverse();
+        } else if (recentStepLogs.length > 1) {
+          trail = recentStepLogs.slice(1, 4).map(l => ({ time: l.time, step: l.text }));
+        }
+        const trailHtml = trail.length
+          ? `<div class="am-step-trail">${trail.map(s => `<div>✓ <span style="opacity:.75">[${esc(s.time || '')}]</span> ${esc(s.step || '')}</div>`).join('')}</div>`
+          : '';
+        const countText = isPrep
+          ? (run.total > 0 ? `Đang chuẩn bị (${run.total} HĐ)` : 'Đang thực thi')
+          : `${effCurrent}/${run.total} HĐ (${pct}%)`;
+
         runEl.className = 'am-run on';
-        runEl.innerHTML = `⚙️ <b>Đang xử lý: ${esc(run.label)}</b> — ${run.current}/${run.total} HĐ
-          ${run.shd ? `<br>HĐ hiện tại: <b>${esc(run.shd)}</b>` : ''}
-          <div style="margin-top:4px;opacity:.85">${esc(run.message)}</div>
-          <div class="am-bar"><i style="width:${pct}%"></i></div>`;
+        runEl.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <span>⚙️ <b>${esc(runLabel)}</b></span>
+            <span style="font-weight:700;font-size:11px;padding:1px 7px;border-radius:999px;background:#ffedd5;border:1px solid #fdba74">${esc(countText)}</span>
+          </div>
+          ${run.shd ? `<div style="margin-top:3px;font-size:11.5px">HĐ đang xử lý: <b style="font-family:Consolas,monospace;color:#c2410c">${esc(run.shd)}</b></div>` : ''}
+          <div class="am-step-box">
+            <span class="am-step-lbl">▶ Bước hiện tại:</span>
+            <span style="font-family:Consolas,monospace;font-size:10.5px;color:#9a3412">${stepTime}</span><b>${esc(liveStep)}</b>
+          </div>
+          <div class="am-bar"><i class="${isPrep ? 'indeterminate' : ''}" style="width:${pct}%"></i></div>
+          ${trailHtml}`;
       } else {
         runEl.className = 'am-run off';
         runEl.textContent = totalPending ? '⏳ Rảnh — sẽ tự chạy ở lần quét kế tiếp' : `✅ Hệ thống đang rảnh (${totalToday} tác vụ xử lý hôm nay)`;
@@ -125,8 +193,9 @@
         const tip = (t.shds || []).join(', ');
         const todayCnt = t.today || 0;
         const pendCnt = t.pending || 0;
+        const tabName = t.label || t.name || k;
         return `<div class="am-tab ${pendCnt ? 'has' : ''} ${t.auto ? '' : 'off'}" title="${esc(tip || `Hôm nay: ${todayCnt} | Chờ: ${pendCnt}`)}">
-          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.label)}${t.auto ? '' : ' (tắt)'}</span>
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(tabName)}${t.auto ? '' : ' (tắt)'}</span>
           <span class="am-counts">
             <b class="today" title="Số tác vụ xử lý hôm nay (Today)">${todayCnt}</b>
             <span style="color:#94a3b8;font-weight:700">-</span>
@@ -135,10 +204,34 @@
         </div>`;
       }).join('');
 
-      if (!logsCleared) {
-        $('amLogs').innerHTML = (d.logs || []).map(l =>
-          `<div class="${esc(l.level)}"><span class="t">${esc(l.time)}</span>${esc(l.text)}</div>`).join('') ||
-          '<div style="color:#94a3b8">Chưa có nhật ký</div>';
+      // Lọc các dòng nhật ký sau thời điểm bấm nút "🧹 Xóa" (hoạt động cả khi có và chưa có l.seq)
+      let filteredNewestFirst = rawLogsNewestFirst;
+      if (clearedMarkerKey) {
+        if (clearedMarkerKey === '__CLEARED_EMPTY__') {
+          filteredNewestFirst = rawLogsNewestFirst;
+        } else {
+          const cutIdx = rawLogsNewestFirst.findIndex(l => logKey(l) === clearedMarkerKey);
+          filteredNewestFirst = cutIdx !== -1 ? rawLogsNewestFirst.slice(0, cutIdx) : rawLogsNewestFirst;
+        }
+      }
+
+      // Đảo lại theo đúng chuẩn Terminal: dòng cũ ở trên -> dòng mới nhất ở dưới cùng
+      const chronologicalLogs = filteredNewestFirst.slice(0, 60).slice().reverse();
+      const box = $('amLogs');
+      if (chronologicalLogs.length > 0) {
+        const newestKey = logKey(chronologicalLogs[chronologicalLogs.length - 1]);
+        const wasNearBottom = (box.scrollHeight - box.scrollTop - box.clientHeight) < 48 || !lastRenderedNewestKey;
+        box.innerHTML = chronologicalLogs.map(l =>
+          `<div class="${esc(l.level)}"><span class="t">${esc(l.time)}</span>${esc(l.text)}</div>`
+        ).join('');
+        if (newestKey !== lastRenderedNewestKey && wasNearBottom) {
+          box.scrollTop = box.scrollHeight;
+        }
+        lastRenderedNewestKey = newestKey;
+      } else if (clearedMarkerKey) {
+        box.innerHTML = '<div style="color:#94a3b8;font-style:italic">Đã làm sạch nhật ký — các bước mới sẽ hiển thị trực tiếp tại đây...</div>';
+      } else {
+        box.innerHTML = '<div style="color:#94a3b8">Chưa có nhật ký</div>';
       }
     } catch (e) { /* bỏ qua lỗi mạng tạm thời */ }
   }

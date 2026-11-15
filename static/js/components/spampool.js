@@ -675,8 +675,9 @@ function renderSpamPoolTerminalLogs(logs) {
   if (!spampoolLogTerminal || !logs || logs.length === 0) return;
 
   const relevant = logs.filter(l => {
+    const tid = (l.task_id || '').toLowerCase();
     const txt = (l.text || '').toLowerCase();
-    return txt.includes('spampool') || txt.includes('radius') || txt.includes('savecus') || txt.includes('azure') || txt.includes('iam');
+    return tid === 'spampool' || txt.includes('spampool') || txt.includes('radius') || txt.includes('savecus') || txt.includes('azure') || txt.includes('iam');
   });
   const displayLogs = (relevant.length > 0 ? relevant : logs).slice(-40);
   spampoolLogTerminal.innerHTML = '';

@@ -62,6 +62,8 @@
 
   <!-- Local Custom CSS (Sidebar layout, MUI styles, animations) -->
   <link rel="stylesheet" href="/static/style.css">
+  <!-- Unified UI/UX Design Tokens & Polish (Loaded after style.css) -->
+  <link rel="stylesheet" href="/static/ui-polish.css?v=1.0">
 </head>
 <body class="mui-light-theme text-slate-800 antialiased bg-[#f8fafd]">
 
@@ -98,6 +100,20 @@
         {% include "components/tabs/stub_tabs.html" %}
 
       </main>
+
+      <!-- ================= SHARED FOOTER ================= -->
+      <footer class="app-shared-footer" id="appSharedFooter" role="contentinfo">
+        <div class="flex items-center gap-2">
+          <span class="font-semibold text-slate-700">Caption Nextsu AI</span>
+          <span>•</span>
+          <span>Hệ Thống Tự Động Hóa Inside FPT &amp; Radius Portal</span>
+        </div>
+        <div class="flex items-center gap-3 text-xs">
+          <span>Bản quyền © 2026 Caption Nextsu AI</span>
+          <span>•</span>
+          <span class="font-mono text-slate-500">UI v4.3 Unified</span>
+        </div>
+      </footer>
 
     </div>
 

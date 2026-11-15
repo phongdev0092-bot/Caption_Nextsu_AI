@@ -496,8 +496,9 @@ function renderMyBaeTerminalLogs(logs) {
   if (!mybaeLogTerminal || !logs || logs.length === 0) return;
 
   const relevant = logs.filter(l => {
+    const tid = (l.task_id || '').toLowerCase();
     const txt = (l.text || '').toLowerCase();
-    return txt.includes('mybae') || txt.includes('đăng nhập');
+    return tid === 'bypass_mybae' || tid === 'mybae' || tid === 'login' || txt.includes('mybae') || txt.includes('đăng nhập');
   });
   const displayLogs = (relevant.length > 0 ? relevant : logs).slice(-40);
   mybaeLogTerminal.innerHTML = '';

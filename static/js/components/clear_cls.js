@@ -489,8 +489,9 @@ function renderClsTerminalLogs(logs) {
   if (!logs || logs.length === 0) return;
 
   const relevant = logs.filter(l => {
+    const tid = (l.task_id || '').toLowerCase();
     const txt = (l.text || '').toLowerCase();
-    return txt.includes('clear cls') || txt.includes('cls') || txt.includes('đăng nhập') || txt.includes('phiên') || txt.includes('inside');
+    return tid === 'clear_cls' || tid === 'cls' || tid === 'login' || txt.includes('clear cls') || txt.includes('cls') || txt.includes('đăng nhập') || txt.includes('phiên') || txt.includes('inside');
   });
   const displayLogs = (relevant.length > 0 ? relevant : logs).slice(-40);
   clsLogTerminal.innerHTML = '';

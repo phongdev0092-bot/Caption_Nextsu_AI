@@ -1,0 +1,914 @@
+/* ==========================================================================
+   UI POLISH & DESIGN SYSTEM (Caption Nextsu AI - Unified UI/UX Layer)
+   Loaded AFTER /static/style.css — Purely additive overrides & tokens.
+   Preserves 100% of existing DOM IDs, classes, data-* attributes, and logic.
+   ========================================================================== */
+
+:root {
+  /* 1. Design Tokens: Color System (WCAG AA compliant) */
+  --ui-bg-canvas: #f4f7fb;
+  --ui-bg-surface: #ffffff;
+  --ui-bg-subtle: #f8fafc;
+  --ui-bg-elevated: #ffffff;
+  --ui-bg-zebra: #fafbfd;
+  --ui-bg-hover: #f1f5f9;
+
+  --ui-text-primary: #0f172a;     /* Contrast > 15:1 on white */
+  --ui-text-secondary: #334155;   /* Contrast > 9:1 on white */
+  --ui-text-muted: #475569;       /* Contrast > 7:1 on white (replaces low-contrast light grays) */
+  --ui-text-subtle: #526077;      /* Contrast >= 5.8:1 (WCAG AA) */
+
+  --ui-border-default: #dce3ec;
+  --ui-border-strong: #cbd5e1;
+  --ui-border-subtle: #e8eef5;
+
+  /* Brand & Semantic Accents */
+  --ui-primary: #1a73e8;
+  --ui-primary-hover: #1557b0;
+  --ui-primary-soft: #e8f0fe;
+  --ui-primary-border: #bfdbfe;
+
+  --ui-success: #0d9488;
+  --ui-success-strong: #15803d;
+  --ui-success-soft: #ecfdf5;
+  --ui-success-border: #a7f3d0;
+
+  --ui-warning: #d97706;
+  --ui-warning-strong: #b45309;
+  --ui-warning-soft: #fffbeb;
+  --ui-warning-border: #fde68a;
+
+  --ui-danger: #dc2626;
+  --ui-danger-strong: #b91c1c;
+  --ui-danger-soft: #fef2f2;
+  --ui-danger-border: #fecaca;
+
+  --ui-info: #0284c7;
+  --ui-info-soft: #f0f9ff;
+  --ui-info-border: #bae6fd;
+
+  /* 2. Typography Tokens (Body >= 13px, Secondary >= 12px, Table Header 12.5px semi-bold) */
+  --ui-font-sans: 'Inter', 'Google Sans', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --ui-font-mono: 'JetBrains Mono', Consolas, 'Courier New', monospace;
+  --ui-text-base: 13.5px;
+  --ui-text-sm: 12.5px;
+  --ui-text-xs: 12px;
+  --ui-text-th: 12.5px;
+
+  /* 3. Spacing, Border Radius & Elevation Tokens */
+  --ui-space-xs: 6px;
+  --ui-space-sm: 10px;
+  --ui-space-md: 16px;
+  --ui-space-lg: 20px;
+  --ui-space-xl: 24px;
+
+  --ui-radius-sm: 8px;
+  --ui-radius-md: 12px;
+  --ui-radius-lg: 16px;
+  --ui-radius-pill: 9999px;
+
+  --ui-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --ui-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --ui-shadow-md: 0 4px 12px -2px rgba(15, 23, 42, 0.08), 0 2px 6px -1px rgba(15, 23, 42, 0.04);
+  --ui-shadow-lg: 0 12px 28px -4px rgba(15, 23, 42, 0.14), 0 4px 10px -2px rgba(15, 23, 42, 0.06);
+  --ui-focus-ring: 0 0 0 3px rgba(26, 115, 232, 0.28);
+}
+
+/* ==========================================================================
+   F. DARK MODE TOKENS (Class .dark OR System prefers-color-scheme when auto)
+   ========================================================================== */
+html.dark,
+body.dark {
+  --ui-bg-canvas: #0b1120;
+  --ui-bg-surface: #111827;
+  --ui-bg-subtle: #1e293b;
+  --ui-bg-elevated: #1f2937;
+  --ui-bg-zebra: #141d2f;
+  --ui-bg-hover: #1e293b;
+
+  --ui-text-primary: #f1f5f9;
+  --ui-text-secondary: #cbd5e1;
+  --ui-text-muted: #94a3b8;
+  --ui-text-subtle: #94a3b8;
+
+  --ui-border-default: #26334d;
+  --ui-border-strong: #334155;
+  --ui-border-subtle: #1e293b;
+
+  --ui-primary: #3b82f6;
+  --ui-primary-hover: #60a5fa;
+  --ui-primary-soft: rgba(59, 130, 246, 0.16);
+  --ui-primary-border: rgba(96, 165, 250, 0.35);
+
+  --ui-success-soft: rgba(16, 185, 129, 0.15);
+  --ui-success-border: rgba(52, 211, 153, 0.35);
+  --ui-warning-soft: rgba(245, 158, 11, 0.15);
+  --ui-warning-border: rgba(251, 191, 36, 0.35);
+  --ui-danger-soft: rgba(239, 68, 68, 0.15);
+  --ui-danger-border: rgba(248, 113, 113, 0.35);
+
+  --mui-bg: #0b1120;
+  --mui-surface: #111827;
+  --mui-border: #26334d;
+  --mui-border-light: #1e293b;
+  --text-main: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not(.light-forced):not(.dark) {
+    --ui-focus-ring: 0 0 0 3px rgba(59, 130, 246, 0.32);
+  }
+}
+
+/* ==========================================================================
+   A. TYPOGRAPHY, CONTRAST & FLUID WIDE CONTAINER
+   ========================================================================== */
+body.mui-light-theme {
+  font-family: var(--ui-font-sans);
+  font-size: var(--ui-text-base);
+  line-height: 1.5;
+  background-color: var(--ui-bg-canvas);
+  color: var(--ui-text-primary);
+}
+
+.app-layout {
+  background-color: var(--ui-bg-canvas);
+}
+
+/* Responsive Wide Layout: Avoid excessive empty side margins on 1440px-2560px screens */
+.mui-main-container {
+  max-width: min(1760px, 100%) !important;
+  width: 100%;
+  padding: 20px 24px 28px !important;
+  gap: 18px !important;
+}
+
+@media (min-width: 1536px) {
+  .mui-main-container {
+    padding: 24px 32px 32px !important;
+  }
+}
+
+/* Enforce minimum readable font sizes & WCAG AA contrast for light slate text */
+.tab-panel {
+  font-size: var(--ui-text-base);
+  gap: 16px;
+}
+
+.tab-panel .text-xs,
+.app-sidebar .text-xs,
+.app-topbar .text-xs {
+  font-size: var(--ui-text-sm) !important;
+  line-height: 1.45 !important;
+}
+
+.tab-panel .text-\[10px\],
+.tab-panel .text-\[10\.5px\],
+.tab-panel .text-\[11px\],
+.tab-panel .text-\[11\.5px\] {
+  font-size: var(--ui-text-xs) !important;
+  line-height: 1.4 !important;
+}
+
+/* Boost low-contrast slate-400/500 to WCAG AA compliant slate tones */
+.text-slate-400 {
+  color: var(--ui-text-subtle) !important;
+}
+
+.text-slate-500 {
+  color: var(--ui-text-muted) !important;
+}
+
+.section-desc,
+.preview-label,
+.template-hint-text,
+.modal-sub {
+  font-size: var(--ui-text-sm) !important;
+  color: var(--ui-text-muted) !important;
+}
+
+/* Keyboard Focus Ring (Accessibility - Item F) */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--ui-primary) !important;
+  outline-offset: 2px !important;
+  box-shadow: var(--ui-focus-ring) !important;
+}
+
+/* Unified Card, KPI, Chart & Table Panel Elevation & Radius */
+.mui-card,
+.kpi-card,
+.tab-panel > div.bg-white,
+.tab-panel .lg\:col-span-7.bg-white,
+.tab-panel .lg\:col-span-5.bg-white,
+.tab-panel .lg\:col-span-2.bg-white,
+.tab-panel .grid > div.bg-white {
+  background-color: var(--ui-bg-surface);
+  border: 1px solid var(--ui-border-default) !important;
+  border-radius: var(--ui-radius-lg) !important;
+  box-shadow: var(--ui-shadow-sm) !important;
+  transition: box-shadow 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.kpi-card:hover,
+.tab-panel .grid.grid-cols-2 > div.bg-white:hover {
+  box-shadow: var(--ui-shadow-md) !important;
+  border-color: var(--ui-border-strong) !important;
+}
+
+/* ==========================================================================
+   B. TOOLBAR PER TAB: PRIMARY ACTION, AUTO SWITCH, TEST 1 HĐ, RESPONSIVE
+   ========================================================================== */
+
+/* Primary Run Buttons: Prominent, elevated, unmistakable CTA */
+#btnAutoFetch,
+#btnExecuteImport,
+#btnAiRunImport,
+#btnRunAutoBypass,
+#btnRunAutoCls,
+#btnRunAutoAssign,
+#btnRunAutoClearSignal,
+#btnRunAutoResetSignal,
+#btnRunAutoMyBae,
+#btnStartAutoSpamPool,
+#btnStartAutoBypassNat,
+#btnStartAutoPort,
+.stub-tab-panel button[id$="-run"] {
+  min-height: 38px;
+  padding: 0 18px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.01em;
+  border-radius: var(--ui-radius-md) !important;
+  box-shadow: 0 3px 10px rgba(26, 115, 232, 0.26), 0 1px 2px rgba(15, 23, 42, 0.12) !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease !important;
+}
+
+#btnAutoFetch:hover:not(:disabled),
+#btnExecuteImport:hover:not(:disabled),
+#btnAiRunImport:hover:not(:disabled),
+#btnRunAutoBypass:hover:not(:disabled),
+#btnRunAutoCls:hover:not(:disabled),
+#btnRunAutoAssign:hover:not(:disabled),
+#btnRunAutoClearSignal:hover:not(:disabled),
+#btnRunAutoResetSignal:hover:not(:disabled),
+#btnRunAutoMyBae:hover:not(:disabled),
+#btnStartAutoSpamPool:hover:not(:disabled),
+#btnStartAutoBypassNat:hover:not(:disabled),
+#btnStartAutoPort:hover:not(:disabled),
+.stub-tab-panel button[id$="-run"]:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+  box-shadow: 0 6px 16px rgba(26, 115, 232, 0.32), 0 2px 4px rgba(15, 23, 42, 0.12) !important;
+}
+
+/* Secondary / Outlined Toolbar Buttons */
+.speed-dial-trigger,
+#btnClearTable,
+#btnAiDryRun,
+#btnAiSeedTest,
+#btnAiUnlock,
+#btnAiToggleFlag {
+  min-height: 36px;
+  border: 1px solid var(--ui-border-strong) !important;
+  background-color: var(--ui-bg-surface) !important;
+  color: var(--ui-text-secondary) !important;
+  border-radius: var(--ui-radius-md) !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  padding: 0 12px !important;
+  box-shadow: var(--ui-shadow-xs) !important;
+}
+
+.speed-dial-trigger:hover,
+#btnClearTable:hover,
+#btnAiDryRun:hover,
+#btnAiSeedTest:hover,
+#btnAiUnlock:hover,
+#btnAiToggleFlag:hover {
+  background-color: var(--ui-bg-hover) !important;
+  border-color: var(--ui-primary) !important;
+  color: var(--ui-primary) !important;
+}
+
+/* Auto Mode Toggle Buttons: Distinct ON (emerald pill) vs OFF (neutral slate pill) */
+button[id^="btnAuto"][id$="ModeToggle"],
+#btnAutoModeToggle,
+.stub-tab-panel button[id$="-auto-toggle"] {
+  min-height: 36px;
+  padding: 0 14px !important;
+  border-radius: var(--ui-radius-md) !important;
+  font-size: 12.5px !important;
+  font-weight: 700 !important;
+  animation: none !important; /* Stop distracting whole-button pulse; only pulse the inner dot */
+  position: relative;
+}
+
+/* "TEST 1 HĐ" Quick Test Input Box: Clear interactive input field, never looks disabled */
+#inputSpamPoolSingleSHD,
+#inputBypassNatSingleSHD,
+#inputPortSingleSHD {
+  width: 136px !important;
+  height: 30px !important;
+  padding: 2px 10px !important;
+  background-color: #ffffff !important;
+  border: 1.5px solid #cbd5e1 !important;
+  border-radius: 8px !important;
+  color: var(--ui-text-primary) !important;
+  font-family: var(--ui-font-mono) !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+#inputSpamPoolSingleSHD::placeholder,
+#inputBypassNatSingleSHD::placeholder,
+#inputPortSingleSHD::placeholder {
+  color: #64748b !important;
+  font-weight: 500 !important;
+  text-transform: none !important;
+}
+
+#inputSpamPoolSingleSHD:focus,
+#inputBypassNatSingleSHD:focus,
+#inputPortSingleSHD:focus {
+  border-color: var(--ui-primary) !important;
+  box-shadow: var(--ui-focus-ring) !important;
+}
+
+/* Always show Test 1 HĐ container cleanly on responsive toolbars */
+div:has(> #inputSpamPoolSingleSHD),
+div:has(> #inputBypassNatSingleSHD),
+div:has(> #inputPortSingleSHD) {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px !important;
+  padding: 3px 6px !important;
+  background: var(--ui-bg-subtle) !important;
+  border: 1px solid var(--ui-border-strong) !important;
+  border-radius: var(--ui-radius-md) !important;
+}
+
+#btnTestSingleSpamPool,
+#btnTestSingleBypassNat,
+#btnTestSinglePort {
+  height: 28px !important;
+  padding: 0 10px !important;
+  border-radius: 7px !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+}
+
+/* ==========================================================================
+   C. KPI CARDS & SCOPE BADGES
+   ========================================================================== */
+.kpi-scope-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px !important;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: var(--ui-radius-pill);
+  background-color: var(--ui-bg-subtle);
+  color: var(--ui-text-muted);
+  border: 1px solid var(--ui-border-default);
+  margin-left: 6px;
+  vertical-align: middle;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.kpi-scope-badge.scope-filtered {
+  background-color: var(--ui-primary-soft);
+  color: var(--ui-primary);
+  border-color: var(--ui-primary-border);
+}
+
+/* ==========================================================================
+   D. DATA TABLES: COMPACT FIT, STICKY SHD & ACTION, ELLIPSIS, BADGES, EMPTY/SKELETON
+   ========================================================================== */
+.table-responsive {
+  border-radius: var(--ui-radius-md);
+  border: 1px solid var(--ui-border-default);
+  background: var(--ui-bg-surface);
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.mui-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px !important;
+}
+
+.mui-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  background-color: var(--ui-bg-subtle) !important;
+}
+
+.mui-table thead th {
+  font-size: var(--ui-text-th) !important;
+  font-weight: 600 !important;
+  color: var(--ui-text-secondary) !important;
+  padding: 10px 12px !important;
+  border-bottom: 1.5px solid var(--ui-border-default) !important;
+  background-color: var(--ui-bg-subtle) !important;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+.mui-table tbody td {
+  font-size: 13px !important;
+  padding: 9px 12px !important;
+  border-bottom: 1px solid var(--ui-border-subtle) !important;
+  color: var(--ui-text-primary);
+  vertical-align: middle;
+}
+
+/* Zebra striping & row hover */
+.mui-table tbody tr:nth-child(even) {
+  background-color: var(--ui-bg-zebra);
+}
+
+.mui-table tbody tr:hover {
+  background-color: #eef4ff !important;
+}
+
+html.dark .mui-table tbody tr:hover {
+  background-color: rgba(59, 130, 246, 0.12) !important;
+}
+
+/* Fit columns on wide screens without unnecessary horizontal scroll */
+@media (min-width: 1360px) {
+  .mui-table td {
+    white-space: normal;
+    word-break: break-word;
+  }
+  .mui-table td:has(strong.font-mono),
+  .mui-table td[data-col="shd"],
+  .mui-table td[data-col="ngay"],
+  .mui-table td:first-child,
+  .mui-table td:last-child {
+    white-space: nowrap;
+  }
+}
+
+/* Sticky SHD Column & Sticky Action Column (last column) */
+.mui-table th.col-sticky-shd,
+.mui-table td.col-sticky-shd {
+  position: sticky;
+  left: 0;
+  z-index: 11;
+  background-color: inherit;
+  box-shadow: 2px 0 5px -2px rgba(15, 23, 42, 0.08);
+}
+
+.mui-table thead th.col-sticky-shd {
+  z-index: 17;
+  background-color: var(--ui-bg-subtle) !important;
+}
+
+.mui-table tbody tr:nth-child(odd) td.col-sticky-shd {
+  background-color: var(--ui-bg-surface);
+}
+
+.mui-table tbody tr:nth-child(even) td.col-sticky-shd {
+  background-color: var(--ui-bg-zebra);
+}
+
+.mui-table tbody tr:hover td.col-sticky-shd {
+  background-color: #eef4ff !important;
+}
+
+.mui-table thead th:last-child,
+.mui-table tbody td:last-child:has(button) {
+  position: sticky;
+  right: 0;
+  z-index: 11;
+  box-shadow: -2px 0 5px -2px rgba(15, 23, 42, 0.08);
+}
+
+.mui-table thead th:last-child {
+  z-index: 17;
+  background-color: var(--ui-bg-subtle) !important;
+}
+
+.mui-table tbody tr:nth-child(odd) td:last-child:has(button) {
+  background-color: var(--ui-bg-surface);
+}
+
+.mui-table tbody tr:nth-child(even) td:last-child:has(button) {
+  background-color: var(--ui-bg-zebra);
+}
+
+.mui-table tbody tr:hover td:last-child:has(button) {
+  background-color: #eef4ff !important;
+}
+
+/* Long "Thao tác" / Reason cells: Ellipsis truncation + full hover tooltip */
+.mui-table td[data-col="thao-tac"] span,
+.mui-table td.cell-ellipsis,
+.cell-thao-tac-truncate {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap !important;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* Unified Status Badges (Pending, Running, Done, Error) */
+.ui-badge-status,
+.badge-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px !important;
+  border-radius: var(--ui-radius-pill) !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  line-height: 1.35;
+  border: 1px solid transparent;
+}
+
+.badge-status.success,
+.ui-badge-done {
+  background-color: var(--ui-success-soft) !important;
+  color: var(--ui-success-strong) !important;
+  border-color: var(--ui-success-border) !important;
+}
+
+.badge-status.error,
+.ui-badge-error {
+  background-color: var(--ui-danger-soft) !important;
+  color: var(--ui-danger-strong) !important;
+  border-color: var(--ui-danger-border) !important;
+}
+
+.badge-status.pending,
+.ui-badge-pending {
+  background-color: var(--ui-warning-soft) !important;
+  color: var(--ui-warning-strong) !important;
+  border-color: var(--ui-warning-border) !important;
+}
+
+.ui-badge-running {
+  background-color: var(--ui-primary-soft) !important;
+  color: var(--ui-primary) !important;
+  border-color: var(--ui-primary-border) !important;
+}
+
+/* Empty State & Skeleton Loading State in Tables */
+.ui-table-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 28px 16px;
+  color: var(--ui-text-muted);
+}
+
+.ui-table-empty-state .empty-icon {
+  font-size: 28px;
+  line-height: 1;
+  opacity: 0.85;
+}
+
+.ui-table-empty-state .empty-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ui-text-secondary);
+}
+
+.ui-table-empty-state .empty-hint {
+  font-size: 12px;
+  color: var(--ui-text-muted);
+}
+
+@keyframes uiSkeletonShimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.ui-skeleton-bar {
+  display: inline-block;
+  height: 12px;
+  width: 180px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background-size: 200% 100%;
+  animation: uiSkeletonShimmer 1.4s infinite linear;
+}
+
+/* Pagination Polish */
+.pg-btn,
+.pg-num-btn {
+  min-height: 30px !important;
+  min-width: 30px !important;
+  padding: 0 10px !important;
+  font-size: 12.5px !important;
+  border-radius: 8px !important;
+  transition: all 0.15s ease !important;
+}
+
+/* ==========================================================================
+   E. SIDEBAR, STATUS DOTS, TOPBAR & TOP STATUS BANNER
+   ========================================================================== */
+
+/* 1. Sidebar Nav Items: Uniform height (42px), no awkward line wraps, tooltips */
+.sidebar-nav-item {
+  min-height: 42px !important;
+  height: 42px;
+  padding: 0 12px !important;
+  border-radius: 11px !important;
+  font-size: 13.5px !important;
+  gap: 10px !important;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.sidebar-nav-item .nav-label {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  line-height: 1.35 !important;
+}
+
+/* Collapsed Sidebar (Icon-only mode with clean centered icons & status dot) */
+.app-sidebar.collapsed .sidebar-nav-item {
+  padding: 0 !important;
+  justify-content: center !important;
+  position: relative;
+}
+
+.app-sidebar.collapsed .sidebar-nav-item [id^="sidebarAuto"] {
+  position: absolute;
+  top: 7px;
+  right: 14px;
+}
+
+.app-sidebar.collapsed .sidebar-nav-item [id^="navPendingBadge"]:not(.hidden) {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  font-size: 9px !important;
+  padding: 0 4px !important;
+  min-width: 15px;
+  height: 15px;
+  line-height: 15px;
+}
+
+/* 2. Convert Sidebar "🤖 AUTO" Badge into Semantic Status Dot
+      - Gray: Off (.hidden added by JS when auto*Mode is false)
+      - Green: On (:not(.hidden) when auto*Mode is true)
+      - Green Pulsing: Running ([data-auto-state="running"])
+      - Red: Error ([data-auto-state="error"]) */
+.sidebar-nav-item > [id^="sidebarAuto"] {
+  display: inline-block !important;
+  width: 9px !important;
+  height: 9px !important;
+  min-width: 9px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+  color: transparent !important;
+  overflow: hidden;
+  vertical-align: middle;
+  flex-shrink: 0;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+/* Auto OFF (JS adds .hidden when auto*Mode === false) -> Gray Dot */
+.sidebar-nav-item > [id^="sidebarAuto"].hidden {
+  background-color: #94a3b8 !important;
+  border: 1.5px solid #cbd5e1 !important;
+  box-shadow: none !important;
+  animation: none !important;
+  opacity: 0.75;
+}
+
+/* Auto ON (:not(.hidden)) -> Solid Emerald Dot */
+.sidebar-nav-item > [id^="sidebarAuto"]:not(.hidden) {
+  background-color: #10b981 !important;
+  border: 1.5px solid #a7f3d0 !important;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2) !important;
+  animation: none !important;
+}
+
+/* Auto RUNNING (data-auto-state="running") -> Pulsing Emerald Dot */
+.sidebar-nav-item > [id^="sidebarAuto"][data-auto-state="running"] {
+  background-color: #059669 !important;
+  border-color: #6ee7b7 !important;
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.32) !important;
+  animation: uiDotPulse 1.2s infinite ease-in-out !important;
+}
+
+/* Auto ERROR (data-auto-state="error") -> Red Dot */
+.sidebar-nav-item > [id^="sidebarAuto"][data-auto-state="error"] {
+  background-color: #ef4444 !important;
+  border-color: #fecaca !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25) !important;
+  animation: none !important;
+}
+
+@keyframes uiDotPulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25); }
+  50% { transform: scale(1.22); box-shadow: 0 0 0 5px rgba(16, 185, 129, 0.4); }
+}
+
+/* 3. Inside Session Dot States (unknown / checking / alive / expired) */
+.session-dot {
+  width: 10px !important;
+  height: 10px !important;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.session-dot.unknown {
+  background-color: #94a3b8 !important;
+  box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.22);
+}
+
+.session-dot.checking {
+  background-color: #f59e0b !important;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25);
+  animation: pulse-dot 0.9s infinite alternate;
+}
+
+.session-dot.alive {
+  background-color: #10b981 !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.24) !important;
+}
+
+.session-dot.expired {
+  background-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.24) !important;
+}
+
+/* 4. Top Status Banner Semantic Variants (info, running, warning, error) */
+.mui-banner-status {
+  border-radius: var(--ui-radius-md) !important;
+  padding: 10px 16px !important;
+  font-size: 13px !important;
+  background-color: var(--ui-bg-surface);
+  border: 1px solid var(--ui-border-default);
+  border-left: 4px solid var(--ui-primary);
+  transition: all 0.2s ease;
+}
+
+.mui-banner-status.banner-state-info {
+  border-left-color: var(--ui-primary);
+  background-color: var(--ui-bg-surface);
+}
+
+.mui-banner-status.banner-state-running {
+  border-left-color: #0284c7;
+  background-color: var(--ui-info-soft);
+  border-color: var(--ui-info-border);
+}
+
+.mui-banner-status.banner-state-success {
+  border-left-color: #10b981;
+  background-color: var(--ui-success-soft);
+  border-color: var(--ui-success-border);
+}
+
+.mui-banner-status.banner-state-warning {
+  border-left-color: #f59e0b;
+  background-color: var(--ui-warning-soft);
+  border-color: var(--ui-warning-border);
+}
+
+.mui-banner-status.banner-state-error {
+  border-left-color: #ef4444;
+  background-color: var(--ui-danger-soft);
+  border-color: var(--ui-danger-border);
+}
+
+/* 5. Enhanced Toast / Snackbar (#muiSnackbar) for 409 & Status Alerts */
+.mui-snackbar {
+  bottom: 24px !important;
+  left: 24px !important;
+  max-width: min(520px, calc(100vw - 48px));
+  padding: 12px 18px !important;
+  border-radius: var(--ui-radius-md) !important;
+  font-size: 13.5px !important;
+  font-weight: 500;
+  line-height: 1.45;
+  background: #1e293b !important;
+  color: #f8fafc !important;
+  border-left: 4px solid #38bdf8;
+  box-shadow: var(--ui-shadow-lg) !important;
+  z-index: 10000 !important;
+}
+
+.mui-snackbar.toast-success {
+  background: #064e3b !important;
+  border-left-color: #34d399 !important;
+}
+
+.mui-snackbar.toast-warning {
+  background: #78350f !important;
+  border-left-color: #fbbf24 !important;
+}
+
+.mui-snackbar.toast-error {
+  background: #7f1d1d !important;
+  border-left-color: #f87171 !important;
+}
+
+/* ==========================================================================
+   F. SHARED FOOTER & DARK MODE OVERRIDES
+   ========================================================================== */
+.app-shared-footer {
+  margin-top: auto;
+  padding: 14px 28px;
+  border-top: 1px solid var(--ui-border-default);
+  background-color: var(--ui-bg-surface);
+  color: var(--ui-text-muted);
+  font-size: 12.5px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Dark Mode Surface Overrides */
+html.dark body.mui-light-theme,
+html.dark .app-layout {
+  background-color: var(--ui-bg-canvas) !important;
+  color: var(--ui-text-primary) !important;
+}
+
+html.dark .app-sidebar,
+html.dark .app-topbar,
+html.dark .app-shared-footer,
+html.dark .mui-card,
+html.dark .kpi-card,
+html.dark .mui-modal-box,
+html.dark .modal-footer,
+html.dark .bg-white {
+  background-color: var(--ui-bg-surface) !important;
+  border-color: var(--ui-border-default) !important;
+  color: var(--ui-text-primary) !important;
+}
+
+html.dark .bg-slate-50,
+html.dark .bg-slate-50\/80,
+html.dark .bg-slate-100,
+html.dark .detail-grid-section,
+html.dark .acc-stealth-card,
+html.dark .history-item {
+  background-color: var(--ui-bg-subtle) !important;
+  border-color: var(--ui-border-default) !important;
+  color: var(--ui-text-primary) !important;
+}
+
+html.dark .text-slate-900,
+html.dark .text-slate-800,
+html.dark .text-slate-700,
+html.dark .card-section-title,
+html.dark .modal-title {
+  color: var(--ui-text-primary) !important;
+}
+
+html.dark .text-slate-600 {
+  color: var(--ui-text-secondary) !important;
+}
+
+html.dark input:not([type="checkbox"]):not([type="radio"]),
+html.dark select,
+html.dark textarea {
+  background-color: var(--ui-bg-subtle) !important;
+  border-color: var(--ui-border-strong) !important;
+  color: var(--ui-text-primary) !important;
+}
+
+html.dark .sidebar-nav-item {
+  color: var(--ui-text-secondary) !important;
+}
+
+html.dark .sidebar-nav-item:hover {
+  background-color: var(--ui-bg-subtle) !important;
+  color: var(--ui-text-primary) !important;
+}
+
+html.dark .sidebar-nav-item.active {
+  background-color: var(--ui-primary-soft) !important;
+  color: #60a5fa !important;
+}

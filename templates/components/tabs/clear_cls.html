@@ -93,7 +93,10 @@
             <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
               <div>
                 <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Tổng Dòng Trên Sheet</div>
-                <div class="text-2xl font-bold text-slate-900 mt-1" id="clsStatTotal">0</div>
+                <div class="flex items-baseline gap-2 mt-1">
+                  <div class="text-2xl font-bold text-slate-900" id="clsStatTotal">0</div>
+                  <span class="kpi-scope-badge">Toàn Sheet</span>
+                </div>
                 <div class="text-[11px] text-slate-500 mt-0.5">Tổng bản ghi trên Sheet</div>
               </div>
               <div class="w-11 h-11 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center text-xl shrink-0">
@@ -104,7 +107,10 @@
             <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
               <div>
                 <div class="text-[11px] font-semibold uppercase tracking-wider text-amber-500">Chờ Xử Lý (Chưa Clear)</div>
-                <div class="text-2xl font-bold text-amber-600 mt-1" id="clsStatPending">0</div>
+                <div class="flex items-baseline gap-2 mt-1">
+                  <div class="text-2xl font-bold text-amber-600" id="clsStatPending">0</div>
+                  <span class="kpi-scope-badge scope-filtered" data-scope-select="selectDateFilterCls">Theo bộ lọc: Hôm nay</span>
+                </div>
                 <div class="text-[11px] text-amber-600 font-medium mt-0.5">● Cần đóng phiếu trên Inside</div>
               </div>
               <div class="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl shrink-0">
@@ -115,7 +121,10 @@
             <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
               <div>
                 <div class="text-[11px] font-semibold uppercase tracking-wider text-emerald-600">Cập Nhật Thành Công</div>
-                <div class="text-2xl font-bold text-emerald-600 mt-1" id="clsStatDone">0</div>
+                <div class="flex items-baseline gap-2 mt-1">
+                  <div class="text-2xl font-bold text-emerald-600" id="clsStatDone">0</div>
+                  <span class="kpi-scope-badge scope-filtered" data-scope-select="selectDateFilterCls">Theo bộ lọc: Hôm nay</span>
+                </div>
                 <div class="text-[11px] text-emerald-600 font-medium mt-0.5">✓ Đã hoàn tất trên Inside</div>
               </div>
               <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl shrink-0">
@@ -126,7 +135,10 @@
             <div class="kpi-card bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
               <div>
                 <div class="text-[11px] font-semibold uppercase tracking-wider text-rose-500">Không Thành Công / Lỗi</div>
-                <div class="text-2xl font-bold text-rose-600 mt-1" id="clsStatError">0</div>
+                <div class="flex items-baseline gap-2 mt-1">
+                  <div class="text-2xl font-bold text-rose-600" id="clsStatError">0</div>
+                  <span class="kpi-scope-badge scope-filtered" data-scope-select="selectDateFilterCls">Theo bộ lọc: Hôm nay</span>
+                </div>
                 <div class="text-[11px] text-rose-500 mt-0.5">✕ Cần kiểm tra lại phiếu</div>
               </div>
               <div class="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center text-xl shrink-0">
@@ -202,11 +214,11 @@
                 <thead>
                   <tr class="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                     <th class="p-3 w-10 text-center">
-                      <input type="checkbox" id="chkClsSelectAll" class="rounded text-indigo-600 cursor-pointer" checked>
+                      <input type="checkbox" id="chkClsSelectAll" class="rounded text-indigo-600 cursor-pointer" aria-label="Chọn tất cả" checked>
                     </th>
                     <th class="p-3 w-12 text-center">STT</th>
                     <th class="p-3 font-semibold text-slate-700">Tác Vụ</th>
-                    <th class="p-3 font-semibold text-slate-800">Số Hợp Đồng</th>
+                    <th class="p-3 font-semibold text-slate-800 col-sticky-shd">Số Hợp Đồng</th>
                     <th class="p-3 text-slate-600">Email NVKT</th>
                     <th class="p-3 text-slate-600">Lý Do Đóng Phiếu (Nguyên Nhân 1)</th>
                     <th class="p-3 text-slate-600">Ngày Cập Nhật</th>

@@ -609,8 +609,9 @@ function renderBypassTerminalLogs(logs) {
 
   // Lọc các log liên quan ByPass hoặc thông báo Inside FPT
   const relevant = logs.filter(l => {
+    const tid = (l.task_id || '').toLowerCase();
     const txt = (l.text || '').toLowerCase();
-    return txt.includes('bypass') || txt.includes('đăng nhập') || txt.includes('phiên') || txt.includes('inside');
+    return tid === 'bypass' || tid === 'login' || txt.includes('bypass') || txt.includes('đăng nhập') || txt.includes('phiên') || txt.includes('inside');
   });
   const displayLogs = (relevant.length > 0 ? relevant : logs).slice(-40);
   bypassLogTerminal.innerHTML = '';

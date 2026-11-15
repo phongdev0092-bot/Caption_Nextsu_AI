@@ -270,6 +270,38 @@ class TestConcurrencyAndSafeguards(unittest.TestCase):
         self.assertNotIn(server._auto_reset_after_clear_loop, targets)
         self.assertNotIn(server._auto_orchestrator_loop, targets)
 
+    def test_auto_overview_and_task_logger_track_live_steps(self):
+        server.bypass_task_state["is_running"] = True
+        server.bypass_task_state["total"] = 3
+        server.bypass_task_state["current_index"] = 0
+        server.bypass_task_state["current_shd"] = "SGAAB001"
+        task_log = server.make_task_logger(server.bypass_task_state, "bypass", "Auto Bypass")
+
+        task_log("Đang khởi tạo Chrome và đăng nhập IAM...", "info")
+        self.assertIn("[Chuẩn bị 3 HĐ]", server.bypass_task_state["message"])
+        self.assertEqual(server.bypass_task_state["current_step"], "Đang khởi tạo Chrome và đăng nhập IAM...")
+
+        server.bypass_task_state["current_index"] = 1
+        task_log("Đang chọn Nguyên nhân 1 trên popup ByPass...", "info")
+        self.assertIn("[1/3 • HĐ SGAAB001]", server.bypass_task_state["message"])
+        self.assertEqual(len(server.bypass_task_state["recent_steps"]), 2)
+
+        with server.app.test_client() as client:
+            resp = client.get("/api/auto/overview")
+            self.assertEqual(resp.status_code, 200)
+            body = resp.get_json() or {}
+            run = body.get("running") or {}
+            self.assertEqual(run.get("tab"), "bypass")
+            self.assertEqual(run.get("label"), "Bypass")
+            self.assertEqual(run.get("name"), "Bypass")
+            self.assertEqual(run.get("current"), 1)
+            self.assertEqual(run.get("total"), 3)
+            self.assertEqual(run.get("shd"), "SGAAB001")
+            self.assertIn("Đang chọn Nguyên nhân 1", run.get("step", ""))
+            self.assertEqual(len(run.get("recent_steps") or []), 2)
+            logs = body.get("logs") or []
+            self.assertTrue(any(l.get("task_id") == "bypass" and l.get("seq", 0) > 0 for l in logs))
+
 
 if __name__ == "__main__":
     unittest.main()

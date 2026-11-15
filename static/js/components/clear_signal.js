@@ -506,16 +506,17 @@ async function pollClearSignalStatus() {
 
 function renderClearSignalTerminalLogs(logs) {
   if (!clearSignalLogTerminal || !logs) return;
-  const filtered = logs.filter(l => l.task_id === 'clear_signal' || (l.text && l.text.toLowerCase().includes('clear tín hiệu')));
+  const filtered = logs.filter(l => l.task_id === 'clear_signal' || l.task_id === 'login' || (l.text && l.text.toLowerCase().includes('clear tín hiệu')));
   if (filtered.length === 0) return;
 
-  clearSignalLogTerminal.innerHTML = filtered.slice(0, 40).map(l => {
+  clearSignalLogTerminal.innerHTML = filtered.slice(-40).map(l => {
     let colorClass = 'text-slate-300';
     if (l.level === 'success') colorClass = 'text-emerald-400 font-semibold';
     else if (l.level === 'error') colorClass = 'text-rose-400 font-semibold';
     else if (l.level === 'warning') colorClass = 'text-amber-300';
-    return `<div class="${colorClass}"><span class="text-slate-500">[${l.time}]</span> ${l.text}</div>`;
+    return `<div class="${colorClass}"><span class="text-slate-500">[${escapeHtml(l.time)}]</span> ${escapeHtml(l.text)}</div>`;
   }).join('');
+  clearSignalLogTerminal.scrollTop = clearSignalLogTerminal.scrollHeight;
 }
 
 if (btnClearClearSignalLogs) {
