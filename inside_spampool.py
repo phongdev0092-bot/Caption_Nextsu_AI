@@ -80,8 +80,7 @@ def load_cache():
 
 def save_cache(data):
     try:
-        with open(SPAMPOOL_CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        core_login.atomic_write_json(SPAMPOOL_CACHE_FILE, data)
     except Exception as e:
         print(f"[CACHE ERROR] {e}")
 

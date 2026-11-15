@@ -181,8 +181,7 @@ def clear_auto_attempts(tab=None, shds=None):
             attempts = {}
             if locked_backup:
                 attempts["_manual_locked"] = locked_backup
-        with open(AUTO_ATTEMPT_FILE, "w", encoding="utf-8") as f:
-            json.dump(attempts, f, ensure_ascii=False, indent=2)
+        core_login.atomic_write_json(AUTO_ATTEMPT_FILE, attempts)
     except Exception:
         pass
 
@@ -198,8 +197,7 @@ def _load_auto_attempts_raw():
 
 def _save_auto_attempts_raw(data):
     try:
-        with open(AUTO_ATTEMPT_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        core_login.atomic_write_json(AUTO_ATTEMPT_FILE, data)
     except Exception:
         pass
 
@@ -307,10 +305,10 @@ auto_tasks = [
         "schedule": "Mỗi 15 phút",
         "interval_minutes": 15,
         "is_active": True,
-        "last_run": "2026-10-13 10:45",
-        "next_run": "2026-10-13 11:00",
-        "status": "Đang chạy",
-        "success_count": 48,
+        "last_run": "--",
+        "next_run": "--",
+        "status": "Sẵn sàng",
+        "success_count": 0,
         "failed_count": 0,
         "description": "Tự động quét và trích xuất thông tin mới nhất từ Inside FPT theo danh sách hợp đồng chờ."
     },
@@ -321,11 +319,11 @@ auto_tasks = [
         "schedule": "Mỗi 30 phút",
         "interval_minutes": 30,
         "is_active": True,
-        "last_run": "2026-10-13 10:30",
-        "next_run": "2026-10-13 11:00",
+        "last_run": "--",
+        "next_run": "--",
         "status": "Sẵn sàng",
-        "success_count": 120,
-        "failed_count": 2,
+        "success_count": 0,
+        "failed_count": 0,
         "description": "Tự động đối soát và import file danh sách hợp đồng mới được thêm vào thư mục."
     },
     {
@@ -335,10 +333,10 @@ auto_tasks = [
         "schedule": "Mỗi 60 phút",
         "interval_minutes": 60,
         "is_active": False,
-        "last_run": "2026-10-13 09:00",
+        "last_run": "--",
         "next_run": "--:--",
         "status": "Tạm dừng",
-        "success_count": 15,
+        "success_count": 0,
         "failed_count": 0,
         "description": "Phát hiện các phiếu thi công chưa hoàn tất quá 24h và gửi thông báo cảnh báo."
     },
@@ -349,25 +347,19 @@ auto_tasks = [
         "schedule": "Hàng ngày (00:00)",
         "interval_minutes": 1440,
         "is_active": True,
-        "last_run": "2026-10-13 00:00",
-        "next_run": "2026-10-14 00:00",
-        "status": "Hoàn tất",
-        "success_count": 7,
+        "last_run": "--",
+        "next_run": "--",
+        "status": "Sẵn sàng",
+        "success_count": 0,
         "failed_count": 0,
         "description": "Tự động tối ưu hóa và sao lưu dữ liệu nén Zstandard .json.zst."
     }
 ]
 
-task_logs = [
-    {"time": "11:00:15", "task_id": "task_1", "text": "Khởi động kịch bản quét định kỳ Phiếu Thi Công...", "level": "info"},
-    {"time": "11:00:18", "task_id": "task_1", "text": "Đã kiểm tra 12 HĐ: 12 HĐ giữ nguyên trạng thái trong 48h.", "level": "success"},
-    {"time": "10:30:22", "task_id": "task_2", "text": "Kịch bản Auto Import đã đối soát 50 bản ghi thành công.", "level": "success"},
-    {"time": "10:00:05", "task_id": "task_4", "text": "Kiểm tra toàn vẹn kho Zstandard: nén tốt, không phát hiện lỗi.", "level": "info"}
-]
+task_logs = []
 
 import atexit
 _load_log_from_disk()
-threading.Thread(target=_log_flusher_loop, daemon=True).start()
 atexit.register(_flush_log_to_disk)
 
 @app.route("/api/logs/download", methods=["GET"])
@@ -519,54 +511,73 @@ def scan_qr():
 
 @app.route("/api/login", methods=["POST"])
 def trigger_login():
+    ok_lock, owner = core_login.try_acquire_inside_task("login")
+    if not ok_lock:
+        return jsonify({
+            "status": "busy",
+            "error": f"Đang bận chạy tiến trình Inside: {owner}",
+            "message": f"Đang bận chạy tiến trình Inside: {owner}"
+        }), 409
+
     if task_state["status"] == "running":
+        core_login.release_inside_task("login")
         return jsonify({"status": "busy", "message": "Đang thực hiện đăng nhập..."}), 429
 
-    data = request.json or {}
-    cfg = core_login.load_config()
-    active_acc = core_login.get_active_account_info(cfg)
+    started = False
+    try:
+        data = request.json or {}
+        cfg = core_login.load_config()
+        active_acc = core_login.get_active_account_info(cfg)
 
-    username = data.get("username") or active_acc["username"]
-    password = data.get("password") or active_acc["password"]
-    secret = data.get("totp_secret") if "totp_secret" in data else active_acc["totp_secret"]
-    use_otp = data.get("use_otp") if "use_otp" in data else active_acc["use_otp"]
-    headless = data.get("headless", True)
-    keep_open = data.get("keep_browser_open", False if headless else True)
+        username = data.get("username") or active_acc["username"]
+        password = data.get("password") or active_acc["password"]
+        secret = data.get("totp_secret") if "totp_secret" in data else active_acc["totp_secret"]
+        use_otp = data.get("use_otp") if "use_otp" in data else active_acc["use_otp"]
+        headless = data.get("headless", True)
+        keep_open = data.get("keep_browser_open", False if headless else True)
 
-    task_state["status"] = "running"
-    task_state["message"] = f"Đang kết nối Chrome ({active_acc['mode'].upper()}: {username})..."
-    add_log(f"=== BẮT ĐẦU ĐĂNG NHẬP ({active_acc['mode'].upper()}: {username}) ===", "info")
+        task_state["status"] = "running"
+        task_state["message"] = f"Đang kết nối Chrome ({active_acc['mode'].upper()}: {username})..."
+        add_log(f"=== BẮT ĐẦU ĐĂNG NHẬP ({active_acc['mode'].upper()}: {username}) ===", "info")
 
-    def worker():
-        try:
-            core_login.run_fpt_login(
-                username=username,
-                password=password,
-                secret=secret,
-                use_otp=use_otp,
-                headless=headless,
-                keep_open=keep_open,
-                use_custom_profile=True,
-                log_callback=lambda msg, lvl: add_log(msg, lvl)
-            )
-            task_state["status"] = "success"
-            task_state["message"] = "Đã đăng nhập thành công"
-            task_state["user"] = username
-            task_state["last_login_time"] = time.strftime("%H:%M:%S")
-            add_log(f"Đăng nhập thành công tài khoản {username}", "success")
-        except Exception as e:
-            raw_err = str(e)
-            if "Stacktrace:" in raw_err:
-                clean_err = raw_err.split("Stacktrace:")[0].replace("Message:", "").strip()
-                display_msg = clean_err if clean_err else "Hết thời gian chờ phản hồi từ trang đăng nhập Inside FPT"
-            else:
-                display_msg = raw_err
-            task_state["status"] = "error"
-            task_state["message"] = f"Lỗi: {display_msg}"
-            add_log(f"Đăng nhập thất bại: {display_msg}", "error")
+        def worker():
+            try:
+                core_login.run_fpt_login(
+                    username=username,
+                    password=password,
+                    secret=secret,
+                    use_otp=use_otp,
+                    headless=headless,
+                    keep_open=keep_open,
+                    use_custom_profile=True,
+                    log_callback=lambda msg, lvl: add_log(msg, lvl)
+                )
+                task_state["status"] = "success"
+                task_state["message"] = "Đã đăng nhập thành công"
+                task_state["user"] = username
+                task_state["last_login_time"] = time.strftime("%H:%M:%S")
+                add_log(f"Đăng nhập thành công tài khoản {username}", "success")
+            except Exception as e:
+                raw_err = str(e)
+                if "Stacktrace:" in raw_err:
+                    clean_err = raw_err.split("Stacktrace:")[0].replace("Message:", "").strip()
+                    display_msg = clean_err if clean_err else "Hết thời gian chờ phản hồi từ trang đăng nhập Inside FPT"
+                else:
+                    display_msg = raw_err
+                task_state["status"] = "error"
+                task_state["message"] = f"Lỗi: {display_msg}"
+                add_log(f"Đăng nhập thất bại: {display_msg}", "error")
+            finally:
+                core_login.release_inside_task("login")
 
-    threading.Thread(target=worker, daemon=True).start()
-    return jsonify({"status": "started", "account": active_acc['mode'], "user": username})
+        threading.Thread(target=worker, daemon=True).start()
+        started = True
+        return jsonify({"status": "started", "account": active_acc['mode'], "user": username})
+    finally:
+        if not started:
+            if task_state["status"] == "running":
+                task_state["status"] = "idle"
+            core_login.release_inside_task("login")
 
 @app.route("/api/status", methods=["GET"])
 def get_status():
@@ -735,96 +746,118 @@ def check_cached_contract_48h(contract_no, records):
 
 @app.route("/api/retrieval/run", methods=["POST"])
 def run_retrieval_process():
+    ok_lock, owner = core_login.try_acquire_inside_task("retrieval")
+    if not ok_lock:
+        return jsonify({
+            "status": "busy",
+            "error": f"Đang bận chạy tiến trình Inside: {owner}",
+            "message": f"Đang bận chạy tiến trình Inside: {owner}"
+        }), 409
+
     if retrieval_task["is_running"]:
+        core_login.release_inside_task("retrieval")
         return jsonify({"status": "busy", "message": "Đang có tiến trình lấy dữ liệu đang chạy..."}), 429
 
-    data = request.json or {}
-    contracts = data.get("contracts", [])
-    if isinstance(contracts, str):
-        contracts = [c.strip() for c in contracts.split(",") if c.strip()]
+    started = False
+    try:
+        data = request.json or {}
+        contracts = data.get("contracts", [])
+        if isinstance(contracts, str):
+            contracts = [c.strip() for c in contracts.split(",") if c.strip()]
 
-    if not contracts:
-        return jsonify({"status": "error", "message": "Vui lòng nhập hoặc chọn ít nhất 1 số hợp đồng!"}), 400
+        if not contracts:
+            core_login.release_inside_task("retrieval")
+            return jsonify({"status": "error", "message": "Vui lòng nhập hoặc chọn ít nhất 1 số hợp đồng!"}), 400
 
-    retrieval_task["is_running"] = True
-    retrieval_task["total"] = len(contracts)
-    retrieval_task["current_index"] = 0
-    retrieval_task["current_contract"] = contracts[0]
-    retrieval_task["message"] = f"Bắt đầu xử lý {len(contracts)} hợp đồng..."
+        retrieval_task["is_running"] = True
+        retrieval_task["total"] = len(contracts)
+        retrieval_task["current_index"] = 0
+        retrieval_task["current_contract"] = contracts[0]
+        retrieval_task["message"] = f"Bắt đầu xử lý {len(contracts)} hợp đồng..."
 
-    add_log(f"=== BẮT ĐẦU AUTO LẤY DỮ LIỆU {len(contracts)} HỢP ĐỒNG ===", "info")
+        add_log(f"=== BẮT ĐẦU AUTO LẤY DỮ LIỆU {len(contracts)} HỢP ĐỒNG ===", "info")
 
-    def worker():
-        # Phân loại và kiểm tra danh sách hợp đồng đã có dữ liệu thành công trong 48h
-        to_scrape = []
-        skipped_count = 0
+        def worker():
+            scraper = None
+            try:
+                # Phân loại và kiểm tra danh sách hợp đồng đã có dữ liệu thành công trong 48h
+                to_scrape = []
+                skipped_count = 0
 
-        for c_no in contracts:
-            is_cached, cached_record = check_cached_contract_48h(c_no, retrieval_records)
-            if is_cached:
-                skipped_count += 1
-                add_log(f"⏩ [BỎ QUA 48H] HĐ {c_no} đã có dữ liệu thành công trong 48h (KH: {cached_record.get('customer_name')}). Bỏ qua không cào lại.", "info")
-                # Đưa bản ghi lên đầu danh sách hiển thị
-                for existing in list(retrieval_records):
-                    if existing.get("contract_no") == c_no:
-                        retrieval_records.remove(existing)
-                retrieval_records.insert(0, cached_record)
-            else:
-                to_scrape.append(c_no)
+                for c_no in contracts:
+                    is_cached, cached_record = check_cached_contract_48h(c_no, retrieval_records)
+                    if is_cached:
+                        skipped_count += 1
+                        add_log(f"⏩ [BỎ QUA 48H] HĐ {c_no} đã có dữ liệu thành công trong 48h (KH: {cached_record.get('customer_name')}). Bỏ qua không cào lại.", "info")
+                        # Đưa bản ghi lên đầu danh sách hiển thị
+                        for existing in list(retrieval_records):
+                            if existing.get("contract_no") == c_no:
+                                retrieval_records.remove(existing)
+                        retrieval_records.insert(0, cached_record)
+                    else:
+                        to_scrape.append(c_no)
 
-        # Nếu toàn bộ hợp đồng đều đã được lưu thành công trong vòng 48h
-        if not to_scrape:
-            retrieval_task["message"] = f"Hoàn tất: Toàn bộ {len(contracts)} hợp đồng đều đã có dữ liệu thành công trong 48H (Không cần cào lại)!"
-            add_log(f"=== HOÀN TẤT TỨC THÌ: TOÀN BỘ {len(contracts)} HỢP ĐỒNG ĐÃ ĐƯỢC LẤY TRONG 48H ===", "success")
-            save_records_zstd(retrieval_records)
+                # Nếu toàn bộ hợp đồng đều đã được lưu thành công trong vòng 48h
+                if not to_scrape:
+                    retrieval_task["message"] = f"Hoàn tất: Toàn bộ {len(contracts)} hợp đồng đều đã có dữ liệu thành công trong 48H (Không cần cào lại)!"
+                    add_log(f"=== HOÀN TẤT TỨC THÌ: TOÀN BỘ {len(contracts)} HỢP ĐỒNG ĐÃ ĐƯỢC LẤY TRONG 48H ===", "success")
+                    save_records_zstd(retrieval_records)
+                    return
+
+                add_log(f"Khởi động Chrome để cào {len(to_scrape)} HĐ (Đã bỏ qua {skipped_count} HĐ có sẵn trong 48h)...", "info")
+                scraper = InsideScraper(headless=True, log_cb=add_log)
+                scraper.init_driver()
+                scraper.login_inside()
+                scraper.navigate_to_deployment_search()
+
+                for idx, c_no in enumerate(to_scrape):
+                    retrieval_task["current_index"] = idx + 1
+                    retrieval_task["total"] = len(to_scrape)
+                    retrieval_task["current_contract"] = c_no
+                    retrieval_task["message"] = f"Đang xử lý {idx + 1}/{len(to_scrape)}: {c_no} (Đã bỏ qua {skipped_count} HĐ trùng 48h)"
+
+                    result = scraper.fetch_contract_info(c_no)
+                    result["id"] = len(retrieval_records) + 1
+                    result["created_at_ts"] = time.time()
+                    result["timestamp"] = time.strftime("%Y-%m-%d %H:%M:%S")
+
+                    # Remove previous entry for same contract if present
+                    for existing in list(retrieval_records):
+                        if existing.get("contract_no") == c_no:
+                            retrieval_records.remove(existing)
+                    
+                    retrieval_records.insert(0, result)
+                    # Lưu nén Zstandard sau mỗi hợp đồng
+                    save_records_zstd(retrieval_records)
+
+                retrieval_task["message"] = f"Hoàn tất lấy dữ liệu {len(to_scrape)} hợp đồng (Đã bỏ qua {skipped_count} HĐ trùng 48h)!"
+                add_log(f"=== HOÀN TẤT LẤY DỮ LIỆU {len(to_scrape)} HỢP ĐỒNG ===", "success")
+
+            except Exception as e:
+                raw_err = str(e)
+                if "Stacktrace:" in raw_err:
+                    clean_err = raw_err.split("Stacktrace:")[0].replace("Message:", "").strip()
+                    display_msg = clean_err if clean_err else "Hết thời gian chờ phản hồi từ trang Inside FPT"
+                else:
+                    display_msg = raw_err
+                retrieval_task["message"] = f"Lỗi tiến trình: {display_msg}"
+                add_log(f"Tiến trình bị gián đoạn: {display_msg}", "error")
+            finally:
+                retrieval_task["is_running"] = False
+                if scraper:
+                    try:
+                        scraper.close()
+                    except Exception:
+                        pass
+                core_login.release_inside_task("retrieval")
+
+        threading.Thread(target=worker, daemon=True).start()
+        started = True
+        return jsonify({"status": "started", "count": len(contracts)})
+    finally:
+        if not started:
             retrieval_task["is_running"] = False
-            return
-
-        add_log(f"Khởi động Chrome để cào {len(to_scrape)} HĐ (Đã bỏ qua {skipped_count} HĐ có sẵn trong 48h)...", "info")
-        scraper = InsideScraper(headless=True, log_cb=add_log)
-        try:
-            scraper.init_driver()
-            scraper.login_inside()
-            scraper.navigate_to_deployment_search()
-
-            for idx, c_no in enumerate(to_scrape):
-                retrieval_task["current_index"] = idx + 1
-                retrieval_task["total"] = len(to_scrape)
-                retrieval_task["current_contract"] = c_no
-                retrieval_task["message"] = f"Đang xử lý {idx + 1}/{len(to_scrape)}: {c_no} (Đã bỏ qua {skipped_count} HĐ trùng 48h)"
-
-                result = scraper.fetch_contract_info(c_no)
-                result["id"] = len(retrieval_records) + 1
-                result["created_at_ts"] = time.time()
-                result["timestamp"] = time.strftime("%Y-%m-%d %H:%M:%S")
-
-                # Remove previous entry for same contract if present
-                for existing in list(retrieval_records):
-                    if existing.get("contract_no") == c_no:
-                        retrieval_records.remove(existing)
-                
-                retrieval_records.insert(0, result)
-                # Lưu nén Zstandard sau mỗi hợp đồng
-                save_records_zstd(retrieval_records)
-
-            retrieval_task["message"] = f"Hoàn tất lấy dữ liệu {len(to_scrape)} hợp đồng (Đã bỏ qua {skipped_count} HĐ trùng 48h)!"
-            add_log(f"=== HOÀN TẤT LẤY DỮ LIỆU {len(to_scrape)} HỢP ĐỒNG ===", "success")
-
-        except Exception as e:
-            raw_err = str(e)
-            if "Stacktrace:" in raw_err:
-                clean_err = raw_err.split("Stacktrace:")[0].replace("Message:", "").strip()
-                display_msg = clean_err if clean_err else "Hết thời gian chờ phản hồi từ trang Inside FPT"
-            else:
-                display_msg = raw_err
-            retrieval_task["message"] = f"Lỗi tiến trình: {display_msg}"
-            add_log(f"Tiến trình bị gián đoạn: {display_msg}", "error")
-        finally:
-            retrieval_task["is_running"] = False
-            scraper.close()
-
-    threading.Thread(target=worker, daemon=True).start()
-    return jsonify({"status": "started", "count": len(contracts)})
+            core_login.release_inside_task("retrieval")
 
 @app.route("/api/retrieval/template", methods=["GET"])
 def download_retrieval_template():
@@ -864,15 +897,24 @@ def get_storage_info():
 @app.route("/api/session/check", methods=["GET"])
 def check_session_api():
     """Kiểm tra xem phiên đăng nhập Inside FPT hiện tại có khả dụng không."""
-    if retrieval_task.get("is_running") or bypass_task_state.get("is_running") or cls_task_state.get("is_running") or assign_task_state.get("is_running"):
+    ok_lock, owner = core_login.try_acquire_inside_task("session_check")
+    if not ok_lock:
         return jsonify({
-            "status": "ok",
+            "status": "busy",
             "is_alive": True,
-            "message": "Đang có tiến trình tự động (ByPass / Clear Cls / Phân Công / Thu thập) hoạt động bình thường trên phiên Inside FPT"
-        })
+            "error": f"Đang bận chạy tiến trình Inside: {owner}",
+            "message": f"Đang có tiến trình tự động ({owner}) hoạt động trên phiên Inside FPT"
+        }), 409
 
     driver = None
     try:
+        if retrieval_task.get("is_running") or bypass_task_state.get("is_running") or cls_task_state.get("is_running") or assign_task_state.get("is_running"):
+            return jsonify({
+                "status": "ok",
+                "is_alive": True,
+                "message": "Đang có tiến trình tự động (ByPass / Clear Cls / Phân Công / Thu thập) hoạt động bình thường trên phiên Inside FPT"
+            })
+
         driver = core_login.create_driver_with_retry(
             headless=True,
             keep_open=False,
@@ -910,6 +952,7 @@ def check_session_api():
                 driver.quit()
             except Exception:
                 pass
+        core_login.release_inside_task("session_check")
 
 @app.route("/api/retrieval/export", methods=["GET"])
 def export_retrieval_excel():
@@ -1172,6 +1215,7 @@ bypass_task_state = {
     "gid": inside_bypass.GID_BYPASS,
     "processed_in_session": []  # [{"shd": ..., "status": ..., "time": ...}]
 }
+active_bypass_bot = None
 
 # Đường dẫn file cache lưu vĩnh viễn trạng thái các HĐ đã ByPass thành công
 BYPASS_CACHE_PATH = os.path.join(BASE_DIR, "bypass_status_cache.json")
@@ -1189,8 +1233,7 @@ def load_bypass_cache():
 
 def save_bypass_cache(cache_data):
     try:
-        with open(BYPASS_CACHE_PATH, "w", encoding="utf-8") as f:
-            json.dump(cache_data, f, ensure_ascii=False, indent=2)
+        core_login.atomic_write_json(BYPASS_CACHE_PATH, cache_data)
     except Exception as e:
         add_log(f"Lỗi lưu bypass cache: {e}", "warning")
 
@@ -1327,35 +1370,49 @@ def export_bypass_excel():
 
 @app.route("/api/bypass/run", methods=["POST"])
 def run_bypass_process():
-    if bypass_task_state["is_running"]:
-        return jsonify({"status": "busy", "message": "Đang có tiến trình Auto ByPass đang chạy..."}), 429
-    if cls_task_state.get("is_running"):
-        return jsonify({"status": "busy", "message": "Đang có tiến trình Clear Cls đang chạy trên Inside FPT. ByPass sẽ tự động chờ hoàn tất!"}), 429
+    ok_lock, owner = core_login.try_acquire_inside_task("bypass")
+    if not ok_lock:
+        return jsonify({
+            "status": "busy",
+            "error": f"Đang bận chạy tiến trình Inside: {owner}",
+            "message": f"Đang bận chạy tiến trình Inside: {owner}"
+        }), 409
 
-    data = request.json or {}
-    sheet_id = data.get("sheet_id", inside_bypass.DEFAULT_SHEET_ID)
-    gid = data.get("gid", inside_bypass.GID_BYPASS)
-    selected_records = data.get("records")
-    headless = data.get("headless", True)
+    validated = False
+    try:
+        if bypass_task_state["is_running"]:
+            return jsonify({"status": "busy", "message": "Đang có tiến trình Auto ByPass đang chạy..."}), 429
+        if cls_task_state.get("is_running"):
+            return jsonify({"status": "busy", "message": "Đang có tiến trình Clear Cls đang chạy trên Inside FPT. ByPass sẽ tự động chờ hoàn tất!"}), 429
 
-    sheet_res = inside_bypass.fetch_sheet_data(sheet_id=sheet_id, gid=gid)
-    all_sheet_records = sheet_res.get("records", []) if sheet_res.get("status") == "ok" else []
+        data = request.json or {}
+        sheet_id = data.get("sheet_id", inside_bypass.DEFAULT_SHEET_ID)
+        gid = data.get("gid", inside_bypass.GID_BYPASS)
+        selected_records = data.get("records")
+        headless = data.get("headless", True)
 
-    if selected_records:
-        to_process = selected_records
-        if not all_sheet_records:
-            all_sheet_records = selected_records
-    else:
-        if sheet_res["status"] != "ok" or not all_sheet_records:
-            return jsonify({"status": "error", "message": "Không tìm thấy dữ liệu trên Google Sheet"}), 400
-        # Lọc chỉ những dòng chưa xử lý
-        to_process = []
-        for r in all_sheet_records:
-            if not inside_bypass.is_bypass_final_status(r.get("Thao Tác", "")):
-                to_process.append(r)
+        sheet_res = inside_bypass.fetch_sheet_data(sheet_id=sheet_id, gid=gid)
+        all_sheet_records = sheet_res.get("records", []) if sheet_res.get("status") == "ok" else []
 
-    if not to_process:
-        return jsonify({"status": "error", "message": "Tất cả các bản ghi đã được xử lý xong (không có hợp đồng mới để chạy)!"}), 400
+        if selected_records:
+            to_process = selected_records
+            if not all_sheet_records:
+                all_sheet_records = selected_records
+        else:
+            if sheet_res["status"] != "ok" or not all_sheet_records:
+                return jsonify({"status": "error", "message": "Không tìm thấy dữ liệu trên Google Sheet"}), 400
+            # Lọc chỉ những dòng chưa xử lý
+            to_process = []
+            for r in all_sheet_records:
+                if not inside_bypass.is_bypass_final_status(r.get("Thao Tác", "")):
+                    to_process.append(r)
+
+        if not to_process:
+            return jsonify({"status": "error", "message": "Tất cả các bản ghi đã được xử lý xong (không có hợp đồng mới để chạy)!"}), 400
+        validated = True
+    finally:
+        if not validated:
+            core_login.release_inside_task("bypass")
 
     bypass_task_state["is_running"] = True
     bypass_task_state["total"] = len(to_process)
@@ -1395,6 +1452,7 @@ def run_bypass_process():
                 add_log(f"Không thể đẩy Webhook Google Sheet: {e_hook}", "warning")
 
     def worker():
+        global active_bypass_bot
         bot = None
         driver_ready = False
         try:
@@ -1448,6 +1506,7 @@ def run_bypass_process():
 
                 if not driver_ready:
                     bot = inside_bypass.InsideBypassAutomation(headless=headless, log_cb=add_log)
+                    active_bypass_bot = bot
                     bot.init_driver()
                     bot.navigate_to_bypass_page()
                     bot.open_import_tab_and_dismiss_help()
@@ -1512,8 +1571,15 @@ def run_bypass_process():
                     bot.close()
                 except Exception:
                     pass
+            active_bypass_bot = None
+            core_login.release_inside_task("bypass")
 
-    threading.Thread(target=worker, daemon=True).start()
+    try:
+        threading.Thread(target=worker, daemon=True).start()
+    except Exception:
+        bypass_task_state["is_running"] = False
+        core_login.release_inside_task("bypass")
+        raise
     return jsonify({"status": "started", "count": len(to_process)})
 
 # ================= TAB 4: AUTO CLEAR CLS CÓ SR =================
@@ -1529,6 +1595,7 @@ cls_task_state = {
     "gid": inside_cls.GID_CLEAR_CLS,
     "processed_in_session": []
 }
+active_cls_bot = None
 
 CLS_CACHE_PATH = os.path.join(BASE_DIR, "cls_status_cache.json")
 
@@ -1545,8 +1612,7 @@ def load_cls_cache():
 
 def save_cls_cache(cache_data):
     try:
-        with open(CLS_CACHE_PATH, "w", encoding="utf-8") as f:
-            json.dump(cache_data, f, ensure_ascii=False, indent=2)
+        core_login.atomic_write_json(CLS_CACHE_PATH, cache_data)
     except Exception as e:
         add_log(f"Lỗi lưu cls cache: {e}", "warning")
 
@@ -1574,10 +1640,7 @@ def get_cls_sheet_data():
             )
 
             if not has_final_result:
-                # Nếu chưa có kết quả cuối cùng thì luôn hiển thị là Chưa xử lý và xóa cache cũ
-                if shd in processed_cls_cache:
-                    processed_cls_cache.pop(shd, None)
-                    save_cls_cache(processed_cls_cache)
+                # Nếu chưa có kết quả cuối cùng thì luôn hiển thị là Chưa xử lý (không ghi đè cache khi GET)
                 r["Kết Quả"] = "Chưa xử lý"
                 if not r.get("Thao Tác") or raw_tt in ["nan", "chưa xử lý", ""]:
                     r["Thao Tác"] = "Chưa cập nhật"
@@ -1689,48 +1752,62 @@ def export_cls_excel():
 
 @app.route("/api/cls/run", methods=["POST"])
 def run_cls_process():
-    if cls_task_state["is_running"]:
-        return jsonify({"status": "busy", "message": "Đang có tiến trình Clear Cls đang chạy..."}), 429
-    if bypass_task_state.get("is_running"):
-        return jsonify({"status": "busy", "message": "Đang có tiến trình ByPass đang chạy trên Inside FPT. Clear Cls sẽ tự động chờ hoàn tất!"}), 429
+    ok_lock, owner = core_login.try_acquire_inside_task("cls")
+    if not ok_lock:
+        return jsonify({
+            "status": "busy",
+            "error": f"Đang bận chạy tiến trình Inside: {owner}",
+            "message": f"Đang bận chạy tiến trình Inside: {owner}"
+        }), 409
 
-    data = request.json or {}
-    sheet_id = data.get("sheet_id", inside_cls.DEFAULT_SHEET_ID)
-    gid = data.get("gid", inside_cls.GID_CLEAR_CLS)
-    selected_records = data.get("records")
-    headless = data.get("headless", True)
+    validated = False
+    try:
+        if cls_task_state["is_running"]:
+            return jsonify({"status": "busy", "message": "Đang có tiến trình Clear Cls đang chạy..."}), 429
+        if bypass_task_state.get("is_running"):
+            return jsonify({"status": "busy", "message": "Đang có tiến trình ByPass đang chạy trên Inside FPT. Clear Cls sẽ tự động chờ hoàn tất!"}), 429
 
-    sheet_res = inside_cls.fetch_sheet_data(sheet_id=sheet_id, gid=gid)
-    col_indices = sheet_res.get("col_indices", {}) if sheet_res.get("status") == "ok" else {}
+        data = request.json or {}
+        sheet_id = data.get("sheet_id", inside_cls.DEFAULT_SHEET_ID)
+        gid = data.get("gid", inside_cls.GID_CLEAR_CLS)
+        selected_records = data.get("records")
+        headless = data.get("headless", True)
 
-    if selected_records:
-        to_process = selected_records
-    else:
-        if sheet_res["status"] != "ok" or not sheet_res["records"]:
-            return jsonify({"status": "error", "message": "Không tìm thấy dữ liệu trên Google Sheet"}), 400
-        all_sheet_records = sheet_res["records"]
-        to_process = []
-        for r in all_sheet_records:
-            shd = str(r.get("SHD", "")).strip()
-            kq_txt = str(r.get("Kết Quả", "")).strip().lower()
-            tt_txt = str(r.get("Thao Tác", "")).strip().lower()
-            is_already_done = (
-                kq_txt == "đã xử lý" or 
-                tt_txt == "đã clear" or 
-                "cập nhật thành công" in tt_txt or 
-                ("thành công" in tt_txt and "không" not in tt_txt) or 
-                "không thành công" in tt_txt or 
-                shd in processed_cls_cache
-            )
-            if not is_already_done:
-                to_process.append(r)
+        sheet_res = inside_cls.fetch_sheet_data(sheet_id=sheet_id, gid=gid)
+        col_indices = sheet_res.get("col_indices", {}) if sheet_res.get("status") == "ok" else {}
 
-        # Nếu toàn bộ trên Sheet đã ghi "Đã xử lý", nhưng người dùng vẫn bấm Chạy, chạy lại danh sách để người dùng xem trực tiếp
-        if not to_process:
-            to_process = all_sheet_records
+        if selected_records:
+            to_process = selected_records
+        else:
+            if sheet_res["status"] != "ok" or not sheet_res["records"]:
+                return jsonify({"status": "error", "message": "Không tìm thấy dữ liệu trên Google Sheet"}), 400
+            all_sheet_records = sheet_res["records"]
+            to_process = []
+            for r in all_sheet_records:
+                shd = str(r.get("SHD", "")).strip()
+                kq_txt = str(r.get("Kết Quả", "")).strip().lower()
+                tt_txt = str(r.get("Thao Tác", "")).strip().lower()
+                is_already_done = (
+                    kq_txt == "đã xử lý" or 
+                    tt_txt == "đã clear" or 
+                    "cập nhật thành công" in tt_txt or 
+                    ("thành công" in tt_txt and "không" not in tt_txt) or 
+                    "không thành công" in tt_txt or 
+                    shd in processed_cls_cache
+                )
+                if not is_already_done:
+                    to_process.append(r)
 
-    if not to_process:
-        return jsonify({"status": "error", "message": "Không có hợp đồng nào để xử lý!"}), 400
+            if not to_process:
+                return jsonify({
+                    "status": "empty",
+                    "count": 0,
+                    "message": "Không có hợp đồng mới cần xử lý Clear Cls trên Google Sheet!"
+                }), 200
+        validated = True
+    finally:
+        if not validated:
+            core_login.release_inside_task("cls")
 
     cls_task_state["is_running"] = True
     cls_task_state["total"] = len(to_process)
@@ -1859,8 +1936,15 @@ def run_cls_process():
                     bot.close()
                 except Exception:
                     pass
+            active_cls_bot = None
+            core_login.release_inside_task("cls")
 
-    threading.Thread(target=worker_cls, daemon=True).start()
+    try:
+        threading.Thread(target=worker_cls, daemon=True).start()
+    except Exception:
+        cls_task_state["is_running"] = False
+        core_login.release_inside_task("cls")
+        raise
     return jsonify({"status": "started", "count": len(to_process)})
 
 
@@ -1955,32 +2039,50 @@ def export_assign_excel():
 
 @app.route("/api/assign/run", methods=["POST"])
 def run_assign_process():
-    if assign_task_state["is_running"]:
-        return jsonify({"status": "busy", "message": "Đang có tiến trình Phân Công Tay đang chạy..."}), 429
-    if cls_task_state.get("is_running"):
-        return jsonify({"status": "busy", "message": "Đang có tiến trình Clear Cls đang chạy. Hãy chờ hoàn tất!"}), 429
-    if bypass_task_state.get("is_running"):
-        return jsonify({"status": "busy", "message": "Đang có tiến trình ByPass đang chạy trên Inside FPT."}), 429
+    ok_lock, owner = core_login.try_acquire_inside_task("assign")
+    if not ok_lock:
+        return jsonify({
+            "status": "busy",
+            "error": f"Đang bận chạy tiến trình Inside: {owner}",
+            "message": f"Đang bận chạy tiến trình Inside: {owner}"
+        }), 409
 
-    data            = request.json or {}
-    sheet_id        = data.get("sheet_id", inside_assign.DEFAULT_SHEET_ID)
-    gid             = data.get("gid", inside_assign.GID_ASSIGN)
-    selected_records= data.get("records")
-    headless        = data.get("headless", True)
+    validated = False
+    try:
+        if assign_task_state["is_running"]:
+            return jsonify({"status": "busy", "message": "Đang có tiến trình Phân Công Tay đang chạy..."}), 429
+        if cls_task_state.get("is_running"):
+            return jsonify({"status": "busy", "message": "Đang có tiến trình Clear Cls đang chạy. Hãy chờ hoàn tất!"}), 429
+        if bypass_task_state.get("is_running"):
+            return jsonify({"status": "busy", "message": "Đang có tiến trình ByPass đang chạy trên Inside FPT."}), 429
 
-    if selected_records:
-        to_process = selected_records
-    else:
-        sheet_res = inside_assign.fetch_sheet_data(sheet_id=sheet_id, gid=gid)
-        if sheet_res["status"] != "ok" or not sheet_res["records"]:
-            return jsonify({"status": "error", "message": "Không tìm thấy dữ liệu trên Google Sheet Phân Công Tay"}), 400
-        to_process = [r for r in sheet_res["records"]
-                      if not inside_assign.is_final_thao_tac(r.get("Thao Tác", ""))]
+        data            = request.json or {}
+        sheet_id        = data.get("sheet_id", inside_assign.DEFAULT_SHEET_ID)
+        gid             = data.get("gid", inside_assign.GID_ASSIGN)
+        selected_records= data.get("records")
+        headless        = data.get("headless", True)
+
+        if selected_records:
+            to_process = selected_records
+        else:
+            sheet_res = inside_assign.fetch_sheet_data(sheet_id=sheet_id, gid=gid)
+            if sheet_res["status"] != "ok" or not sheet_res["records"]:
+                return jsonify({"status": "error", "message": "Không tìm thấy dữ liệu trên Google Sheet Phân Công Tay"}), 400
+            to_process = [r for r in sheet_res["records"]
+                          if not inside_assign.is_final_thao_tac(r.get("Thao Tác", ""))]
+            if not to_process:
+                return jsonify({
+                    "status": "empty",
+                    "count": 0,
+                    "message": "Không có hợp đồng mới cần xử lý Phân Công Tay trên Google Sheet!"
+                }), 200
+
         if not to_process:
-            to_process = sheet_res["records"]
-
-    if not to_process:
-        return jsonify({"status": "error", "message": "Không có hợp đồng nào để xử lý!"}), 400
+            return jsonify({"status": "empty", "count": 0, "message": "Không có hợp đồng nào được chọn để xử lý!"}), 200
+        validated = True
+    finally:
+        if not validated:
+            core_login.release_inside_task("assign")
 
     assign_task_state["is_running"]             = True
     assign_task_state["total"]                  = len(to_process)
@@ -2081,8 +2183,15 @@ def run_assign_process():
                     bot.close()
                 except Exception:
                     pass
+            active_assign_bot = None
+            core_login.release_inside_task("assign")
 
-    threading.Thread(target=worker_assign, daemon=True).start()
+    try:
+        threading.Thread(target=worker_assign, daemon=True).start()
+    except Exception:
+        assign_task_state["is_running"] = False
+        core_login.release_inside_task("assign")
+        raise
     return jsonify({"status": "started", "count": len(to_process)})
 
 
@@ -2099,6 +2208,7 @@ clear_signal_task_state = {
     "gid": inside_signal.GID_CLEAR_SIGNAL,
     "processed_in_session": []
 }
+active_clear_signal_bot = None
 
 reset_signal_task_state = {
     "is_running": False,
@@ -2110,6 +2220,7 @@ reset_signal_task_state = {
     "gid": inside_signal.GID_RESET_SIGNAL,
     "processed_in_session": []
 }
+active_reset_signal_bot = None
 
 # 1. Clear Tín Hiệu Routes
 @app.route("/api/clear-signal/sheet-data", methods=["GET"])
@@ -2192,57 +2303,70 @@ def export_clear_signal_excel():
 
 @app.route("/api/clear-signal/run", methods=["POST"])
 def run_clear_signal_process():
-    if clear_signal_task_state["is_running"]:
-        return jsonify({"status": "busy", "message": "Đang có tiến trình Clear Tín Hiệu đang chạy..."}), 429
-    if reset_signal_task_state["is_running"]:
-        return jsonify({"status": "busy", "message": "Đang có tiến trình Cấp Lại Tín Hiệu đang chạy..."}), 429
+    ok, busy_by = core_login.try_acquire_inside_task("clear_signal")
+    if not ok:
+        return jsonify({
+            "status": "error",
+            "message": f"Phiên Chrome Inside FPT đang bận chạy '{busy_by}'. Vui lòng đợi tiến trình đó hoàn tất!"
+        }), 409
 
-    data            = request.json or {}
-    sheet_id        = data.get("sheet_id", inside_signal.DEFAULT_SHEET_ID)
-    gid             = data.get("gid", inside_signal.GID_CLEAR_SIGNAL)
-    selected_records= data.get("records")
-    headless        = data.get("headless", True)
-    is_manual       = bool(data.get("manual"))
+    validated = False
+    try:
+        if clear_signal_task_state["is_running"]:
+            return jsonify({"status": "busy", "message": "Đang có tiến trình Clear Tín Hiệu đang chạy..."}), 429
+        if reset_signal_task_state["is_running"]:
+            return jsonify({"status": "busy", "message": "Đang có tiến trình Cấp Lại Tín Hiệu đang chạy..."}), 429
 
-    if selected_records:
-        if is_manual:
-            to_process = list(selected_records)
+        data            = request.json or {}
+        sheet_id        = data.get("sheet_id", inside_signal.DEFAULT_SHEET_ID)
+        gid             = data.get("gid", inside_signal.GID_CLEAR_SIGNAL)
+        selected_records= data.get("records")
+        headless        = data.get("headless", True)
+        is_manual       = bool(data.get("manual"))
+
+        if selected_records:
+            if is_manual:
+                to_process = list(selected_records)
+            else:
+                to_process = [
+                    r for r in selected_records
+                    if not inside_signal.is_final_status(r.get("Kết Quả", ""))
+                    and not _is_signal_manual_locked("clear_signal", r)
+                ]
         else:
+            sheet_res = inside_signal.fetch_sheet_data(sheet_id=sheet_id, gid=gid, signal_type="clear")
+            if sheet_res["status"] != "ok" or not sheet_res["records"]:
+                return jsonify({"status": "error", "message": "Không tìm thấy dữ liệu trên Google Sheet Clear Tín Hiệu"}), 400
+            _decorate_signal_lock_flags("clear_signal", sheet_res["records"])
             to_process = [
-                r for r in selected_records
+                r for r in sheet_res["records"]
                 if not inside_signal.is_final_status(r.get("Kết Quả", ""))
-                and not _is_signal_manual_locked("clear_signal", r)
+                and (is_manual or not _is_signal_manual_locked("clear_signal", r))
             ]
-    else:
-        sheet_res = inside_signal.fetch_sheet_data(sheet_id=sheet_id, gid=gid, signal_type="clear")
-        if sheet_res["status"] != "ok" or not sheet_res["records"]:
-            return jsonify({"status": "error", "message": "Không tìm thấy dữ liệu trên Google Sheet Clear Tín Hiệu"}), 400
-        _decorate_signal_lock_flags("clear_signal", sheet_res["records"])
-        to_process = [
-            r for r in sheet_res["records"]
-            if not inside_signal.is_final_status(r.get("Kết Quả", ""))
-            and (is_manual or not _is_signal_manual_locked("clear_signal", r))
-        ]
 
-    if not to_process:
-        msg_empty = (
-            "Không có hợp đồng hợp lệ đang chờ Clear Tín Hiệu (các HĐ tồn ngày cũ / lỗi đăng nhập phải thao tác tay)!"
-            if not is_manual else
-            "Không có hợp đồng nào được chọn để Clear Tín Hiệu!"
-        )
-        return jsonify({"status": "error", "message": msg_empty}), 400
+        if not to_process:
+            msg_empty = (
+                "Không có hợp đồng mới cần xử lý Clear Tín Hiệu (các HĐ tồn ngày cũ / lỗi đăng nhập phải thao tác tay)!"
+                if not is_manual else
+                "Không có hợp đồng nào được chọn để Clear Tín Hiệu!"
+            )
+            return jsonify({"status": "empty", "count": 0, "message": msg_empty}), 200
 
-    if is_manual:
-        _unlock_signal_contracts_from_manual("clear_signal", [r.get("SHD") for r in to_process])
+        if is_manual:
+            _unlock_signal_contracts_from_manual("clear_signal", [r.get("SHD") for r in to_process])
 
-    clear_signal_task_state["is_running"]           = True
-    clear_signal_task_state["total"]                = len(to_process)
-    clear_signal_task_state["current_index"]        = 0
-    clear_signal_task_state["current_shd"]          = str(to_process[0].get("SHD", ""))
-    clear_signal_task_state["message"]              = f"Bắt đầu xử lý {len(to_process)} hợp đồng Clear Tín Hiệu..."
-    clear_signal_task_state["sheet_id"]             = sheet_id
-    clear_signal_task_state["gid"]                  = gid
-    clear_signal_task_state["processed_in_session"] = []
+        clear_signal_task_state["is_running"]           = True
+        clear_signal_task_state["total"]                = len(to_process)
+        clear_signal_task_state["current_index"]        = 0
+        clear_signal_task_state["current_shd"]          = str(to_process[0].get("SHD", ""))
+        clear_signal_task_state["message"]              = f"Bắt đầu xử lý {len(to_process)} hợp đồng Clear Tín Hiệu..."
+        clear_signal_task_state["sheet_id"]             = sheet_id
+        clear_signal_task_state["gid"]                  = gid
+        clear_signal_task_state["processed_in_session"] = []
+        validated = True
+    finally:
+        if not validated:
+            core_login.release_inside_task("clear_signal")
 
     mode_label = "Chạy ngầm (Headless)" if headless else "Mở Chrome xem trực tiếp (Visible)"
     add_log(f"=== BẮT ĐẦU AUTO CLEAR TÍN HIỆU {len(to_process)} HỢP ĐỒNG ({mode_label}) ===", "info")
@@ -2277,9 +2401,12 @@ def run_clear_signal_process():
                 add_log(f"Không thể đẩy Webhook cho HĐ {record.get('SHD')}: {e_hook}", "warning")
 
     def worker_clear_signal():
-        bot = inside_signal.InsideSignalAutomation(signal_type="clear", headless=headless, log_cb=add_log)
+        global active_clear_signal_bot
+        bot = None
         processed_shds = set()
         try:
+            bot = inside_signal.InsideSignalAutomation(signal_type="clear", headless=headless, log_cb=add_log)
+            active_clear_signal_bot = bot
             bot.init_driver()
             if not bot.driver:
                 raise RuntimeError("Không thể khởi tạo/đăng nhập trình duyệt Chrome cho Clear Tín Hiệu")
@@ -2348,8 +2475,15 @@ def run_clear_signal_process():
                     bot.close()
                 except Exception:
                     pass
+            active_clear_signal_bot = None
+            core_login.release_inside_task("clear_signal")
 
-    threading.Thread(target=worker_clear_signal, daemon=True).start()
+    try:
+        threading.Thread(target=worker_clear_signal, daemon=True).start()
+    except Exception:
+        clear_signal_task_state["is_running"] = False
+        core_login.release_inside_task("clear_signal")
+        raise
     return jsonify({"status": "started", "count": len(to_process)})
 
 
@@ -2433,63 +2567,76 @@ def export_reset_signal_excel():
 
 @app.route("/api/reset-signal/run", methods=["POST"])
 def run_reset_signal_process():
-    if reset_signal_task_state["is_running"]:
-        return jsonify({"status": "busy", "message": "Đang có tiến trình Cấp Lại Tín Hiệu đang chạy..."}), 429
-    if clear_signal_task_state["is_running"]:
-        return jsonify({"status": "busy", "message": "Đang có tiến trình Clear Tín Hiệu đang chạy..."}), 429
+    ok, busy_by = core_login.try_acquire_inside_task("reset_signal")
+    if not ok:
+        return jsonify({
+            "status": "error",
+            "message": f"Phiên Chrome Inside FPT đang bận chạy '{busy_by}'. Vui lòng đợi tiến trình đó hoàn tất!"
+        }), 409
 
-    data            = request.json or {}
-    sheet_id        = data.get("sheet_id", inside_signal.DEFAULT_SHEET_ID)
-    gid             = data.get("gid", inside_signal.GID_RESET_SIGNAL)
-    selected_records= data.get("records")
-    headless        = data.get("headless", True)
-    is_manual       = bool(data.get("manual"))
+    validated = False
+    try:
+        if reset_signal_task_state["is_running"]:
+            return jsonify({"status": "busy", "message": "Đang có tiến trình Cấp Lại Tín Hiệu đang chạy..."}), 429
+        if clear_signal_task_state["is_running"]:
+            return jsonify({"status": "busy", "message": "Đang có tiến trình Clear Tín Hiệu đang chạy..."}), 429
 
-    if selected_records:
-        if is_manual:
-            to_process = list(selected_records)
+        data            = request.json or {}
+        sheet_id        = data.get("sheet_id", inside_signal.DEFAULT_SHEET_ID)
+        gid             = data.get("gid", inside_signal.GID_RESET_SIGNAL)
+        selected_records= data.get("records")
+        headless        = data.get("headless", True)
+        is_manual       = bool(data.get("manual"))
+
+        if selected_records:
+            if is_manual:
+                to_process = list(selected_records)
+            else:
+                to_process = [
+                    r for r in selected_records
+                    if not inside_signal.is_final_status(r.get("Kết Quả", ""))
+                    and not _is_signal_manual_locked("reset_signal", r)
+                ]
         else:
+            sheet_res = inside_signal.fetch_sheet_data(sheet_id=sheet_id, gid=gid, signal_type="reset")
+            if sheet_res["status"] != "ok" or not sheet_res["records"]:
+                return jsonify({"status": "error", "message": "Không tìm thấy dữ liệu trên Google Sheet Cấp Lại Tín Hiệu"}), 400
+            _decorate_signal_lock_flags("reset_signal", sheet_res["records"])
             to_process = [
-                r for r in selected_records
+                r for r in sheet_res["records"]
                 if not inside_signal.is_final_status(r.get("Kết Quả", ""))
-                and not _is_signal_manual_locked("reset_signal", r)
+                and (is_manual or not _is_signal_manual_locked("reset_signal", r))
             ]
-    else:
-        sheet_res = inside_signal.fetch_sheet_data(sheet_id=sheet_id, gid=gid, signal_type="reset")
-        if sheet_res["status"] != "ok" or not sheet_res["records"]:
-            return jsonify({"status": "error", "message": "Không tìm thấy dữ liệu trên Google Sheet Cấp Lại Tín Hiệu"}), 400
-        _decorate_signal_lock_flags("reset_signal", sheet_res["records"])
-        to_process = [
-            r for r in sheet_res["records"]
-            if not inside_signal.is_final_status(r.get("Kết Quả", ""))
-            and (is_manual or not _is_signal_manual_locked("reset_signal", r))
-        ]
 
-    if not to_process:
-        msg_empty = (
-            "Không có hợp đồng hợp lệ đang chờ Cấp Lại Tín Hiệu (các HĐ tồn ngày cũ / lỗi đăng nhập phải thao tác tay)!"
-            if not is_manual else
-            "Không có hợp đồng nào được chọn để Cấp Lại Tín Hiệu!"
-        )
-        return jsonify({"status": "error", "message": msg_empty}), 400
+        if not to_process:
+            msg_empty = (
+                "Không có hợp đồng mới cần xử lý Cấp Lại Tín Hiệu (các HĐ tồn ngày cũ / lỗi đăng nhập phải thao tác tay)!"
+                if not is_manual else
+                "Không có hợp đồng nào được chọn để Cấp Lại Tín Hiệu!"
+            )
+            return jsonify({"status": "empty", "count": 0, "message": msg_empty}), 200
 
-    if is_manual:
-        _unlock_signal_contracts_from_manual("reset_signal", [r.get("SHD") for r in to_process])
+        if is_manual:
+            _unlock_signal_contracts_from_manual("reset_signal", [r.get("SHD") for r in to_process])
 
-    reset_signal_task_state["is_running"]           = True
-    reset_signal_task_state["total"]                = len(to_process)
-    reset_signal_task_state["current_index"]        = 0
-    reset_signal_task_state["current_shd"]          = str(to_process[0].get("SHD", ""))
-    reset_signal_task_state["message"]              = f"Bắt đầu xử lý {len(to_process)} hợp đồng Cấp Lại Tín Hiệu..."
-    reset_signal_task_state["sheet_id"]             = sheet_id
-    reset_signal_task_state["gid"]                  = gid
-    reset_signal_task_state["processed_in_session"] = []
+        reset_signal_task_state["is_running"]           = True
+        reset_signal_task_state["total"]                = len(to_process)
+        reset_signal_task_state["current_index"]        = 0
+        reset_signal_task_state["current_shd"]          = str(to_process[0].get("SHD", ""))
+        reset_signal_task_state["message"]              = f"Bắt đầu xử lý {len(to_process)} hợp đồng Cấp Lại Tín Hiệu..."
+        reset_signal_task_state["sheet_id"]             = sheet_id
+        reset_signal_task_state["gid"]                  = gid
+        reset_signal_task_state["processed_in_session"] = []
 
-    is_auto_72h = data.get("source") == "auto_72h" or any(isinstance(r, dict) and r.get("_is_auto_72h") for r in to_process)
-    if is_auto_72h:
-        for r in to_process:
-            if isinstance(r, dict):
-                r["_is_auto_72h"] = True
+        is_auto_72h = data.get("source") == "auto_72h" or any(isinstance(r, dict) and r.get("_is_auto_72h") for r in to_process)
+        if is_auto_72h:
+            for r in to_process:
+                if isinstance(r, dict):
+                    r["_is_auto_72h"] = True
+        validated = True
+    finally:
+        if not validated:
+            core_login.release_inside_task("reset_signal")
 
     mode_label = "Chạy ngầm (Headless)" if headless else "Mở Chrome xem trực tiếp (Visible)"
     auto_tag = " [TỰ ĐỘNG 72H]" if is_auto_72h else ""
@@ -2530,9 +2677,12 @@ def run_reset_signal_process():
                 add_log(f"Không thể đẩy Webhook cho HĐ {record.get('SHD')}: {e_hook}", "warning")
 
     def worker_reset_signal():
-        bot = inside_signal.InsideSignalAutomation(signal_type="reset", headless=headless, log_cb=add_log)
+        global active_reset_signal_bot
+        bot = None
         processed_shds = set()
         try:
+            bot = inside_signal.InsideSignalAutomation(signal_type="reset", headless=headless, log_cb=add_log)
+            active_reset_signal_bot = bot
             bot.init_driver()
             if not bot.driver:
                 raise RuntimeError("Không thể khởi tạo/đăng nhập trình duyệt Chrome cho Cấp Lại Tín Hiệu")
@@ -2610,8 +2760,15 @@ def run_reset_signal_process():
                     bot.close()
                 except Exception:
                     pass
+            active_reset_signal_bot = None
+            core_login.release_inside_task("reset_signal")
 
-    threading.Thread(target=worker_reset_signal, daemon=True).start()
+    try:
+        threading.Thread(target=worker_reset_signal, daemon=True).start()
+    except Exception:
+        reset_signal_task_state["is_running"] = False
+        core_login.release_inside_task("reset_signal")
+        raise
     return jsonify({"status": "started", "count": len(to_process)})
 
 
@@ -2639,7 +2796,12 @@ def _is_clear_success(kq):
 def _auto_reset_after_clear_check():
     """Clear Tín Hiệu thành công quá 72h mà chưa có Cấp Lại Tín Hiệu -> tự chạy Cấp Lại (mỗi HĐ chỉ thử 1 lần, lỗi thì báo log, không chạy lại)."""
     from datetime import datetime, timedelta
-    if reset_signal_task_state["is_running"] or clear_signal_task_state["is_running"] or _other_inside_task_running():
+    if (
+        reset_signal_task_state["is_running"]
+        or clear_signal_task_state["is_running"]
+        or core_login.get_running_inside_task() is not None
+        or _other_inside_task_running()
+    ):
         return
     clear_res = inside_signal.fetch_sheet_data(gid=inside_signal.GID_CLEAR_SIGNAL, signal_type="clear")
     reset_res = inside_signal.fetch_sheet_data(gid=inside_signal.GID_RESET_SIGNAL, signal_type="reset")
@@ -2709,6 +2871,14 @@ def _auto_reset_after_clear_check():
     if not due:
         return
 
+    if (
+        reset_signal_task_state["is_running"]
+        or clear_signal_task_state["is_running"]
+        or core_login.get_running_inside_task() is not None
+        or _other_inside_task_running()
+    ):
+        return
+
     add_log(f"⏰ Phát hiện {len(due)} HĐ đã Clear Tín Hiệu quá {AUTO_RESET_HOURS}h chưa Cấp Lại → Cập nhật Auto Cấp Lại và gửi sang Cấp Lại Tín Hiệu", "info", "reset_signal")
     for r in due:
         shd = str(r.get("SHD", "")).strip()
@@ -2724,6 +2894,9 @@ def _auto_reset_after_clear_check():
     try:
         with app.test_client() as c:
             resp = c.post("/api/reset-signal/run", json={"records": due, "headless": True, "source": "auto_72h", "manual": False})
+            if resp.status_code == 409:
+                add_log(f"Phiên Inside FPT đang bận, tạm hoãn Cấp Lại 72h: {resp.get_json(silent=True)}", "warning", "reset_signal")
+                return
             if resp.status_code != 200:
                 add_log(f"Không thể tự Cấp Lại sau 72h (HTTP {resp.status_code}): {resp.get_json(silent=True)}", "error", "reset_signal")
                 _lock_signal_contracts_for_manual("reset_signal", [r.get("SHD") for r in due], reason="login_or_server_error")
@@ -2739,8 +2912,6 @@ def _auto_reset_after_clear_loop():
         except Exception as e:
             add_log(f"Lỗi kiểm tra Cấp Lại 72h: {e}", "warning")
         time.sleep(300)
-
-threading.Thread(target=_auto_reset_after_clear_loop, daemon=True).start()
 
 @app.route("/api/reset-signal/check-72h", methods=["POST", "GET"])
 def trigger_check_72h_api():
@@ -2766,15 +2937,22 @@ active_mybae_bot = None
 
 def _other_inside_task_running():
     """Trả về tên tiến trình khác đang dùng chung phiên Chrome Inside FPT (hoặc rỗng)."""
+    running = core_login.get_running_inside_task()
+    if running:
+        return running
     for name, st in (
         ("Phân Công Tay", assign_task_state),
         ("Clear Cls", cls_task_state),
         ("ByPass", bypass_task_state),
         ("Clear Tín Hiệu", clear_signal_task_state),
         ("Cấp Lại Tín Hiệu", reset_signal_task_state),
+        ("Bypass MyBAE", mybae_task_state),
+        ("Kéo Dữ Liệu", retrieval_task),
     ):
         if st.get("is_running"):
             return name
+    if task_state.get("status") == "running":
+        return "login"
     return ""
 
 @app.route("/api/session/clear-all", methods=["POST", "GET"])
@@ -2783,22 +2961,52 @@ def clear_all_sessions_api():
     Dọn dẹp triệt để:
     1. Đóng toàn bộ bot đang hoạt động
     2. Giải phóng tiến trình Chrome/ChromeDriver treo của các tác vụ cũ
-    3. Xóa toàn bộ file lock profile
-    4. Reset toàn bộ cờ is_running nếu bị kẹt
+    3. Xóa toàn bộ file lock profile (Inside FPT, Radius Portal, Port Portal)
+    4. Reset toàn bộ cờ is_running và giải phóng khóa phiên Inside nếu bị kẹt
     """
-    global active_mybae_bot, active_assign_bot, active_cls_bot
-    for b in [active_mybae_bot, active_assign_bot, active_cls_bot]:
+    global active_bypass_bot, active_cls_bot, active_assign_bot, \
+        active_clear_signal_bot, active_reset_signal_bot, active_mybae_bot, \
+        active_spampool_bot, active_bypass_nat_bot, active_port_bot
+    for b in (
+        active_bypass_bot,
+        active_cls_bot,
+        active_assign_bot,
+        active_clear_signal_bot,
+        active_reset_signal_bot,
+        active_mybae_bot,
+        active_spampool_bot,
+        active_bypass_nat_bot,
+        active_port_bot,
+    ):
         if b:
             try:
-                b.close()
+                if hasattr(b, "request_stop"):
+                    b.request_stop()
             except Exception:
                 pass
-    active_mybae_bot = None
-    active_assign_bot = None
-    active_cls_bot = None
+            try:
+                b.close(force=True)
+            except TypeError:
+                try:
+                    b.close()
+                except Exception:
+                    pass
+            except Exception:
+                pass
 
-    import core_login
-    core_login.clean_profile_locks_and_orphans(log_cb=add_log)
+    active_bypass_bot = None
+    active_cls_bot = None
+    active_assign_bot = None
+    active_clear_signal_bot = None
+    active_reset_signal_bot = None
+    active_mybae_bot = None
+    active_spampool_bot = None
+    active_bypass_nat_bot = None
+    active_port_bot = None
+
+    core_login.clean_profile_locks_and_orphans(profile_dir=core_login.get_inside_profile_dir(), log_cb=add_log)
+    core_login.clean_profile_locks_and_orphans(profile_dir=core_login.get_radius_profile_dir(), log_cb=add_log)
+    core_login.clean_profile_locks_and_orphans(profile_dir=inside_port.get_port_profile_dir(), log_cb=add_log)
 
     assign_task_state["is_running"] = False
     cls_task_state["is_running"] = False
@@ -2806,6 +3014,12 @@ def clear_all_sessions_api():
     clear_signal_task_state["is_running"] = False
     reset_signal_task_state["is_running"] = False
     mybae_task_state["is_running"] = False
+    spampool_task_state["is_running"] = False
+    bypass_nat_task_state["is_running"] = False
+    port_task_state["is_running"] = False
+    retrieval_task["is_running"] = False
+    task_state["status"] = "idle"
+    core_login.release_inside_task()
 
     add_log("Đã giải phóng toàn bộ tiến trình treo và xóa sạch phiên cũ!", "success")
     return jsonify({"status": "ok", "message": "Đã giải phóng toàn bộ tiến trình Chrome treo và xóa sạch phiên cũ!"})
@@ -2881,39 +3095,49 @@ def export_mybae_excel():
 
 @app.route("/api/mybae/run", methods=["POST"])
 def run_mybae_process():
-    if mybae_task_state["is_running"]:
-        return jsonify({"status": "busy", "message": "Đang có tiến trình Bypass MyBAE đang chạy..."}), 429
-    other = _other_inside_task_running()
-    if other:
-        return jsonify({"status": "busy", "message": f"Đang có tiến trình {other} đang chạy trên Inside FPT. Hãy chờ hoàn tất!"}), 429
+    ok, busy_by = core_login.try_acquire_inside_task("mybae")
+    if not ok:
+        return jsonify({
+            "status": "error",
+            "message": f"Phiên Chrome Inside FPT đang bận chạy '{busy_by}'. Vui lòng đợi tiến trình đó hoàn tất!"
+        }), 409
 
-    data             = request.json or {}
-    sheet_id         = data.get("sheet_id", inside_mybae.DEFAULT_SHEET_ID)
-    gid              = data.get("gid", inside_mybae.GID_MYBAE)
-    selected_records = data.get("records")
-    headless         = data.get("headless", True)
+    validated = False
+    try:
+        if mybae_task_state["is_running"]:
+            return jsonify({"status": "busy", "message": "Đang có tiến trình Bypass MyBAE đang chạy..."}), 429
 
-    sheet_res = inside_mybae.fetch_sheet_data(sheet_id=sheet_id, gid=gid)
-    col_indices = sheet_res.get("col_indices", {}) if sheet_res.get("status") == "ok" else {}
+        data             = request.json or {}
+        sheet_id         = data.get("sheet_id", inside_mybae.DEFAULT_SHEET_ID)
+        gid              = data.get("gid", inside_mybae.GID_MYBAE)
+        selected_records = data.get("records")
+        headless         = data.get("headless", True)
 
-    if selected_records:
-        to_process = selected_records
-    else:
-        if sheet_res["status"] != "ok" or not sheet_res["records"]:
-            return jsonify({"status": "error", "message": "Không tìm thấy dữ liệu trên Google Sheet Bypass MyBAE"}), 400
-        to_process = [r for r in sheet_res["records"] if not inside_mybae.is_final_row(r)]
+        sheet_res = inside_mybae.fetch_sheet_data(sheet_id=sheet_id, gid=gid)
+        col_indices = sheet_res.get("col_indices", {}) if sheet_res.get("status") == "ok" else {}
 
-    if not to_process:
-        return jsonify({"status": "error", "message": "Không có hợp đồng nào để xử lý!"}), 400
+        if selected_records:
+            to_process = selected_records
+        else:
+            if sheet_res["status"] != "ok" or not sheet_res["records"]:
+                return jsonify({"status": "error", "message": "Không tìm thấy dữ liệu trên Google Sheet Bypass MyBAE"}), 400
+            to_process = [r for r in sheet_res["records"] if not inside_mybae.is_final_row(r)]
 
-    mybae_task_state["is_running"]           = True
-    mybae_task_state["total"]                = len(to_process)
-    mybae_task_state["current_index"]        = 0
-    mybae_task_state["current_shd"]          = str(to_process[0].get("SHD", ""))
-    mybae_task_state["message"]              = f"Bắt đầu xử lý {len(to_process)} hợp đồng Bypass MyBAE..."
-    mybae_task_state["sheet_id"]             = sheet_id
-    mybae_task_state["gid"]                  = gid
-    mybae_task_state["processed_in_session"] = []
+        if not to_process:
+            return jsonify({"status": "error", "message": "Không có hợp đồng nào để xử lý!"}), 400
+
+        mybae_task_state["is_running"]           = True
+        mybae_task_state["total"]                = len(to_process)
+        mybae_task_state["current_index"]        = 0
+        mybae_task_state["current_shd"]          = str(to_process[0].get("SHD", ""))
+        mybae_task_state["message"]              = f"Bắt đầu xử lý {len(to_process)} hợp đồng Bypass MyBAE..."
+        mybae_task_state["sheet_id"]             = sheet_id
+        mybae_task_state["gid"]                  = gid
+        mybae_task_state["processed_in_session"] = []
+        validated = True
+    finally:
+        if not validated:
+            core_login.release_inside_task("mybae")
 
     mode_label = "Chạy ngầm (Headless)" if headless else "Mở Chrome xem trực tiếp (Visible)"
     add_log(f"=== BẮT ĐẦU AUTO BYPASS MYBAE {len(to_process)} HỢP ĐỒNG ({mode_label}) ===", "info")
@@ -2953,9 +3177,10 @@ def run_mybae_process():
 
     def worker_mybae():
         global active_mybae_bot
-        bot = inside_mybae.InsideMyBaeAutomation(headless=headless, keep_open=True, log_cb=add_log)
-        active_mybae_bot = bot
+        bot = None
         try:
+            bot = inside_mybae.InsideMyBaeAutomation(headless=headless, keep_open=True, log_cb=add_log)
+            active_mybae_bot = bot
             bot.init_driver()
             bot.navigate_to_assign_page()
 
@@ -3004,8 +3229,15 @@ def run_mybae_process():
                     bot.close()
                 except Exception:
                     pass
+            active_mybae_bot = None
+            core_login.release_inside_task("mybae")
 
-    threading.Thread(target=worker_mybae, daemon=True).start()
+    try:
+        threading.Thread(target=worker_mybae, daemon=True).start()
+    except Exception:
+        mybae_task_state["is_running"] = False
+        core_login.release_inside_task("mybae")
+        raise
     return jsonify({"status": "started", "count": len(to_process)})
 
 
@@ -3016,6 +3248,7 @@ def run_mybae_process():
 import inside_spampool
 
 radius_task_lock = threading.Lock()
+radius_sync_busy = {"active": False}
 
 spampool_task_state = {
     "is_running": False,
@@ -3069,72 +3302,87 @@ def clear_spampool_cache():
 
 @app.route("/api/spampool/login", methods=["POST"])
 def spampool_manual_login():
-    data = request.json or {}
-    headless = data.get("headless", False)
-    force = data.get("force", False)
-
-    add_log("=== BẮT ĐẦU XÁC THỰC ĐĂNG NHẬP RADIUS PORTAL ===", "info")
+    with radius_task_lock:
+        if spampool_task_state.get("is_running") or bypass_nat_task_state.get("is_running") or radius_sync_busy["active"]:
+            return jsonify({"status": "busy", "message": "Hệ thống Radius Portal đang bận xử lý tác vụ khác!"}), 409
+        radius_sync_busy["active"] = True
     try:
-        ok, final_url, title = core_login.run_radius_login(
-            headless=headless,
-            keep_open=True,
-            log_callback=add_log,
-            force=force
-        )
-        add_log(f"Đăng nhập thành công Radius Portal! ({final_url})", "success")
-        return jsonify({
-            "status": "ok",
-            "url": final_url,
-            "title": title,
-            "message": "Đăng nhập Radius Portal thành công!"
-        })
-    except Exception as e:
-        add_log(f"Đăng nhập Radius Portal thất bại: {e}", "error")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        data = request.json or {}
+        headless = data.get("headless", False)
+        force = data.get("force", False)
+
+        add_log("=== BẮT ĐẦU XÁC THỰC ĐĂNG NHẬP RADIUS PORTAL ===", "info")
+        try:
+            ok, final_url, title = core_login.run_radius_login(
+                headless=headless,
+                keep_open=True,
+                log_callback=add_log,
+                force=force
+            )
+            add_log(f"Đăng nhập thành công Radius Portal! ({final_url})", "success")
+            return jsonify({
+                "status": "ok",
+                "url": final_url,
+                "title": title,
+                "message": "Đăng nhập Radius Portal thành công!"
+            })
+        except Exception as e:
+            add_log(f"Đăng nhập Radius Portal thất bại: {e}", "error")
+            return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        with radius_task_lock:
+            radius_sync_busy["active"] = False
 
 @app.route("/api/spampool/test_single", methods=["POST"])
 def test_single_spampool():
-    data = request.json or {}
-    shd = str(data.get("shd", "")).strip().upper()
-    row_id = str(data.get("row_id", "")).strip()
-    tac_vu = str(data.get("tac_vu", "")).strip()
-    headless = data.get("headless", False)
+    with radius_task_lock:
+        if spampool_task_state.get("is_running") or bypass_nat_task_state.get("is_running") or radius_sync_busy["active"]:
+            return jsonify({"status": "busy", "message": "Hệ thống Radius Portal đang bận xử lý tác vụ khác!"}), 409
+        radius_sync_busy["active"] = True
 
-    if not shd:
-        return jsonify({"status": "error", "message": "Chưa cung cấp Số Hợp Đồng!"}), 400
-
+    bot = None
+    shd = ""
     try:
-        sheet_data = inside_spampool.fetch_sheet_data()
-        records = sheet_data.get("records", [])
-        target_rec = None
-        if row_id:
-            for r in records:
-                if str(r.get("ID", "")).strip() == row_id:
-                    target_rec = r
-                    break
-        if not target_rec:
-            # Ưu tiên bản ghi đang pending nếu có nhiều dòng cùng SHD
-            for r in records:
-                if str(r.get("SHD", "")).strip().upper() == shd and inside_spampool.is_pending(r.get("Kết Quả"), r.get("Thao Tác")):
-                    target_rec = r
-                    break
-        if not target_rec:
-            for r in records:
-                if str(r.get("SHD", "")).strip().upper() == shd:
-                    target_rec = r
-                    break
-        if target_rec:
-            if not tac_vu:
-                tac_vu = str(target_rec.get("Tác Vụ", "")).strip()
-            if not row_id:
-                row_id = str(target_rec.get("ID", "")).strip()
-    except Exception:
-        pass
+        data = request.json or {}
+        shd = str(data.get("shd", "")).strip().upper()
+        row_id = str(data.get("row_id", "")).strip()
+        tac_vu = str(data.get("tac_vu", "")).strip()
+        headless = data.get("headless", False)
 
-    task_name = "DEACTIVE IP 0.0.0.0" if inside_spampool.is_deactive_ip_task(tac_vu) else "SPAMPOOL"
-    add_log(f"=== BẮT ĐẦU TEST {task_name} CHO HĐ {shd} (Tác vụ: '{tac_vu}') ===", "info")
-    bot = inside_spampool.InsideSpamPoolAutomation(headless=headless, keep_open=False, log_cb=add_log)
-    try:
+        if not shd:
+            return jsonify({"status": "error", "message": "Chưa cung cấp Số Hợp Đồng!"}), 400
+
+        try:
+            sheet_data = inside_spampool.fetch_sheet_data()
+            records = sheet_data.get("records", [])
+            target_rec = None
+            if row_id:
+                for r in records:
+                    if str(r.get("ID", "")).strip() == row_id:
+                        target_rec = r
+                        break
+            if not target_rec:
+                # Ưu tiên bản ghi đang pending nếu có nhiều dòng cùng SHD
+                for r in records:
+                    if str(r.get("SHD", "")).strip().upper() == shd and inside_spampool.is_pending(r.get("Kết Quả"), r.get("Thao Tác")):
+                        target_rec = r
+                        break
+            if not target_rec:
+                for r in records:
+                    if str(r.get("SHD", "")).strip().upper() == shd:
+                        target_rec = r
+                        break
+            if target_rec:
+                if not tac_vu:
+                    tac_vu = str(target_rec.get("Tác Vụ", "")).strip()
+                if not row_id:
+                    row_id = str(target_rec.get("ID", "")).strip()
+        except Exception:
+            pass
+
+        task_name = "DEACTIVE IP 0.0.0.0" if inside_spampool.is_deactive_ip_task(tac_vu) else "SPAMPOOL"
+        add_log(f"=== BẮT ĐẦU TEST {task_name} CHO HĐ {shd} (Tác vụ: '{tac_vu}') ===", "info")
+        bot = inside_spampool.InsideSpamPoolAutomation(headless=headless, keep_open=False, log_cb=add_log)
         bot.init_driver()
         bot.navigate_to_network_connection()
         ok, thao_tac, ket_qua = bot.process_spampool_contract(shd, tac_vu=tac_vu)
@@ -3195,12 +3443,20 @@ def test_single_spampool():
         add_log(f"Lỗi test HĐ {shd}: {e}", "error")
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
-        bot.close(force=True)
+        if bot:
+            try:
+                bot.close(force=True)
+            except Exception:
+                pass
+        with radius_task_lock:
+            radius_sync_busy["active"] = False
 
 @app.route("/api/spampool/start", methods=["POST"])
 def start_spampool_task():
     global active_spampool_bot
     with radius_task_lock:
+        if radius_sync_busy["active"]:
+            return jsonify({"status": "busy", "message": "Hệ thống Radius Portal đang bận xử lý đăng nhập/test đơn!"}), 409
         if spampool_task_state.get("is_running"):
             return jsonify({"status": "busy", "message": "Tiến trình SpamPool đang chạy!"}), 429
         if bypass_nat_task_state.get("is_running"):
@@ -3404,42 +3660,57 @@ def clear_bypass_nat_cache():
 
 @app.route("/api/bypass_nat/login", methods=["POST"])
 def bypass_nat_manual_login():
-    data = request.json or {}
-    headless = data.get("headless", False)
-    force = data.get("force", False)
-
-    add_log("=== BẮT ĐẦU XÁC THỰC ĐĂNG NHẬP RADIUS PORTAL (BYPASS NAT) ===", "info")
+    with radius_task_lock:
+        if spampool_task_state.get("is_running") or bypass_nat_task_state.get("is_running") or radius_sync_busy["active"]:
+            return jsonify({"status": "busy", "message": "Hệ thống Radius Portal đang bận xử lý tác vụ khác!"}), 409
+        radius_sync_busy["active"] = True
     try:
-        ok, final_url, title = core_login.run_radius_login(
-            headless=headless,
-            keep_open=True,
-            log_callback=add_log,
-            force=force
-        )
-        add_log(f"Đăng nhập thành công Radius Portal! ({final_url})", "success")
-        return jsonify({
-            "status": "ok",
-            "url": final_url,
-            "title": title,
-            "message": "Đăng nhập Radius Portal thành công!"
-        })
-    except Exception as e:
-        add_log(f"Đăng nhập Radius Portal thất bại: {e}", "error")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        data = request.json or {}
+        headless = data.get("headless", False)
+        force = data.get("force", False)
+
+        add_log("=== BẮT ĐẦU XÁC THỰC ĐĂNG NHẬP RADIUS PORTAL (BYPASS NAT) ===", "info")
+        try:
+            ok, final_url, title = core_login.run_radius_login(
+                headless=headless,
+                keep_open=True,
+                log_callback=add_log,
+                force=force
+            )
+            add_log(f"Đăng nhập thành công Radius Portal! ({final_url})", "success")
+            return jsonify({
+                "status": "ok",
+                "url": final_url,
+                "title": title,
+                "message": "Đăng nhập Radius Portal thành công!"
+            })
+        except Exception as e:
+            add_log(f"Đăng nhập Radius Portal thất bại: {e}", "error")
+            return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        with radius_task_lock:
+            radius_sync_busy["active"] = False
 
 @app.route("/api/bypass_nat/test_single", methods=["POST"])
 def test_single_bypass_nat():
-    data = request.json or {}
-    shd = str(data.get("shd", "")).strip().upper()
-    nguyen_nhan_1 = str(data.get("nguyen_nhan_1", "")).strip()
-    headless = data.get("headless", False)
+    with radius_task_lock:
+        if spampool_task_state.get("is_running") or bypass_nat_task_state.get("is_running") or radius_sync_busy["active"]:
+            return jsonify({"status": "busy", "message": "Hệ thống Radius Portal đang bận xử lý tác vụ khác!"}), 409
+        radius_sync_busy["active"] = True
 
-    if not shd:
-        return jsonify({"status": "error", "message": "Chưa cung cấp Số Hợp Đồng!"}), 400
-
-    add_log(f"=== BẮT ĐẦU TEST BYPASS NAT CHO HĐ {shd} ===", "info")
-    bot = inside_bypass_nat.InsideBypassNatAutomation(headless=headless, keep_open=False, log_cb=add_log)
+    bot = None
+    shd = ""
     try:
+        data = request.json or {}
+        shd = str(data.get("shd", "")).strip().upper()
+        nguyen_nhan_1 = str(data.get("nguyen_nhan_1", "")).strip()
+        headless = data.get("headless", False)
+
+        if not shd:
+            return jsonify({"status": "error", "message": "Chưa cung cấp Số Hợp Đồng!"}), 400
+
+        add_log(f"=== BẮT ĐẦU TEST BYPASS NAT CHO HĐ {shd} ===", "info")
+        bot = inside_bypass_nat.InsideBypassNatAutomation(headless=headless, keep_open=False, log_cb=add_log)
         bot.init_driver()
         bot.navigate_to_network_connection()
         ok, thao_tac, ket_qua = bot.process_bypass_nat_contract(shd, nguyen_nhan_1)
@@ -3493,12 +3764,20 @@ def test_single_bypass_nat():
         add_log(f"Lỗi test HĐ {shd}: {e}", "error")
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
-        bot.close(force=True)
+        if bot:
+            try:
+                bot.close(force=True)
+            except Exception:
+                pass
+        with radius_task_lock:
+            radius_sync_busy["active"] = False
 
 @app.route("/api/bypass_nat/start", methods=["POST"])
 def start_bypass_nat_task():
     global active_bypass_nat_bot
     with radius_task_lock:
+        if radius_sync_busy["active"]:
+            return jsonify({"status": "busy", "message": "Hệ thống Radius Portal đang bận xử lý tác vụ đơn lẻ/đăng nhập!"}), 409
         if bypass_nat_task_state.get("is_running"):
             return jsonify({"status": "busy", "message": "Tiến trình Bypass NAT đang chạy!"}), 429
         if spampool_task_state.get("is_running"):
@@ -3649,6 +3928,7 @@ port_task_state = {
 }
 active_port_bot = None
 port_task_lock = threading.Lock()
+port_sync_busy = {"active": False}
 
 def _update_port_sheet_webhook(shd, thao_tac_val, row_id=None, sheet_id=None, gid=None, tac_vu="Thu Hồi Port", tap_diem="", port_val="", ket_qua_val=None):
     cfg = core_login.load_config()
@@ -3753,55 +4033,62 @@ def clear_port_cache():
 
 @app.route("/api/port/test_single", methods=["POST"])
 def test_single_port():
-    data = request.json or {}
-    shd = str(data.get("shd", "")).strip()
-    row_id = str(data.get("row_id", "")).strip()
-    tac_vu = str(data.get("tac_vu", "")).strip()
-    tap_diem = str(data.get("tap_diem", "")).strip()
-    port_num = str(data.get("port", "")).strip()
-    headless = data.get("headless", False)
+    with port_task_lock:
+        if port_task_state.get("is_running") or port_sync_busy["active"]:
+            return jsonify({"status": "busy", "message": "Hệ thống Port Portal đang bận xử lý tác vụ khác!"}), 409
+        port_sync_busy["active"] = True
 
-    # Trường hợp dòng chỉ có Tập điểm / Port mà cột SHD để trống
-    if not shd:
-        thao_tac = inside_port.PORT_NO_SHD_MSG
-        now_str = time.strftime("%d/%m/%Y %H:%M:%S")
-        cache = inside_port.load_cache()
-        c_val = {
-            "thao_tac": thao_tac,
-            "ket_qua": "Không thành công",
-            "tap_diem": tap_diem,
-            "port": port_num,
-            "time": now_str,
-            "timestamp_epoch": time.time(),
-            "force_override": True
-        }
-        if row_id:
-            cache[f"_{row_id}"] = c_val
-            cache[f"ROW_{row_id}"] = c_val
-        inside_port.save_cache(cache)
-
-        _update_port_sheet_webhook(
-            "",
-            thao_tac,
-            row_id=row_id,
-            tac_vu=tac_vu or "Thu Hồi Port",
-            tap_diem=tap_diem,
-            port_val=port_num,
-            ket_qua_val="Không thành công"
-        )
-        add_log(f"⚠️ Dòng ID={row_id} (Tập điểm={tap_diem}, Port={port_num}) trống SHD -> {thao_tac}", "warning", "port")
-        return jsonify({
-            "status": "ok",
-            "shd": "",
-            "tap_diem": tap_diem,
-            "port": port_num,
-            "thao_tac": thao_tac,
-            "message": thao_tac
-        })
-
-    add_log(f"=== BẮT ĐẦU THU HỒI PORT CHO HĐ {shd} ===", "info")
-    bot = inside_port.InsidePortAutomation(headless=headless, keep_open=False, log_cb=add_log)
+    bot = None
+    shd = ""
     try:
+        data = request.json or {}
+        shd = str(data.get("shd", "")).strip()
+        row_id = str(data.get("row_id", "")).strip()
+        tac_vu = str(data.get("tac_vu", "")).strip()
+        tap_diem = str(data.get("tap_diem", "")).strip()
+        port_num = str(data.get("port", "")).strip()
+        headless = data.get("headless", False)
+
+        # Trường hợp dòng chỉ có Tập điểm / Port mà cột SHD để trống
+        if not shd:
+            thao_tac = inside_port.PORT_NO_SHD_MSG
+            now_str = time.strftime("%d/%m/%Y %H:%M:%S")
+            cache = inside_port.load_cache()
+            c_val = {
+                "thao_tac": thao_tac,
+                "ket_qua": "Không thành công",
+                "tap_diem": tap_diem,
+                "port": port_num,
+                "time": now_str,
+                "timestamp_epoch": time.time(),
+                "force_override": True
+            }
+            if row_id:
+                cache[f"_{row_id}"] = c_val
+                cache[f"ROW_{row_id}"] = c_val
+            inside_port.save_cache(cache)
+
+            _update_port_sheet_webhook(
+                "",
+                thao_tac,
+                row_id=row_id,
+                tac_vu=tac_vu or "Thu Hồi Port",
+                tap_diem=tap_diem,
+                port_val=port_num,
+                ket_qua_val="Không thành công"
+            )
+            add_log(f"⚠️ Dòng ID={row_id} (Tập điểm={tap_diem}, Port={port_num}) trống SHD -> {thao_tac}", "warning", "port")
+            return jsonify({
+                "status": "ok",
+                "shd": "",
+                "tap_diem": tap_diem,
+                "port": port_num,
+                "thao_tac": thao_tac,
+                "message": thao_tac
+            })
+
+        add_log(f"=== BẮT ĐẦU THU HỒI PORT CHO HĐ {shd} ===", "info")
+        bot = inside_port.InsidePortAutomation(headless=headless, keep_open=False, log_cb=add_log)
         bot.init_driver()
         bot.navigate_to_ftth_new_search()
         ok, thao_tac = bot.process_port_contract(shd, tac_vu=tac_vu)
@@ -3846,12 +4133,20 @@ def test_single_port():
         add_log(f"Lỗi xử lý Thu hồi Port HĐ {shd}: {e}", "error")
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
-        bot.close(force=True)
+        if bot:
+            try:
+                bot.close(force=True)
+            except Exception:
+                pass
+        with port_task_lock:
+            port_sync_busy["active"] = False
 
 @app.route("/api/port/start", methods=["POST"])
 def start_port_auto():
     global active_port_bot
     with port_task_lock:
+        if port_sync_busy["active"]:
+            return jsonify({"status": "busy", "message": "Hệ thống Port Portal đang bận xử lý tác vụ test đơn!"}), 409
         if port_task_state.get("is_running"):
             return jsonify({"status": "busy", "message": "Tiến trình Cấp/Thu Hồi Port đang chạy!"}), 429
 
@@ -4061,7 +4356,6 @@ def find_free_port(preferred_port=5001, fallback_start=5001, fallback_end=5100):
 
 # ================= AUTO NỀN TOÀN HỆ THỐNG (chạy trên server, không cần mở tab/trình duyệt) =================
 AUTO_MODES_FILE   = os.path.join(BASE_DIR, "auto_modes.json")
-AUTO_ATTEMPT_FILE = os.path.join(BASE_DIR, "auto_attempts.json")
 AUTO_ATTEMPT_TTL  = 300  # HĐ đã được Auto thử: chờ 5 phút (để Sheet kịp cập nhật) rồi mới thử lại nếu vẫn chưa xử lý
 AUTO_SCAN_INTERVAL = 5  # giây
 AUTO_TABS = ["bypass", "cls", "assign", "clear_signal", "reset_signal", "mybae", "spampool", "bypass_nat", "port"]
@@ -4245,7 +4539,8 @@ def _auto_orchestrator_cycle():
                 if not pend_to_run:
                     continue
                 add_log(f"🤖 Auto nền: phát hiện {len(pend_to_run)} HĐ SpamPool → tự chạy", "info")
-                if c.post("/api/spampool/start", json={"headless": True}).status_code == 200:
+                r_sp = c.post("/api/spampool/start", json={"headless": True})
+                if r_sp.status_code == 200 and (r_sp.get_json(silent=True) or {}).get("status") == "started":
                     attempts.setdefault(tab, {}).update({str(r.get("SHD")).strip(): now for r in pend_to_run})
                     inside_signal.save_cache(AUTO_ATTEMPT_FILE, attempts)
                     triggered = True
@@ -4265,7 +4560,8 @@ def _auto_orchestrator_cycle():
                 if not pend_to_run:
                     continue
                 add_log(f"🤖 Auto nền: phát hiện {len(pend_to_run)} HĐ Bypass NAT → tự chạy", "info")
-                if c.post("/api/bypass_nat/start", json={"headless": True}).status_code == 200:
+                r_bn = c.post("/api/bypass_nat/start", json={"headless": True})
+                if r_bn.status_code == 200 and (r_bn.get_json(silent=True) or {}).get("status") == "started":
                     attempts.setdefault(tab, {}).update({str(r.get("SHD")).strip(): now for r in pend_to_run})
                     inside_signal.save_cache(AUTO_ATTEMPT_FILE, attempts)
                     triggered = True
@@ -4302,7 +4598,8 @@ def _auto_orchestrator_cycle():
                 if not pend_to_run:
                     continue
                 add_log(f"🤖 Auto nền: phát hiện {len(pend_to_run)} yêu cầu Cấp/Thu Hồi Port → tự chạy", "info")
-                if c.post("/api/port/start", json={"headless": True}).status_code == 200:
+                r_pt = c.post("/api/port/start", json={"headless": True})
+                if r_pt.status_code == 200 and (r_pt.get_json(silent=True) or {}).get("status") == "started":
                     attempts.setdefault(tab, {}).update({_port_key(r): now for r in pend_to_run})
                     inside_signal.save_cache(AUTO_ATTEMPT_FILE, attempts)
                     triggered = True
@@ -4328,7 +4625,7 @@ def _auto_orchestrator_cycle():
             if tab in ("clear_signal", "reset_signal"):
                 run_payload["manual"] = False
             r2 = c.post(cfg["run"], json=run_payload)
-            if r2.status_code == 200:
+            if r2.status_code == 200 and (r2.get_json(silent=True) or {}).get("status") == "started":
                 attempts.setdefault(tab, {}).update({f"{str(r.get('SHD')).strip()}_{str(r.get('ID', '')).strip()}": now for r in pend})
                 inside_signal.save_cache(AUTO_ATTEMPT_FILE, attempts)
                 triggered = True
@@ -4343,7 +4640,25 @@ def _auto_orchestrator_loop():
             add_log(f"Lỗi Auto nền: {e}", "warning")
         time.sleep(AUTO_SCAN_INTERVAL)
 
-threading.Thread(target=_auto_orchestrator_loop, daemon=True).start()
+_BG_THREADS_STARTED = False
+_BG_THREADS_LOCK = threading.Lock()
+
+def start_background_threads():
+    """Khởi chạy các luồng nền hệ thống một lần duy nhất (bỏ qua khi đang chạy test)."""
+    global _BG_THREADS_STARTED
+    if os.environ.get("TESTING") == "1":
+        return
+    with _BG_THREADS_LOCK:
+        if _BG_THREADS_STARTED:
+            return
+        _BG_THREADS_STARTED = True
+        threading.Thread(target=_log_flusher_loop, daemon=True).start()
+        threading.Thread(target=_auto_reset_after_clear_loop, daemon=True).start()
+        threading.Thread(target=_auto_orchestrator_loop, daemon=True).start()
+
+@app.before_request
+def _ensure_bg_threads_on_request():
+    start_background_threads()
 
 def open_browser_delayed(port):
     time.sleep(1.2)
@@ -4354,6 +4669,7 @@ from auto_import_routes import auto_import_bp
 app.register_blueprint(auto_import_bp)
 
 if __name__ == "__main__":
+    start_background_threads()
     port = int(os.environ.get("PORT", 5001))
 
     print(f"==================================================================")

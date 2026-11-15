@@ -38,6 +38,7 @@ const selectDateFilterClearSignal   = document.getElementById('selectDateFilterC
 const btnClearClearSignalCache      = document.getElementById('btnClearClearSignalCache');
 
 let currentClearSignalRecords  = [];
+let currentFilteredClearSignalRecords = [];
 let selectedClearSignalShds    = new Set();
 let isClearSignalRunning       = false;
 autoClearSignalMode            = localStorage.getItem('autoClearSignalMode') !== 'false'; // Mặc định là BẬT
@@ -125,9 +126,13 @@ if (btnAutoClearSignalModeToggle) {
     autoClearSignalMode = !autoClearSignalMode;
     localStorage.setItem('autoClearSignalMode', autoClearSignalMode ? 'true' : 'false');
     updateAutoClearSignalModeUI();
+    fetch('/api/auto-modes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clear_signal: autoClearSignalMode })
+    }).catch(() => {});
     if (autoClearSignalMode) {
-      showSnackbar('🤖 Chế độ Tự Động Clear Tín Hiệu đã BẬT!');
-      checkAndAutoTriggerClearSignal();
+      showSnackbar('🤖 Chế độ Tự Động Clear Tín Hiệu đã BẬT - Hệ thống chạy nền tự động sẽ điều phối!');
     } else {
       showSnackbar('Chế độ Tự Động Clear Tín Hiệu đã TẮT.');
       if (autoClearSignalCountdownTimer) {
@@ -152,29 +157,9 @@ function _isClearSignalAutoEligible(r) {
   return !_isClearSignalFinalDone(r);
 }
 
+// Việc tự động kích hoạt được điều phối tập trung ở Backend (_auto_orchestrator_loop)
 function checkAndAutoTriggerClearSignal() {
-  if (!autoClearSignalMode || isClearSignalRunning) return;
-  const pending = currentClearSignalRecords.filter(r => _isClearSignalAutoEligible(r));
-  if (pending.length === 0) return;
-  if (autoClearSignalCountdownTimer) return;
-
-  autoClearSignalCountdown = 3;
-  if (autoClearSignalModeText) autoClearSignalModeText.textContent = `Tự Động: chạy sau ${autoClearSignalCountdown}s...`;
-  showSnackbar(`🤖 Phát hiện ${pending.length} hợp đồng Clear Tín Hiệu chưa xử lý - Tự khởi động sau 3 giây...`);
-
-  autoClearSignalCountdownTimer = setInterval(() => {
-    autoClearSignalCountdown--;
-    if (autoClearSignalCountdown > 0) {
-      if (autoClearSignalModeText) autoClearSignalModeText.textContent = `Tự Động: chạy sau ${autoClearSignalCountdown}s...`;
-    } else {
-      clearInterval(autoClearSignalCountdownTimer);
-      autoClearSignalCountdownTimer = null;
-      if (autoClearSignalModeText) autoClearSignalModeText.textContent = 'Tự Động: BẬT';
-      if (!isClearSignalRunning) {
-        executeClearSignalProcess(null, true);
-      }
-    }
-  }, 1000);
+  return;
 }
 
 // ===================== DATA LOADING & RENDERING =====================
@@ -186,6 +171,8 @@ async function loadClearSignalSheetData() {
     if (data.status !== 'ok') return;
 
     currentClearSignalRecords = data.records || [];
+    const validClearShds = new Set(currentClearSignalRecords.map(r => String(r['SHD'] || '').trim()).filter(Boolean));
+    Array.from(selectedClearSignalShds).forEach(s => { if (!validClearShds.has(s)) selectedClearSignalShds.delete(s); });
     renderClearSignalTable();
     updateClearSignalKPIs();
 
@@ -263,6 +250,7 @@ function renderClearSignalTable() {
   const sortedFiltered = (window.UnifiedWorkTabs && typeof window.UnifiedWorkTabs.sortRecordsNewestFirst === 'function')
     ? window.UnifiedWorkTabs.sortRecordsNewestFirst(filtered)
     : filtered;
+  currentFilteredClearSignalRecords = sortedFiltered;
 
   if (clearSignalTableFooterText) {
     clearSignalTableFooterText.textContent = `Hiển thị ${sortedFiltered.length} / ${currentClearSignalRecords.length} bản ghi`;
@@ -380,11 +368,13 @@ function renderClearSignalTable() {
 if (chkClearSignalSelectAll) {
   chkClearSignalSelectAll.addEventListener('change', (e) => {
     const isChecked = e.target.checked;
-    if (isChecked) {
-      currentClearSignalRecords.forEach(r => { if (r['SHD']) selectedClearSignalShds.add(r['SHD']); });
-    } else {
-      selectedClearSignalShds.clear();
-    }
+    const targetList = currentFilteredClearSignalRecords;
+    targetList.forEach(r => {
+      const shd = String(r['SHD'] || '').trim();
+      if (!shd) return;
+      if (isChecked) selectedClearSignalShds.add(shd);
+      else selectedClearSignalShds.delete(shd);
+    });
     renderClearSignalTable();
   });
 }
@@ -427,13 +417,19 @@ async function executeClearSignalProcess(selectedRecords = null, isAuto = false)
       recordsToRun = currentClearSignalRecords.filter(r => selectedClearSignalShds.has(r['SHD']));
     } else {
       recordsToRun = currentClearSignalRecords.filter(r => !_isClearSignalFinalDone(r));
-      if (recordsToRun.length === 0) recordsToRun = currentClearSignalRecords;
     }
   }
 
   if (!recordsToRun || recordsToRun.length === 0) {
-    showSnackbar('Không tìm thấy hợp đồng nào để xử lý');
+    showSnackbar('ℹ️ Không có hợp đồng mới cần xử lý Clear Tín Hiệu!');
     return;
+  }
+
+  if (!isAuto && !selectedRecords) {
+    const doneCount = recordsToRun.filter(r => _isClearSignalFinalDone(r)).length;
+    if (doneCount >= 2 && !window.confirm(`Bạn đang chọn chạy lại ${doneCount} hợp đồng đã xử lý xong. Bạn có chắc chắn muốn chạy lại?`)) {
+      return;
+    }
   }
 
   setClearSignalRunningState(true);
@@ -450,8 +446,8 @@ async function executeClearSignalProcess(selectedRecords = null, isAuto = false)
       })
     });
     const data = await res.json();
-    if (!res.ok) {
-      showSnackbar('❌ ' + (data.message || 'Lỗi khởi chạy'));
+    if (!res.ok || (data.status !== 'started' && data.status !== 'ok')) {
+      showSnackbar((data.status === 'empty' ? 'ℹ️ ' : '❌ ') + (data.message || 'Lỗi khởi chạy'));
       setClearSignalRunningState(false);
     }
   } catch (err) {

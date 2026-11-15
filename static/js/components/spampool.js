@@ -48,7 +48,6 @@ isSpamPoolRunning = false;
 autoSpamPoolMode = localStorage.getItem('autoSpamPoolMode') !== 'false';
 autoSpamPoolCountdownTimer = null;
 autoSpamPoolCountdown = 0;
-let spampoolPollTimer = null;
 
 
 // ===================== AUTO MODE UI =====================
@@ -429,33 +428,43 @@ async function stopAutoSpamPool() {
 }
 
 function startSpamPoolPolling() {
-  if (spampoolPollTimer) clearInterval(spampoolPollTimer);
-  spampoolPollTimer = setInterval(async () => {
-    try {
-      const res = await fetch('/api/spampool/status?_t=' + Date.now());
-      const data = await res.json();
-      if (res.ok && data.status === 'ok') {
-        const t = data.task || {};
-        const total = t.total || 0;
-        const current = t.current_index || 0;
-        const msg = t.message || 'Đang thực hiện...';
-        const isRunning = t.is_running || false;
+  pollSpamPoolStatus();
+}
 
+async function pollSpamPoolStatus() {
+  try {
+    const res = await fetch('/api/spampool/status?_t=' + Date.now());
+    const data = await res.json();
+    if (res.ok && data.status === 'ok') {
+      const t = data.task || {};
+      const total = t.total || 0;
+      const current = t.current_index || 0;
+      const msg = t.message || 'Đang thực hiện...';
+      const isRunning = t.is_running || false;
+
+      if (isRunning) {
         const percent = total > 0 ? Math.round((current / total) * 100) : 0;
+        if (spampoolProgressContainer) spampoolProgressContainer.classList.remove('hidden');
         if (spampoolProgressBar) spampoolProgressBar.style.width = percent + '%';
         if (spampoolProgressPercent) spampoolProgressPercent.textContent = percent + '%';
         if (spampoolProgressText) spampoolProgressText.textContent = msg;
-
-        if (!isRunning) {
-          clearInterval(spampoolPollTimer);
-          isSpamPoolRunning = false;
-          if (btnStartAutoSpamPool) btnStartAutoSpamPool.classList.remove('hidden');
-          if (btnStopAutoSpamPool) btnStopAutoSpamPool.classList.add('hidden');
-          loadSpamPoolSheetData();
+        if (!isSpamPoolRunning) {
+          isSpamPoolRunning = true;
+          if (btnStartAutoSpamPool) btnStartAutoSpamPool.classList.add('hidden');
+          if (btnStopAutoSpamPool) btnStopAutoSpamPool.classList.remove('hidden');
         }
+      } else if (isSpamPoolRunning) {
+        isSpamPoolRunning = false;
+        const percent = total > 0 ? Math.round((current / total) * 100) : 100;
+        if (spampoolProgressBar) spampoolProgressBar.style.width = percent + '%';
+        if (spampoolProgressPercent) spampoolProgressPercent.textContent = percent + '%';
+        if (spampoolProgressText) spampoolProgressText.textContent = msg;
+        if (btnStartAutoSpamPool) btnStartAutoSpamPool.classList.remove('hidden');
+        if (btnStopAutoSpamPool) btnStopAutoSpamPool.classList.add('hidden');
+        loadSpamPoolSheetData();
       }
-    } catch (e) {}
-  }, 2000);
+    }
+  } catch (e) {}
 }
 
 // ===================== TEST NHANH 1 HĐ =====================

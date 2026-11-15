@@ -15,12 +15,71 @@ from selenium.webdriver.support import expected_conditions as EC
 
 import sys
 import subprocess
+import threading
+import re
+import csv
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = os.path.dirname(sys.executable)
 else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
+
+_INSIDE_TASK_GUARD = threading.Lock()
+_CURRENT_INSIDE_TASK = None
+
+def try_acquire_inside_task(task_name: str):
+    """Giành quyền chạy tiến trình dùng chung InsideFPT_SessionProfile theo kiểu nguyên tử."""
+    global _CURRENT_INSIDE_TASK
+    with _INSIDE_TASK_GUARD:
+        if _CURRENT_INSIDE_TASK is not None:
+            return False, _CURRENT_INSIDE_TASK
+        _CURRENT_INSIDE_TASK = task_name
+        return True, task_name
+
+def release_inside_task(task_name: str = None):
+    """Giải phóng khóa tiến trình Inside (chỉ nhả nếu đúng chủ khóa hoặc khi reset cưỡng bức)."""
+    global _CURRENT_INSIDE_TASK
+    with _INSIDE_TASK_GUARD:
+        if task_name is None or _CURRENT_INSIDE_TASK == task_name:
+            _CURRENT_INSIDE_TASK = None
+
+def get_running_inside_task():
+    with _INSIDE_TASK_GUARD:
+        return _CURRENT_INSIDE_TASK
+
+_FILE_LOCKS_GUARD = threading.Lock()
+_FILE_LOCKS = {}
+
+def _get_file_lock(filepath):
+    abs_path = os.path.abspath(filepath)
+    with _FILE_LOCKS_GUARD:
+        lock = _FILE_LOCKS.get(abs_path)
+        if lock is None:
+            lock = threading.RLock()
+            _FILE_LOCKS[abs_path] = lock
+        return lock
+
+def atomic_write_json(filepath, data, indent=2):
+    abs_path = os.path.abspath(filepath)
+    lock = _get_file_lock(abs_path)
+    with lock:
+        parent = os.path.dirname(abs_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        tmp_path = f"{abs_path}.{os.getpid()}.{threading.get_ident()}.tmp"
+        try:
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=indent)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, abs_path)
+        finally:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
 
 def get_inside_profile_dir():
     """Lấy đường dẫn thư mục lưu Profile phiên Inside FPT trong thư mục dự án."""
@@ -154,8 +213,11 @@ def save_inside_cookies(driver, new_login=False, log_cb=None):
     now = time.time()
     login_at = now if (new_login or not old.get("login_at")) else old.get("login_at")
     try:
-        with open(INSIDE_COOKIE_FILE, "w", encoding="utf-8") as f:
-            json.dump({"login_at": login_at, "saved_at": now, "cookies": list(merged.values())}, f, ensure_ascii=False)
+        atomic_write_json(
+            INSIDE_COOKIE_FILE,
+            {"login_at": login_at, "saved_at": now, "cookies": list(merged.values())},
+            indent=None,
+        )
     except Exception:
         pass
 
@@ -383,7 +445,10 @@ def clean_profile_locks_and_orphans(profile_dir=None, log_cb=None):
             except Exception:
                 pass
 
-    norm_profile = os.path.normpath(profile_dir).lower()
+    norm_profile = os.path.normcase(os.path.abspath(profile_dir))
+    profile_pattern = re.compile(
+        rf'(?:^|[\s="\'/]){re.escape(norm_profile)}(?:$|[\s"\'/\\])'
+    )
 
     if sys.platform.startswith("win"):
         try:
@@ -392,20 +457,20 @@ def clean_profile_locks_and_orphans(profile_dir=None, log_cb=None):
                 "Get-CimInstance Win32_Process -Filter \"Name = 'chrome.exe' or Name = 'chromedriver.exe'\" | Select-Object ProcessId, CommandLine | ConvertTo-Csv -NoTypeInformation"
             ]
             res = subprocess.check_output(cmd, text=True, errors='ignore')
-            for line in res.splitlines():
-                line_lower = line.lower()
-                # CHỈ giải phóng các tiến trình đang khóa đúng thư mục profile này
-                if norm_profile in line_lower:
-                    parts = line.split(',')
-                    if parts and parts[0].replace('"', '').isdigit():
-                        pid = parts[0].replace('"', '')
-                        _log(f"Đang giải phóng tiến trình treo PID {pid} cho {os.path.basename(profile_dir)}...", "warning")
-                        subprocess.run(['taskkill', '/F', '/T', '/PID', pid], capture_output=True)
+            for row in csv.reader(res.splitlines()):
+                if len(row) < 2 or not row[0].strip().isdigit():
+                    continue
+                pid = row[0].strip()
+                cmd_line = os.path.normcase(row[1] or "")
+                # CHỈ giải phóng các tiến trình đang dùng đúng --user-data-dir khớp chính xác thư mục profile này
+                if "--user-data-dir" in cmd_line and profile_pattern.search(cmd_line):
+                    _log(f"Đang giải phóng tiến trình treo PID {pid} cho {os.path.basename(profile_dir)}...", "warning")
+                    subprocess.run(['taskkill', '/F', '/T', '/PID', pid], capture_output=True)
         except Exception as e:
             _log(f"Lưu ý khi dọn dẹp tiến trình cũ: {e}", "warning")
     else:
         try:
-            subprocess.run(['pkill', '-f', os.path.basename(profile_dir)], capture_output=True)
+            subprocess.run(['pkill', '-f', norm_profile], capture_output=True)
         except Exception:
             pass
 
@@ -615,8 +680,7 @@ def get_active_account_info(cfg=None):
     }
 
 def save_config(config_data):
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(config_data, f, indent=2, ensure_ascii=False)
+    atomic_write_json(CONFIG_FILE, config_data, indent=2)
 
 def get_totp_info(secret=None):
     """Returns (current_otp, seconds_remaining)"""

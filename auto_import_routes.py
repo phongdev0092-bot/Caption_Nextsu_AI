@@ -11,6 +11,7 @@ from typing import Any, Dict, List
 
 from flask import Blueprint, jsonify, request
 
+import core_login
 from auto_import_config import (
     AUDIT_LOG_FILE,
     DOWNLOAD_ROOT_DIR,
@@ -130,8 +131,18 @@ def api_auto_import_unlock():
 
 @auto_import_bp.route("/api/auto-import/run", methods=["POST"])
 def api_auto_import_run():
+    ok_lock, owner = core_login.try_acquire_inside_task("auto_import")
+    if not ok_lock:
+        return jsonify({
+            "ok": False,
+            "status": "busy",
+            "error": f"Đang bận chạy tiến trình Inside: {owner}",
+            "message": f"Đang bận chạy tiến trình Inside: {owner}",
+        }), 409
+
     with _state_lock:
         if _run_state["is_running"]:
+            core_login.release_inside_task("auto_import")
             return jsonify({"ok": False, "error": "Dang co mot luot Auto Import khac dang chay."}), 409
         _run_state["is_running"] = True
 
@@ -183,6 +194,7 @@ def api_auto_import_run():
                 with _state_lock:
                     _run_state["is_running"] = False
                     _run_state["last_result"] = res
+                core_login.release_inside_task("auto_import")
 
         threading.Thread(target=_worker, daemon=True).start()
         return jsonify({"ok": True, "started": True})
@@ -191,4 +203,5 @@ def api_auto_import_run():
             uploaded_path.unlink(missing_ok=True)
         with _state_lock:
             _run_state["is_running"] = False
+        core_login.release_inside_task("auto_import")
         return jsonify({"ok": False, "error": str(exc)}), 400

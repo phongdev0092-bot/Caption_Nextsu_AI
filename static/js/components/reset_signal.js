@@ -38,6 +38,7 @@ const selectDateFilterResetSignal   = document.getElementById('selectDateFilterR
 const btnClearResetSignalCache      = document.getElementById('btnClearResetSignalCache');
 
 let currentResetSignalRecords  = [];
+let currentFilteredResetSignalRecords = [];
 let selectedResetSignalShds    = new Set();
 let isResetSignalRunning       = false;
 autoResetSignalMode            = localStorage.getItem('autoResetSignalMode') !== 'false'; // Mặc định là BẬT
@@ -125,9 +126,13 @@ if (btnAutoResetSignalModeToggle) {
     autoResetSignalMode = !autoResetSignalMode;
     localStorage.setItem('autoResetSignalMode', autoResetSignalMode ? 'true' : 'false');
     updateAutoResetSignalModeUI();
+    fetch('/api/auto-modes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset_signal: autoResetSignalMode })
+    }).catch(() => {});
     if (autoResetSignalMode) {
-      showSnackbar('🤖 Chế độ Tự Động Cấp Lại Tín Hiệu đã BẬT!');
-      checkAndAutoTriggerResetSignal();
+      showSnackbar('🤖 Chế độ Tự Động Cấp Lại Tín Hiệu đã BẬT - Hệ thống chạy nền tự động sẽ điều phối!');
     } else {
       showSnackbar('Chế độ Tự Động Cấp Lại Tín Hiệu đã TẮT.');
       if (autoResetSignalCountdownTimer) {
@@ -159,29 +164,9 @@ function _isResetSignalAutoEligible(r) {
   return !_isResetSignalFinalDone(r);
 }
 
+// Việc tự động kích hoạt được điều phối tập trung ở Backend (_auto_orchestrator_loop)
 function checkAndAutoTriggerResetSignal() {
-  if (!autoResetSignalMode || isResetSignalRunning) return;
-  const pending = currentResetSignalRecords.filter(r => _isResetSignalAutoEligible(r));
-  if (pending.length === 0) return;
-  if (autoResetSignalCountdownTimer) return;
-
-  autoResetSignalCountdown = 3;
-  if (autoResetSignalModeText) autoResetSignalModeText.textContent = `Tự Động: chạy sau ${autoResetSignalCountdown}s...`;
-  showSnackbar(`🤖 Phát hiện ${pending.length} hợp đồng Cấp Lại Tín Hiệu chưa xử lý - Tự khởi động sau 3 giây...`);
-
-  autoResetSignalCountdownTimer = setInterval(() => {
-    autoResetSignalCountdown--;
-    if (autoResetSignalCountdown > 0) {
-      if (autoResetSignalModeText) autoResetSignalModeText.textContent = `Tự Động: chạy sau ${autoResetSignalCountdown}s...`;
-    } else {
-      clearInterval(autoResetSignalCountdownTimer);
-      autoResetSignalCountdownTimer = null;
-      if (autoResetSignalModeText) autoResetSignalModeText.textContent = 'Tự Động: BẬT';
-      if (!isResetSignalRunning) {
-        executeResetSignalProcess(null, true);
-      }
-    }
-  }, 1000);
+  return;
 }
 
 // ===================== DATA LOADING & RENDERING =====================
@@ -193,6 +178,8 @@ async function loadResetSignalSheetData() {
     if (data.status !== 'ok') return;
 
     currentResetSignalRecords = data.records || [];
+    const validResetShds = new Set(currentResetSignalRecords.map(r => String(r['SHD'] || '').trim()).filter(Boolean));
+    Array.from(selectedResetSignalShds).forEach(s => { if (!validResetShds.has(s)) selectedResetSignalShds.delete(s); });
     renderResetSignalTable();
     updateResetSignalKPIs();
 
@@ -270,6 +257,7 @@ function renderResetSignalTable() {
   const sortedFiltered = (window.UnifiedWorkTabs && typeof window.UnifiedWorkTabs.sortRecordsNewestFirst === 'function')
     ? window.UnifiedWorkTabs.sortRecordsNewestFirst(filtered)
     : filtered;
+  currentFilteredResetSignalRecords = sortedFiltered;
 
   if (resetSignalTableFooterText) {
     resetSignalTableFooterText.textContent = `Hiển thị ${sortedFiltered.length} / ${currentResetSignalRecords.length} bản ghi`;
@@ -392,11 +380,13 @@ function renderResetSignalTable() {
 if (chkResetSignalSelectAll) {
   chkResetSignalSelectAll.addEventListener('change', (e) => {
     const isChecked = e.target.checked;
-    if (isChecked) {
-      currentResetSignalRecords.forEach(r => { if (r['SHD']) selectedResetSignalShds.add(r['SHD']); });
-    } else {
-      selectedResetSignalShds.clear();
-    }
+    const targetList = currentFilteredResetSignalRecords;
+    targetList.forEach(r => {
+      const shd = String(r['SHD'] || '').trim();
+      if (!shd) return;
+      if (isChecked) selectedResetSignalShds.add(shd);
+      else selectedResetSignalShds.delete(shd);
+    });
     renderResetSignalTable();
   });
 }
@@ -439,13 +429,19 @@ async function executeResetSignalProcess(selectedRecords = null, isAuto = false)
       recordsToRun = currentResetSignalRecords.filter(r => selectedResetSignalShds.has(r['SHD']));
     } else {
       recordsToRun = currentResetSignalRecords.filter(r => !_isResetSignalFinalDone(r));
-      if (recordsToRun.length === 0) recordsToRun = currentResetSignalRecords;
     }
   }
 
   if (!recordsToRun || recordsToRun.length === 0) {
-    showSnackbar('Không tìm thấy hợp đồng nào để xử lý');
+    showSnackbar('ℹ️ Không có hợp đồng mới cần xử lý Cấp Lại Tín Hiệu!');
     return;
+  }
+
+  if (!isAuto && !selectedRecords) {
+    const doneCount = recordsToRun.filter(r => _isResetSignalFinalDone(r)).length;
+    if (doneCount >= 2 && !window.confirm(`Bạn đang chọn chạy lại ${doneCount} hợp đồng đã xử lý xong. Bạn có chắc chắn muốn chạy lại?`)) {
+      return;
+    }
   }
 
   setResetSignalRunningState(true);
@@ -462,8 +458,8 @@ async function executeResetSignalProcess(selectedRecords = null, isAuto = false)
       })
     });
     const data = await res.json();
-    if (!res.ok) {
-      showSnackbar('❌ ' + (data.message || 'Lỗi khởi chạy'));
+    if (!res.ok || (data.status !== 'started' && data.status !== 'ok')) {
+      showSnackbar((data.status === 'empty' ? 'ℹ️ ' : '❌ ') + (data.message || 'Lỗi khởi chạy'));
       setResetSignalRunningState(false);
     }
   } catch (err) {

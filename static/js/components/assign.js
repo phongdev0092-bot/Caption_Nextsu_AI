@@ -37,9 +37,12 @@ const autoAssignModeDot       = document.getElementById('autoAssignModeDot');
 const selectDateFilterAssign  = document.getElementById('selectDateFilterAssign');
 const btnClearAssignCache     = document.getElementById('btnClearAssignCache');
 
-let currentAssignRecords  = [];
-let selectedAssignShds    = new Set();
-let isAssignRunning       = false;
+let currentAssignRecords      = [];
+let currentFilteredAssignRecords = [];
+let selectedAssignShds        = new Set();
+let assignKnownShds           = new Set();
+let assignUserForcedShds      = new Set();
+let isAssignRunning           = false;
 autoAssignMode            = localStorage.getItem('autoAssignMode') !== 'false';
 autoAssignCountdownTimer  = null;
 autoAssignCountdown       = 0;
@@ -114,9 +117,13 @@ if (btnAutoAssignModeToggle) {
     autoAssignMode = !autoAssignMode;
     localStorage.setItem('autoAssignMode', autoAssignMode ? 'true' : 'false');
     updateAutoAssignModeUI();
+    fetch('/api/auto-modes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assign: autoAssignMode })
+    }).catch(() => {});
     if (autoAssignMode) {
-      showSnackbar('🤖 Chế độ Tự Động Phân Công Tay đã BẬT!');
-      checkAndAutoTriggerAssign();
+      showSnackbar('🤖 Chế độ Tự Động Phân Công Tay đã BẬT - Hệ thống chạy nền tự động sẽ điều phối!');
     } else {
       showSnackbar('Chế độ Tự Động Phân Công Tay đã TẮT.');
       if (autoAssignCountdownTimer) {
@@ -142,32 +149,9 @@ function _isAssignAutoPending(r) {
   return !tt || tt === 'chưa cập nhật' || tt === 'chưa xử lý';
 }
 
+// Việc tự động kích hoạt được điều phối tập trung ở Backend (_auto_orchestrator_loop)
 function checkAndAutoTriggerAssign() {
-  if (!autoAssignMode || isAssignRunning) return;
-  const pending = currentAssignRecords.filter(_isAssignAutoPending);
-  if (pending.length === 0) return;
-  if (autoAssignCountdownTimer) return;
-
-  autoAssignCountdown = 3;
-  if (autoAssignModeText) autoAssignModeText.textContent = `Tự Động: chạy sau ${autoAssignCountdown}s...`;
-  showSnackbar(`🤖 Phát hiện ${pending.length} hợp đồng Phân Công chưa xử lý - Tự khởi động sau 3 giây...`);
-
-  autoAssignCountdownTimer = setInterval(() => {
-    autoAssignCountdown--;
-    if (autoAssignCountdown > 0) {
-      if (autoAssignModeText) autoAssignModeText.textContent = `Tự Động: chạy sau ${autoAssignCountdown}s...`;
-    } else {
-      clearInterval(autoAssignCountdownTimer);
-      autoAssignCountdownTimer = null;
-      if (autoAssignModeText) autoAssignModeText.textContent = 'Tự Động: BẬT';
-      if (!autoAssignMode || isAssignRunning) return;
-      const stillPending = currentAssignRecords.filter(_isAssignAutoPending);
-      if (stillPending.length > 0) {
-        showSnackbar(`🚀 Tự động khởi động Phân Công Tay cho ${stillPending.length} hợp đồng...`);
-        runAssignProcess(stillPending);
-      }
-    }
-  }, 1000);
+  return;
 }
 
 // ===================== LOAD DATA =====================
@@ -182,6 +166,20 @@ async function loadAssignSheetData() {
     const data = await res.json();
     if (res.ok && data.status === 'ok') {
       currentAssignRecords = data.records || [];
+      const validShds = new Set(currentAssignRecords.map(r => String(r['SHD'] || '').trim()).filter(Boolean));
+      Array.from(selectedAssignShds).forEach(s => { if (!validShds.has(s)) selectedAssignShds.delete(s); });
+      Array.from(assignKnownShds).forEach(s => { if (!validShds.has(s)) assignKnownShds.delete(s); });
+      currentAssignRecords.forEach(r => {
+        const shd = String(r['SHD'] || '').trim();
+        if (!shd) return;
+        const done = _isAssignFinalDone(r);
+        if (!assignKnownShds.has(shd)) {
+          assignKnownShds.add(shd);
+          if (!done) selectedAssignShds.add(shd);
+        } else if (done && !assignUserForcedShds.has(shd)) {
+          selectedAssignShds.delete(shd);
+        }
+      });
       updateAssignStats(currentAssignRecords);
       if (!isAssignRunning) renderAssignTable(currentAssignRecords);
       if (autoAssignMode && !isAssignRunning && !autoAssignCountdownTimer) {
@@ -254,6 +252,7 @@ function renderAssignTable(records) {
   if (window.UnifiedWorkTabs && typeof window.UnifiedWorkTabs.sortRecordsNewestFirst === 'function') {
     filtered = window.UnifiedWorkTabs.sortRecordsNewestFirst(filtered);
   }
+  currentFilteredAssignRecords = filtered;
 
   if (assignTableFooterText) {
     assignTableFooterText.textContent = `Hiển thị ${filtered.length} bản ghi`;
@@ -264,6 +263,7 @@ function renderAssignTable(records) {
     if (window.UnifiedWorkTabs) {
       window.UnifiedWorkTabs.renderPagination('assignPagination', { total: 0 });
     }
+    updateAssignSelectedCount();
     return;
   }
 
@@ -288,7 +288,7 @@ function renderAssignTable(records) {
     const tt    = String(r['Thao Tác'] || '').trim();
     const tacVu = r['Tác Vụ'] || 'Phân Công Tay';
 
-    const isChecked = !_isAssignFinalDone(r);
+    const isChecked = selectedAssignShds.has(shd);
 
     // Badge Thao Tác
     let badgeTt = '<span class="inline-block px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-600">Chưa xử lý</span>';
@@ -353,8 +353,13 @@ function renderAssignTable(records) {
   tbodyAssignList.querySelectorAll('.assign-row-checkbox').forEach(chk => {
     chk.addEventListener('change', e => {
       const shd = e.target.dataset.shd;
-      if (e.target.checked) selectedAssignShds.add(shd);
-      else selectedAssignShds.delete(shd);
+      if (e.target.checked) {
+        selectedAssignShds.add(shd);
+        assignUserForcedShds.add(shd);
+      } else {
+        selectedAssignShds.delete(shd);
+        assignUserForcedShds.delete(shd);
+      }
       updateAssignSelectedCount();
     });
   });
@@ -373,21 +378,29 @@ function renderAssignTable(records) {
 }
 
 function updateAssignSelectedCount() {
-  const checked = tbodyAssignList ? tbodyAssignList.querySelectorAll('.assign-row-checkbox:checked').length : 0;
-  if (assignSelectedCountText) assignSelectedCountText.textContent = `(${checked} HĐ đã chọn)`;
+  if (assignSelectedCountText) assignSelectedCountText.textContent = `(${selectedAssignShds.size} HĐ đã chọn)`;
+  if (chkAssignSelectAll) {
+    const filteredShds = currentFilteredAssignRecords.map(r => String(r['SHD'] || '').trim()).filter(Boolean);
+    chkAssignSelectAll.checked = filteredShds.length > 0 && filteredShds.every(s => selectedAssignShds.has(s));
+  }
 }
 
 if (chkAssignSelectAll) {
   chkAssignSelectAll.addEventListener('change', e => {
     const checked = e.target.checked;
-    if (tbodyAssignList) {
-      tbodyAssignList.querySelectorAll('.assign-row-checkbox').forEach(chk => {
-        chk.checked = checked;
-        if (checked) selectedAssignShds.add(chk.dataset.shd);
-        else selectedAssignShds.delete(chk.dataset.shd);
-      });
-    }
-    updateAssignSelectedCount();
+    const targetList = currentFilteredAssignRecords;
+    targetList.forEach(r => {
+      const shd = String(r['SHD'] || '').trim();
+      if (!shd) return;
+      if (checked) {
+        selectedAssignShds.add(shd);
+        assignUserForcedShds.add(shd);
+      } else {
+        selectedAssignShds.delete(shd);
+        assignUserForcedShds.delete(shd);
+      }
+    });
+    renderAssignTable(currentAssignRecords);
   });
 }
 
@@ -422,18 +435,21 @@ async function runAssignProcess(specificRecords = null) {
 
   let recordsToRun = specificRecords;
   if (!recordsToRun) {
-    const checkedShds = new Set();
-    if (tbodyAssignList) {
-      tbodyAssignList.querySelectorAll('.assign-row-checkbox:checked').forEach(c => checkedShds.add(c.dataset.shd));
-    }
-    if (checkedShds.size > 0) {
-      recordsToRun = currentAssignRecords.filter(r => checkedShds.has(String(r['SHD'] || '').trim()));
+    if (selectedAssignShds.size > 0) {
+      recordsToRun = currentAssignRecords.filter(r => selectedAssignShds.has(String(r['SHD'] || '').trim()));
     }
   }
 
   if (!recordsToRun || recordsToRun.length === 0) {
     showSnackbar('⚠️ Chưa có hợp đồng nào được chọn để xử lý!');
     return;
+  }
+
+  if (!specificRecords) {
+    const doneCount = recordsToRun.filter(r => _isAssignFinalDone(r)).length;
+    if (doneCount >= 2 && !window.confirm(`Bạn đang chọn chạy lại ${doneCount} hợp đồng Phân Công Tay đã xử lý. Bạn có chắc chắn muốn chạy lại?`)) {
+      return;
+    }
   }
 
   try {

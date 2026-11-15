@@ -29,7 +29,10 @@ const clsSelectedCountText = document.getElementById('clsSelectedCountText');
 const btnRefreshClsSheetData = document.getElementById('btnRefreshClsSheetData');
 
 let currentClsRecords = [];
+let currentFilteredClsRecords = [];
 let selectedClsShds = new Set();
+let clsKnownShds = new Set();
+let clsUserForcedShds = new Set();
 let isClsRunning = false;
 
 // ===================== AUTO MODE CLEAR CLS =====================
@@ -61,9 +64,13 @@ if (btnAutoClsModeToggle) {
     autoClsMode = !autoClsMode;
     localStorage.setItem('autoClsMode', autoClsMode ? 'true' : 'false');
     updateAutoClsModeUI();
+    fetch('/api/auto-modes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cls: autoClsMode })
+    }).catch(() => {});
     if (autoClsMode) {
-      showSnackbar('🤖 Chế độ Tự Động Clear Cls đã BẬT - Sẽ tự xử lý khi phát hiện hợp đồng chưa cập nhật kể cả khi bạn ở tab khác!');
-      checkAndAutoTriggerCls();
+      showSnackbar('🤖 Chế độ Tự Động Clear Cls đã BẬT - Hệ thống chạy nền tự động sẽ điều phối!');
     } else {
       showSnackbar('Chế độ Tự Động Clear Cls đã TẮT.');
       if (autoClsCountdownTimer) {
@@ -75,60 +82,9 @@ if (btnAutoClsModeToggle) {
   });
 }
 
-// Kiểm tra và tự kích hoạt Clear Cls nếu có dòng chưa cập nhật / chưa xử lý
+// Việc tự động kích hoạt được điều phối tập trung ở Backend (_auto_orchestrator_loop)
 function checkAndAutoTriggerCls() {
-  if (!autoClsMode || isClsRunning || isBypassRunning) return;
-
-  // Đếm số dòng chưa cập nhật (chưa xử lý)
-  const pendingRows = currentClsRecords.filter(r => {
-    const kq = String(r['Kết Quả'] || r['Kết Quả'] || '').trim().toLowerCase();
-    const tt = String(r['Thao Tác'] || '').trim().toLowerCase();
-    const isDone = kq === 'đã xử lý' || 
-                   tt === 'đã clear' || 
-                   tt.includes('cập nhật thành công') || 
-                   (tt.includes('thành công') && !tt.includes('không')) || 
-                   tt.includes('không thành công') || 
-                   tt.includes('lỗi');
-    return !isDone;
-  });
-
-  if (pendingRows.length === 0) return; // Không có dòng nào cần xử lý
-
-  if (autoClsCountdownTimer) return; // Đang đếm ngược rồi
-
-  // Đếm ngược 3 giây rồi tự chạy
-  autoClsCountdown = 3;
-  if (autoClsModeText) autoClsModeText.textContent = `Tự Động: chạy sau ${autoClsCountdown}s...`;
-  showSnackbar(`🤖 Phát hiện ${pendingRows.length} hợp đồng Clear Cls chưa cập nhật - Tự khởi động sau 3 giây...`);
-
-  autoClsCountdownTimer = setInterval(() => {
-    autoClsCountdown--;
-    if (autoClsCountdown > 0) {
-      if (autoClsModeText) autoClsModeText.textContent = `Tự Động: chạy sau ${autoClsCountdown}s...`;
-    } else {
-      clearInterval(autoClsCountdownTimer);
-      autoClsCountdownTimer = null;
-      if (autoClsModeText) autoClsModeText.textContent = 'Tự Động: BẬT';
-
-      if (!autoClsMode || isClsRunning || isBypassRunning) return;
-      const stillPending = currentClsRecords.filter(r => {
-        const kq = String(r['Kết Quả'] || r['Kết Quả'] || '').trim().toLowerCase();
-        const tt = String(r['Thao Tác'] || '').trim().toLowerCase();
-        const isDone = kq === 'đã xử lý' || 
-                       tt === 'đã clear' || 
-                       tt.includes('cập nhật thành công') || 
-                       (tt.includes('thành công') && !tt.includes('không')) || 
-                       tt.includes('không thành công') || 
-                       tt.includes('lỗi');
-        return !isDone;
-      });
-
-      if (stillPending.length > 0) {
-        showSnackbar(`🚀 Tự động khởi động Clear Cls cho ${stillPending.length} hợp đồng...`);
-        runClsProcess(stillPending);
-      }
-    }
-  }, 1000);
+  return;
 }
 
 async function loadClsSheetData() {
@@ -142,6 +98,20 @@ async function loadClsSheetData() {
     const data = await res.json();
     if (res.ok && data.status === 'ok') {
       currentClsRecords = data.records || [];
+      const validShds = new Set(currentClsRecords.map(r => String(r['SHD'] || '').trim()).filter(Boolean));
+      Array.from(selectedClsShds).forEach(s => { if (!validShds.has(s)) selectedClsShds.delete(s); });
+      Array.from(clsKnownShds).forEach(s => { if (!validShds.has(s)) clsKnownShds.delete(s); });
+      currentClsRecords.forEach(r => {
+        const shd = String(r['SHD'] || '').trim();
+        if (!shd) return;
+        const done = _isClsRecordDone(r);
+        if (!clsKnownShds.has(shd)) {
+          clsKnownShds.add(shd);
+          if (!done) selectedClsShds.add(shd);
+        } else if (done && !clsUserForcedShds.has(shd)) {
+          selectedClsShds.delete(shd);
+        }
+      });
       updateClsStats(currentClsRecords);
       if (!isClsRunning) {
         renderClsTable(currentClsRecords);
@@ -247,6 +217,7 @@ function renderClsTable(records) {
   if (window.UnifiedWorkTabs && typeof window.UnifiedWorkTabs.sortRecordsNewestFirst === 'function') {
     filtered = window.UnifiedWorkTabs.sortRecordsNewestFirst(filtered);
   }
+  currentFilteredClsRecords = filtered;
 
   if (clsTableFooterText) {
     clsTableFooterText.textContent = `Hiển thị ${filtered.length} bản ghi`;
@@ -257,6 +228,7 @@ function renderClsTable(records) {
     if (window.UnifiedWorkTabs) {
       window.UnifiedWorkTabs.renderPagination('clsPagination', { total: 0 });
     }
+    updateClsSelectedCount();
     return;
   }
 
@@ -281,7 +253,7 @@ function renderClsTable(records) {
     const kq = String(r['Kết Quả'] || r['Kết Quả'] || '').trim();
     const tt = String(r['Thao Tác'] || '').trim();
 
-    const isChecked = selectedClsShds.has(shd) || (!selectedClsShds.size && (kq.toLowerCase() !== 'đã xử lý' && !tt.toLowerCase().includes('thành công') && tt.toLowerCase() !== 'đã clear' && !tt.toLowerCase().includes('không thành công')));
+    const isChecked = selectedClsShds.has(shd);
 
     // Badge Kết Quả
     let badgeKq = '<span class="inline-block px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-600">Chưa xử lý</span>';
@@ -350,32 +322,44 @@ function renderClsTable(records) {
   tbodyClsList.querySelectorAll('.cls-row-checkbox').forEach(chk => {
     chk.addEventListener('change', (e) => {
       const shd = e.target.dataset.shd;
-      if (e.target.checked) selectedClsShds.add(shd);
-      else selectedClsShds.delete(shd);
+      if (e.target.checked) {
+        selectedClsShds.add(shd);
+        clsUserForcedShds.add(shd);
+      } else {
+        selectedClsShds.delete(shd);
+        clsUserForcedShds.delete(shd);
+      }
       updateClsSelectedCount();
     });
   });
 }
 
 function updateClsSelectedCount() {
-  const checked = tbodyClsList ? tbodyClsList.querySelectorAll('.cls-row-checkbox:checked').length : 0;
   if (clsSelectedCountText) {
-    clsSelectedCountText.textContent = `(${checked} HĐ đã chọn)`;
+    clsSelectedCountText.textContent = `(${selectedClsShds.size} HĐ đã chọn)`;
+  }
+  if (chkClsSelectAll) {
+    const filteredShds = currentFilteredClsRecords.map(r => String(r['SHD'] || '').trim()).filter(Boolean);
+    chkClsSelectAll.checked = filteredShds.length > 0 && filteredShds.every(s => selectedClsShds.has(s));
   }
 }
 
 if (chkClsSelectAll) {
   chkClsSelectAll.addEventListener('change', (e) => {
     const isChecked = e.target.checked;
-    if (tbodyClsList) {
-      tbodyClsList.querySelectorAll('.cls-row-checkbox').forEach(chk => {
-        chk.checked = isChecked;
-        const shd = chk.dataset.shd;
-        if (isChecked) selectedClsShds.add(shd);
-        else selectedClsShds.delete(shd);
-      });
-    }
-    updateClsSelectedCount();
+    const targetList = currentFilteredClsRecords;
+    targetList.forEach(r => {
+      const shd = String(r['SHD'] || '').trim();
+      if (!shd) return;
+      if (isChecked) {
+        selectedClsShds.add(shd);
+        clsUserForcedShds.add(shd);
+      } else {
+        selectedClsShds.delete(shd);
+        clsUserForcedShds.delete(shd);
+      }
+    });
+    renderClsTable(currentClsRecords);
   });
 }
 
@@ -389,6 +373,19 @@ if (btnRefreshClsSheetData) {
   });
 }
 
+function _isClsRecordDone(r) {
+  const kq = String(r['Kết Quả'] || r['Kết Quả'] || '').trim().toLowerCase();
+  const tt = String(r['Thao Tác'] || '').trim().toLowerCase();
+  return (
+    tt === 'đã clear' ||
+    tt.includes('cập nhật thành công') ||
+    (tt.includes('thành công') && !tt.includes('không')) ||
+    tt.includes('không thành công') ||
+    tt.includes('lỗi') ||
+    (kq === 'đã xử lý' && tt && !tt.includes('chưa'))
+  );
+}
+
 async function runClsProcess(specificRecords = null) {
   if (isClsRunning) {
     showSnackbar('Đang có tiến trình Clear Cls đang chạy...');
@@ -397,12 +394,20 @@ async function runClsProcess(specificRecords = null) {
 
   let recordsToRun = specificRecords;
   if (!recordsToRun) {
-    const checkedShds = new Set();
-    if (tbodyClsList) {
-      tbodyClsList.querySelectorAll('.cls-row-checkbox:checked').forEach(c => checkedShds.add(c.dataset.shd));
+    if (selectedClsShds.size > 0) {
+      recordsToRun = currentClsRecords.filter(r => selectedClsShds.has(String(r['SHD'] || '').trim()));
     }
-    if (checkedShds.size > 0) {
-      recordsToRun = currentClsRecords.filter(r => checkedShds.has(String(r['SHD'] || '').trim()));
+  }
+
+  if (!recordsToRun || recordsToRun.length === 0) {
+    showSnackbar('⚠️ Chưa có hợp đồng nào được chọn để xử lý!');
+    return;
+  }
+
+  if (!specificRecords) {
+    const doneCount = recordsToRun.filter(r => _isClsRecordDone(r)).length;
+    if (doneCount >= 2 && !window.confirm(`Bạn đang chọn chạy lại ${doneCount} hợp đồng Clear Cls đã xử lý. Bạn có chắc chắn muốn chạy lại?`)) {
+      return;
     }
   }
 

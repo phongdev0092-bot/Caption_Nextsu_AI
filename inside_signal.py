@@ -37,8 +37,7 @@ def load_cache(cache_file):
 
 def save_cache(cache_file, data):
     try:
-        with open(cache_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        core_login.atomic_write_json(cache_file, data)
     except Exception as e:
         print(f"[CACHE ERROR] {e}")
 
@@ -991,6 +990,13 @@ class InsideSignalAutomation:
             self.log(f"🎉 HOÀN TẤT CẤP LẠI TÍN HIỆU HĐ {shd}! Nguồn: {final_nguon}", "success")
             return True, status_str, now_str
 
+    def close(self):
+        """Khi hoàn tất 1 tác vụ: Đóng trình duyệt và xóa sạch toàn bộ session cũ."""
+        if self.driver:
+            self.log("Hoàn tất tác vụ: Đang đóng trình duyệt và xóa sạch toàn bộ session cũ...", "info")
+            core_login.close_driver_and_clear_session(self.driver, log_cb=self.log_cb)
+            self.driver = None
+
 def update_clear_sheet_auto_cap_lai_cell(shd, record, auto_cap_lai_val="Auto Cấp Lại"):
     """
     Cập nhật cột 'Auto Cấp Lại' trên Sheet Clear (GID 0) mà KHÔNG làm thay đổi cột 'Kết Quả'.
@@ -1061,10 +1067,3 @@ def transfer_contract_to_reset_sheet(record, nguon="Auto >72H"):
         return True, resp
     except Exception as e:
         return False, str(e)
-
-    def close(self):
-        """Khi hoàn tất 1 tác vụ: Đóng trình duyệt và xóa sạch toàn bộ session cũ."""
-        if self.driver:
-            self.log("Hoàn tất tác vụ: Đang đóng trình duyệt và xóa sạch toàn bộ session cũ...", "info")
-            core_login.close_driver_and_clear_session(self.driver, log_cb=self.log_cb)
-            self.driver = None

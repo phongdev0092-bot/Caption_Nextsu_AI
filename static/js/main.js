@@ -184,17 +184,35 @@ setTimeout(updateGlobalPendingBadges, 1500);
 setInterval(loadRetrievalData, 2000);
 setInterval(pollStatus, 2000);
 setInterval(fetchLiveOtps, 1000);
-setInterval(pollBypassStatus, 2000);
-setInterval(pollClsStatus, 2000);
-setInterval(pollAssignStatus, 2000);
-setInterval(pollClearSignalStatus, 2000);
-setInterval(pollResetSignalStatus, 2000);
-setInterval(pollMyBaeStatus, 2000);
-setInterval(pollSpamPoolStatus, 2000);
-setInterval(pollBypassNatStatus, 2000);
-setInterval(pollPortStatus, 2000);
 
-// Quét nền định kỳ và kích hoạt Auto Mode liên tab
+const _TASK_POLLERS = [
+  { tabId: 'tab-tasks',         isRunning: () => typeof isBypassRunning !== 'undefined' && isBypassRunning,           poll: () => typeof pollBypassStatus === 'function' && pollBypassStatus() },
+  { tabId: 'tab-clear-cls',     isRunning: () => typeof isClsRunning !== 'undefined' && isClsRunning,                 poll: () => typeof pollClsStatus === 'function' && pollClsStatus() },
+  { tabId: 'tab-manual-assign', isRunning: () => typeof isAssignRunning !== 'undefined' && isAssignRunning,           poll: () => typeof pollAssignStatus === 'function' && pollAssignStatus() },
+  { tabId: 'tab-clear-signal',  isRunning: () => typeof isClearSignalRunning !== 'undefined' && isClearSignalRunning, poll: () => typeof pollClearSignalStatus === 'function' && pollClearSignalStatus() },
+  { tabId: 'tab-reset-signal',  isRunning: () => typeof isResetSignalRunning !== 'undefined' && isResetSignalRunning, poll: () => typeof pollResetSignalStatus === 'function' && pollResetSignalStatus() },
+  { tabId: 'tab-bypass-mybae',  isRunning: () => typeof isMyBaeRunning !== 'undefined' && isMyBaeRunning,             poll: () => typeof pollMyBaeStatus === 'function' && pollMyBaeStatus() },
+  { tabId: 'tab-spampool',      isRunning: () => typeof isSpamPoolRunning !== 'undefined' && isSpamPoolRunning,       poll: () => typeof pollSpamPoolStatus === 'function' && pollSpamPoolStatus() },
+  { tabId: 'tab-bypass-nat',    isRunning: () => typeof isBypassNatRunning !== 'undefined' && isBypassNatRunning,     poll: () => typeof pollBypassNatStatus === 'function' && pollBypassNatStatus() },
+  { tabId: 'tab-port',          isRunning: () => typeof isPortRunning !== 'undefined' && isPortRunning,               poll: () => typeof pollPortStatus === 'function' && pollPortStatus() }
+];
+
+let _statusPollTick = 0;
+setInterval(() => {
+  _statusPollTick = (_statusPollTick + 1) % 3;
+  const pollIdleNow = (_statusPollTick === 0); // Tab nền rảnh: 6000ms; tab đang mở hoặc đang chạy: 2000ms
+  _TASK_POLLERS.forEach(item => {
+    const el = document.getElementById(item.tabId);
+    const isActive = !!(el && el.classList.contains('active'));
+    if (isActive || item.isRunning() || pollIdleNow) {
+      try {
+        item.poll();
+      } catch (e) {}
+    }
+  });
+}, 2000);
+
+// Quét nền định kỳ liên tab
 let bgPollCycle = 0;
 setInterval(() => {
   const tabTasks = document.getElementById('tab-tasks');
@@ -235,7 +253,7 @@ setInterval(() => {
   // Cập nhật huy hiệu thông báo toàn hệ thống
   updateGlobalPendingBadges();
 
-  // Đồng bộ trạng thái nút Tự Động lên server (server tự phát hiện & chạy nền kể cả khi không mở tab)
+  // Đồng bộ trạng thái nút Tự Động lên server (chỉ điều phối duy nhất phía backend)
   fetch('/api/auto-modes', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -247,35 +265,6 @@ setInterval(() => {
       port: !!autoPortMode
     })
   }).catch(() => {});
-
-  // Tự động kích hoạt các tiến trình nếu Auto Mode của tab đó đang BẬT (kể cả khi đang ở tab khác)
-  if (autoBypassMode && !isBypassRunning && !isClsRunning && !autoBypassCountdownTimer) {
-    checkAndAutoTriggerBypass();
-  }
-  if (autoClsMode && !isClsRunning && !isBypassRunning && !autoClsCountdownTimer) {
-    checkAndAutoTriggerCls();
-  }
-  if (autoAssignMode && !isAssignRunning && !autoAssignCountdownTimer) {
-    checkAndAutoTriggerAssign();
-  }
-  if (autoClearSignalMode && !isClearSignalRunning && !autoClearSignalCountdownTimer) {
-    checkAndAutoTriggerClearSignal();
-  }
-  if (autoResetSignalMode && !isResetSignalRunning && !autoResetSignalCountdownTimer) {
-    checkAndAutoTriggerResetSignal();
-  }
-  if (autoMyBaeMode && !isMyBaeRunning && !autoMyBaeCountdownTimer) {
-    checkAndAutoTriggerMyBae();
-  }
-  if (autoSpamPoolMode && !isSpamPoolRunning && !autoSpamPoolCountdownTimer) {
-    checkAndAutoTriggerSpamPool();
-  }
-  if (autoBypassNatMode && !isBypassNatRunning && !autoBypassNatCountdownTimer) {
-    checkAndAutoTriggerBypassNat();
-  }
-  if (autoPortMode && !isPortRunning && !autoPortCountdownTimer) {
-    checkAndAutoTriggerPort();
-  }
 }, 3500);
 
 

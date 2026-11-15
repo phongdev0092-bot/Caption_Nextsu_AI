@@ -46,7 +46,6 @@ let isBypassNatRunning = false;
 let autoBypassNatMode = localStorage.getItem('autoBypassNatMode') !== 'false';
 let autoBypassNatCountdownTimer = null;
 let autoBypassNatCountdown = 0;
-let bypassNatPollTimer = null;
 let currentBypassNatPage = 1;
 
 
@@ -393,37 +392,7 @@ async function stopAutoBypassNat() {
 }
 
 function startBypassNatPolling() {
-  if (bypassNatPollTimer) clearInterval(bypassNatPollTimer);
-  bypassNatPollTimer = setInterval(async () => {
-    try {
-      const res = await fetch('/api/bypass_nat/status?_t=' + Date.now());
-      const data = await res.json();
-      if (res.ok && data.status === 'ok') {
-        const t = data.task || {};
-        const total = t.total || 0;
-        const current = t.current_index || 0;
-        const msg = t.message || 'Đang thực hiện...';
-        const isRunning = t.is_running || false;
-
-        const percent = total > 0 ? Math.round((current / total) * 100) : 0;
-        if (bypassNatProgressBar) bypassNatProgressBar.style.width = percent + '%';
-        if (bypassNatProgressPercent) bypassNatProgressPercent.textContent = percent + '%';
-        if (bypassNatProgressText) bypassNatProgressText.textContent = msg;
-
-        if (!isRunning) {
-          clearInterval(bypassNatPollTimer);
-          bypassNatPollTimer = null;
-          isBypassNatRunning = false;
-          btnStartAutoBypassNat.classList.remove('hidden');
-          if (btnStopAutoBypassNat) btnStopAutoBypassNat.classList.add('hidden');
-          showSnackbar('🏁 Hoàn tất phiên Bypass NAT!');
-          loadBypassNatSheetData();
-        }
-      }
-    } catch (e) {
-      console.warn('Polling bypass_nat error:', e);
-    }
-  }, 2000);
+  pollBypassNatStatus();
 }
 
 async function pollBypassNatStatus() {
@@ -432,20 +401,37 @@ async function pollBypassNatStatus() {
     const data = await res.json();
     if (res.ok && data.status === 'ok') {
       const t = data.task || {};
+      const total = t.total || 0;
+      const current = t.current_index || 0;
+      const msg = t.message || 'Đang thực hiện...';
       const isRunning = t.is_running || false;
-      if (isRunning && !isBypassNatRunning) {
-        isBypassNatRunning = true;
-        btnStartAutoBypassNat.classList.add('hidden');
-        if (btnStopAutoBypassNat) btnStopAutoBypassNat.classList.remove('hidden');
+
+      if (isRunning) {
+        const percent = total > 0 ? Math.round((current / total) * 100) : 0;
         if (bypassNatProgressContainer) bypassNatProgressContainer.classList.remove('hidden');
-        startBypassNatPolling();
-      } else if (!isRunning && isBypassNatRunning) {
+        if (bypassNatProgressBar) bypassNatProgressBar.style.width = percent + '%';
+        if (bypassNatProgressPercent) bypassNatProgressPercent.textContent = percent + '%';
+        if (bypassNatProgressText) bypassNatProgressText.textContent = msg;
+        if (!isBypassNatRunning) {
+          isBypassNatRunning = true;
+          btnStartAutoBypassNat.classList.add('hidden');
+          if (btnStopAutoBypassNat) btnStopAutoBypassNat.classList.remove('hidden');
+        }
+      } else if (isBypassNatRunning) {
         isBypassNatRunning = false;
+        const percent = total > 0 ? Math.round((current / total) * 100) : 100;
+        if (bypassNatProgressBar) bypassNatProgressBar.style.width = percent + '%';
+        if (bypassNatProgressPercent) bypassNatProgressPercent.textContent = percent + '%';
+        if (bypassNatProgressText) bypassNatProgressText.textContent = msg;
         btnStartAutoBypassNat.classList.remove('hidden');
         if (btnStopAutoBypassNat) btnStopAutoBypassNat.classList.add('hidden');
+        showSnackbar('🏁 Hoàn tất phiên Bypass NAT!');
+        loadBypassNatSheetData();
       }
     }
-  } catch (e) {}
+  } catch (e) {
+    console.warn('Polling bypass_nat error:', e);
+  }
 }
 
 // ===================== RUN SINGLE ROW =====================

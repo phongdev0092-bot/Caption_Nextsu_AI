@@ -808,13 +808,15 @@ if (btnAutoModeToggle) {
     autoBypassMode = !autoBypassMode;
     localStorage.setItem('autoBypassMode', autoBypassMode ? 'true' : 'false');
     updateAutoModeUI();
+    fetch('/api/auto-modes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bypass: autoBypassMode })
+    }).catch(() => {});
     if (autoBypassMode) {
-      showSnackbar('🤖 Chế độ Tự Động ByPass đã BẬT - Sẽ tự xử lý khi phát hiện hợp đồng mới kể cả khi bạn ở tab khác!');
-      // Kiểm tra ngay lập tức sau khi bật
-      checkAndAutoTriggerBypass();
+      showSnackbar('🤖 Chế độ Tự Động ByPass đã BẬT - Hệ thống chạy nền tự động sẽ điều phối!');
     } else {
       showSnackbar('Chế độ Tự Động ByPass đã TẮT.');
-      // Hủy countdown nếu đang đếm
       if (autoBypassCountdownTimer) {
         clearInterval(autoBypassCountdownTimer);
         autoBypassCountdownTimer = null;
@@ -847,42 +849,9 @@ function _bypassMarkAutoTried(rows) {
   localStorage.setItem('bypassAutoTried', JSON.stringify(m));
 }
 
-// Kiểm tra và tự kích hoạt bypass nếu có dòng chưa xử lý
+// Việc tự động kích hoạt được điều phối tập trung ở Backend (_auto_orchestrator_loop)
 function checkAndAutoTriggerBypass() {
-  if (!autoBypassMode || isBypassRunning || isClsRunning) return;
-
-  // Đếm số dòng chưa xử lý
-  const pendingRows = currentBypassRecords.filter(_bypassAutoPending);
-
-  if (pendingRows.length === 0) return; // Không có gì để chạy
-
-  // Nếu đang có countdown rồi thì không tạo thêm
-  if (autoBypassCountdownTimer) return;
-
-  // Đếm ngược 3 giây rồi tự chạy
-  autoBypassCountdown = 3;
-  if (autoModeText) autoModeText.textContent = `Tự Động: chạy sau ${autoBypassCountdown}s...`;
-  showSnackbar(`🤖 Phát hiện ${pendingRows.length} hợp đồng ByPass chưa xử lý - Tự khởi động sau 3 giây...`);
-
-  autoBypassCountdownTimer = setInterval(() => {
-    autoBypassCountdown--;
-    if (autoBypassCountdown > 0) {
-      if (autoModeText) autoModeText.textContent = `Tự Động: chạy sau ${autoBypassCountdown}s...`;
-    } else {
-      clearInterval(autoBypassCountdownTimer);
-      autoBypassCountdownTimer = null;
-      if (autoModeText) autoModeText.textContent = 'Tự Động: BẬT';
-
-      // Kiểm tra lại lần nữa trước khi chạy
-      if (!autoBypassMode || isBypassRunning || isClsRunning) return;
-      const stillPending = currentBypassRecords.filter(_bypassAutoPending);
-      if (stillPending.length > 0) {
-        _bypassMarkAutoTried(stillPending);
-        showSnackbar(`🚀 Tự động khởi động ByPass ${stillPending.length} hợp đồng...`);
-        runBypassProcess(stillPending);
-      }
-    }
-  }, 1000);
+  return;
 }
 
 // Filter & Search events for ByPass

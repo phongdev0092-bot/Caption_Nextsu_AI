@@ -38,6 +38,10 @@ const selectDateFilterMyBae   = document.getElementById('selectDateFilterMyBae')
 const btnClearMyBaeCache      = document.getElementById('btnClearMyBaeCache');
 
 let currentMyBaeRecords   = [];
+let currentFilteredMyBaeRecords = [];
+let selectedMyBaeShds     = new Set();
+let mybaeKnownShds        = new Set();
+let mybaeUserForcedShds   = new Set();
 let isMyBaeRunning        = false;
 // Mặc định BẬT đọc sheet 4s/lần
 let autoMyBaeMode         = localStorage.getItem('autoMyBaeMode') !== 'false';
@@ -138,9 +142,13 @@ if (btnAutoMyBaeModeToggle) {
     autoMyBaeMode = !autoMyBaeMode;
     localStorage.setItem('autoMyBaeMode', autoMyBaeMode ? 'true' : 'false');
     updateAutoMyBaeModeUI();
+    fetch('/api/auto-modes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mybae: autoMyBaeMode })
+    }).catch(() => {});
     if (autoMyBaeMode) {
-      showSnackbar('🤖 Chế độ Tự Động Bypass MyBAE đã BẬT!');
-      checkAndAutoTriggerMyBae();
+      showSnackbar('🤖 Chế độ Tự Động Bypass MyBAE đã BẬT - Hệ thống chạy nền tự động sẽ điều phối!');
     } else {
       showSnackbar('Chế độ Tự Động Bypass MyBAE đã TẮT.');
       if (autoMyBaeCountdownTimer) {
@@ -152,33 +160,9 @@ if (btnAutoMyBaeModeToggle) {
   });
 }
 
-// Chế độ tự động chỉ nhặt dòng CHƯA có Thao Tác (dòng lỗi phải chạy tay lại để không lặp vô hạn)
+// Việc tự động kích hoạt được điều phối tập trung ở Backend (_auto_orchestrator_loop)
 function checkAndAutoTriggerMyBae() {
-  if (!autoMyBaeMode || isMyBaeRunning) return;
-  const pending = currentMyBaeRecords.filter(_mybaeIsPending);
-  if (pending.length === 0) return;
-  if (autoMyBaeCountdownTimer) return;
-
-  autoMyBaeCountdown = 3;
-  if (autoMyBaeModeText) autoMyBaeModeText.textContent = `Tự Động: chạy sau ${autoMyBaeCountdown}s...`;
-  showSnackbar(`🤖 Phát hiện ${pending.length} hợp đồng Bypass MyBAE chưa xử lý - Tự khởi động sau 3 giây...`);
-
-  autoMyBaeCountdownTimer = setInterval(() => {
-    autoMyBaeCountdown--;
-    if (autoMyBaeCountdown > 0) {
-      if (autoMyBaeModeText) autoMyBaeModeText.textContent = `Tự Động: chạy sau ${autoMyBaeCountdown}s...`;
-    } else {
-      clearInterval(autoMyBaeCountdownTimer);
-      autoMyBaeCountdownTimer = null;
-      if (autoMyBaeModeText) autoMyBaeModeText.textContent = 'Tự Động: BẬT';
-      if (!autoMyBaeMode || isMyBaeRunning) return;
-      const stillPending = currentMyBaeRecords.filter(_mybaeIsPending);
-      if (stillPending.length > 0) {
-        showSnackbar(`🚀 Tự động khởi động Bypass MyBAE cho ${stillPending.length} hợp đồng...`);
-        runMyBaeProcess(stillPending, true);
-      }
-    }
-  }, 1000);
+  return;
 }
 
 // ===================== LOAD DATA =====================
@@ -189,6 +173,20 @@ async function loadMyBaeSheetData() {
     const data = await res.json();
     if (res.ok && data.status === 'ok') {
       currentMyBaeRecords = data.records || [];
+      const validShds = new Set(currentMyBaeRecords.map(r => String(r['SHD'] || '').trim()).filter(Boolean));
+      Array.from(selectedMyBaeShds).forEach(s => { if (!validShds.has(s)) selectedMyBaeShds.delete(s); });
+      Array.from(mybaeKnownShds).forEach(s => { if (!validShds.has(s)) mybaeKnownShds.delete(s); });
+      currentMyBaeRecords.forEach(r => {
+        const shd = String(r['SHD'] || '').trim();
+        if (!shd) return;
+        const pending = _mybaeIsPending(r);
+        if (!mybaeKnownShds.has(shd)) {
+          mybaeKnownShds.add(shd);
+          if (pending) selectedMyBaeShds.add(shd);
+        } else if (!pending && !mybaeUserForcedShds.has(shd)) {
+          selectedMyBaeShds.delete(shd);
+        }
+      });
       updateMyBaeStats(currentMyBaeRecords);
       if (!isMyBaeRunning) renderMyBaeTable(currentMyBaeRecords);
       if (autoMyBaeMode && !isMyBaeRunning && !autoMyBaeCountdownTimer) {
@@ -257,6 +255,7 @@ function renderMyBaeTable(records) {
   const sortedFiltered = (window.UnifiedWorkTabs && typeof window.UnifiedWorkTabs.sortRecordsNewestFirst === 'function')
     ? window.UnifiedWorkTabs.sortRecordsNewestFirst(filtered)
     : filtered;
+  currentFilteredMyBaeRecords = sortedFiltered;
 
   if (mybaeTableFooterText) {
     mybaeTableFooterText.textContent = `Hiển thị ${sortedFiltered.length} bản ghi`;
@@ -267,6 +266,7 @@ function renderMyBaeTable(records) {
     if (window.UnifiedWorkTabs) {
       window.UnifiedWorkTabs.renderPagination('mybaePagination', { total: 0 });
     }
+    updateMyBaeSelectedCount();
     return;
   }
 
@@ -289,7 +289,7 @@ function renderMyBaeTable(records) {
     const kq     = String(r['Kết Quả'] || '').trim();
     const tt     = String(r['Thao Tác'] || '').trim();
     const tacVu  = r['Tác Vụ'] || 'Bypass MyBAE';
-    const isChecked = _mybaeIsPending(r);
+    const isChecked = selectedMyBaeShds.has(shd);
 
     let badgeKq = '<span class="text-slate-300">—</span>';
     if (kq) {
@@ -345,22 +345,44 @@ function renderMyBaeTable(records) {
   });
 
   tbodyMyBaeList.querySelectorAll('.mybae-row-checkbox').forEach(chk => {
-    chk.addEventListener('change', updateMyBaeSelectedCount);
+    chk.addEventListener('change', e => {
+      const shd = e.target.dataset.shd;
+      if (e.target.checked) {
+        selectedMyBaeShds.add(shd);
+        mybaeUserForcedShds.add(shd);
+      } else {
+        selectedMyBaeShds.delete(shd);
+        mybaeUserForcedShds.delete(shd);
+      }
+      updateMyBaeSelectedCount();
+    });
   });
 }
 
 function updateMyBaeSelectedCount() {
-  const checked = tbodyMyBaeList ? tbodyMyBaeList.querySelectorAll('.mybae-row-checkbox:checked').length : 0;
-  if (mybaeSelectedCountText) mybaeSelectedCountText.textContent = `(${checked} HĐ đã chọn)`;
+  if (mybaeSelectedCountText) mybaeSelectedCountText.textContent = `(${selectedMyBaeShds.size} HĐ đã chọn)`;
+  if (chkMyBaeSelectAll) {
+    const filteredShds = currentFilteredMyBaeRecords.map(r => String(r['SHD'] || '').trim()).filter(Boolean);
+    chkMyBaeSelectAll.checked = filteredShds.length > 0 && filteredShds.every(s => selectedMyBaeShds.has(s));
+  }
 }
 
 if (chkMyBaeSelectAll) {
   chkMyBaeSelectAll.addEventListener('change', e => {
     const checked = e.target.checked;
-    if (tbodyMyBaeList) {
-      tbodyMyBaeList.querySelectorAll('.mybae-row-checkbox').forEach(chk => { chk.checked = checked; });
-    }
-    updateMyBaeSelectedCount();
+    const targetList = currentFilteredMyBaeRecords;
+    targetList.forEach(r => {
+      const shd = String(r['SHD'] || '').trim();
+      if (!shd) return;
+      if (checked) {
+        selectedMyBaeShds.add(shd);
+        mybaeUserForcedShds.add(shd);
+      } else {
+        selectedMyBaeShds.delete(shd);
+        mybaeUserForcedShds.delete(shd);
+      }
+    });
+    renderMyBaeTable(currentMyBaeRecords);
   });
 }
 
@@ -394,18 +416,21 @@ async function runMyBaeProcess(specificRecords = null, silent = false) {
 
   let recordsToRun = specificRecords;
   if (!recordsToRun) {
-    const checkedShds = new Set();
-    if (tbodyMyBaeList) {
-      tbodyMyBaeList.querySelectorAll('.mybae-row-checkbox:checked').forEach(c => checkedShds.add(c.dataset.shd));
-    }
-    if (checkedShds.size > 0) {
-      recordsToRun = currentMyBaeRecords.filter(r => checkedShds.has(String(r['SHD'] || '').trim()));
+    if (selectedMyBaeShds.size > 0) {
+      recordsToRun = currentMyBaeRecords.filter(r => selectedMyBaeShds.has(String(r['SHD'] || '').trim()));
     }
   }
 
   if (!recordsToRun || recordsToRun.length === 0) {
     if (!silent) showSnackbar('⚠️ Chưa có hợp đồng nào được chọn để xử lý!');
     return;
+  }
+
+  if (!specificRecords && !silent) {
+    const doneCount = recordsToRun.filter(r => !_mybaeIsPending(r)).length;
+    if (doneCount >= 2 && !window.confirm(`Bạn đang chọn chạy lại ${doneCount} hợp đồng Bypass MyBAE đã xử lý. Bạn có chắc chắn muốn chạy lại?`)) {
+      return;
+    }
   }
 
   try {
