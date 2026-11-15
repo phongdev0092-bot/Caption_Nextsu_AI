@@ -136,9 +136,10 @@ function _isAssignFinalDone(r) {
   return tt.includes('cập nhật thành công') || tt.includes('thành công!') || tt.includes('đã xử lý');
 }
 
-// Auto chỉ chạy HĐ CHƯA từng xử lý (Thao Tác trống). HĐ đã có kết quả (kể cả lỗi) phải chạy lại thủ công.
+// Auto chỉ chạy HĐ CHƯA từng xử lý (Thao Tác trống / "Chưa cập nhật" / "Chưa xử lý"). HĐ đã có kết quả (kể cả lỗi) phải chạy lại thủ công.
 function _isAssignAutoPending(r) {
-  return !String(r['Thao Tác'] || '').trim();
+  const tt = String(r['Thao Tác'] || '').trim().toLowerCase();
+  return !tt || tt === 'chưa cập nhật' || tt === 'chưa xử lý';
 }
 
 function checkAndAutoTriggerAssign() {

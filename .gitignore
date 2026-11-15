@@ -26,3 +26,15 @@ inside_session_cookies.json
 logs/
 tmp_auto_import/
 .venv/
+
+# Secrets & runtime caches (do not commit credentials or mutable runtime state)
+config.json
+*_cache.json
+auto_attempts.json
+auto_modes.json
+auto_reset_72h_state.json
+auto_import_history.json
+auto_import_config.json
+activity_log.jsonl.zst
+logs.json.zst
+graphify-out/cache/

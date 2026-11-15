@@ -148,13 +148,13 @@ class ModernInsideFPTApp:
 
         # Username
         tk.Label(form_frame, text="Tài khoản:", font=("Segoe UI", 9, "bold"), fg=self.text_color, bg=self.card_bg).grid(row=0, column=0, sticky="w", pady=4)
-        self.user_var = tk.StringVar(value=self.config.get("username", "phuongnam.phongnh5"))
+        self.user_var = tk.StringVar(value=self.config.get("username", ""))
         self.user_entry = tk.Entry(form_frame, textvariable=self.user_var, font=("Segoe UI", 10), bg="#0f172a", fg="#ffffff", insertbackground="#ffffff", relief="flat", highlightbackground=self.card_border, highlightthickness=1)
         self.user_entry.grid(row=0, column=1, columnspan=2, sticky="ew", padx=(10, 0), pady=4, ipady=4)
 
         # Password
         tk.Label(form_frame, text="Mật khẩu:", font=("Segoe UI", 9, "bold"), fg=self.text_color, bg=self.card_bg).grid(row=1, column=0, sticky="w", pady=4)
-        self.pass_var = tk.StringVar(value=self.config.get("password", "Benngo@@20262027"))
+        self.pass_var = tk.StringVar(value=self.config.get("password", ""))
         self.pass_entry = tk.Entry(form_frame, textvariable=self.pass_var, show="•", font=("Segoe UI", 10), bg="#0f172a", fg="#ffffff", insertbackground="#ffffff", relief="flat", highlightbackground=self.card_border, highlightthickness=1)
         self.pass_entry.grid(row=1, column=1, sticky="ew", padx=(10, 5), pady=4, ipady=4)
 
@@ -173,7 +173,7 @@ class ModernInsideFPTApp:
 
         # Secret Key
         tk.Label(form_frame, text="OTP Secret:", font=("Segoe UI", 9, "bold"), fg=self.text_color, bg=self.card_bg).grid(row=2, column=0, sticky="w", pady=4)
-        self.secret_var = tk.StringVar(value=self.config.get("totp_secret", "J5MBXLD2IZJSJWADQU"))
+        self.secret_var = tk.StringVar(value=self.config.get("totp_secret", ""))
         self.secret_entry = tk.Entry(form_frame, textvariable=self.secret_var, font=("Consolas", 10), bg="#0f172a", fg="#38bdf8", insertbackground="#ffffff", relief="flat", highlightbackground=self.card_border, highlightthickness=1)
         self.secret_entry.grid(row=2, column=1, sticky="ew", padx=(10, 5), pady=4, ipady=4)
 

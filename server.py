@@ -170,18 +170,112 @@ def clear_auto_attempts(tab=None, shds=None):
             except Exception:
                 attempts = {}
         if tab:
-            if tab in attempts:
+            if tab in attempts and isinstance(attempts[tab], dict):
                 if shds:
                     for s in shds:
                         attempts[tab].pop(str(s).strip(), None)
                 else:
                     attempts[tab] = {}
         else:
+            locked_backup = attempts.get("_manual_locked") if isinstance(attempts.get("_manual_locked"), dict) else None
             attempts = {}
+            if locked_backup:
+                attempts["_manual_locked"] = locked_backup
         with open(AUTO_ATTEMPT_FILE, "w", encoding="utf-8") as f:
             json.dump(attempts, f, ensure_ascii=False, indent=2)
     except Exception:
         pass
+
+def _load_auto_attempts_raw():
+    if os.path.exists(AUTO_ATTEMPT_FILE):
+        try:
+            with open(AUTO_ATTEMPT_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+def _save_auto_attempts_raw(data):
+    try:
+        with open(AUTO_ATTEMPT_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+def _get_signal_manual_locked(tab, attempts=None):
+    data = attempts if isinstance(attempts, dict) else _load_auto_attempts_raw()
+    locked_root = data.get("_manual_locked")
+    if not isinstance(locked_root, dict):
+        return {}
+    tab_map = locked_root.get(tab)
+    return tab_map if isinstance(tab_map, dict) else {}
+
+def _lock_signal_contracts_for_manual(tab, shds, reason="login_or_server_error"):
+    clean_shds = [str(s).strip() for s in (shds or []) if str(s).strip()]
+    if not clean_shds:
+        return
+    data = _load_auto_attempts_raw()
+    locked_root = data.setdefault("_manual_locked", {})
+    if not isinstance(locked_root, dict):
+        locked_root = {}
+        data["_manual_locked"] = locked_root
+    tab_map = locked_root.setdefault(tab, {})
+    if not isinstance(tab_map, dict):
+        tab_map = {}
+        locked_root[tab] = tab_map
+    now_ts = time.time()
+    for shd in clean_shds:
+        tab_map[shd] = {"ts": now_ts, "reason": reason}
+    _save_auto_attempts_raw(data)
+
+def _unlock_signal_contracts_from_manual(tab, shds):
+    clean_shds = [str(s).strip() for s in (shds or []) if str(s).strip()]
+    if not clean_shds:
+        return
+    data = _load_auto_attempts_raw()
+    locked_root = data.get("_manual_locked")
+    if not isinstance(locked_root, dict):
+        return
+    tab_map = locked_root.get(tab)
+    if not isinstance(tab_map, dict):
+        return
+    changed = False
+    for shd in clean_shds:
+        if shd in tab_map:
+            tab_map.pop(shd, None)
+            changed = True
+    if changed:
+        _save_auto_attempts_raw(data)
+
+def _is_signal_manual_locked(tab, r, attempts=None):
+    if not isinstance(r, dict):
+        return False
+    if r.get("_is_old_day_backlog") or r.get("_manual_only") or r.get("_login_or_server_error_locked"):
+        return True
+    kq = inside_signal.normalize_nfc(r.get("Kết Quả", "")).lower()
+    if "lỗi" in kq:
+        return True
+    shd = str(r.get("SHD") or r.get("Số Hợp Đồng") or "").strip()
+    if tab and shd:
+        locked_map = _get_signal_manual_locked(tab, attempts=attempts)
+        if shd in locked_map:
+            return True
+    return False
+
+def _decorate_signal_lock_flags(tab, records):
+    locked_map = _get_signal_manual_locked(tab)
+    for r in records or []:
+        if not isinstance(r, dict):
+            continue
+        shd = str(r.get("SHD") or r.get("Số Hợp Đồng") or "").strip()
+        kq = inside_signal.normalize_nfc(r.get("Kết Quả", "")).lower()
+        has_err = "lỗi" in kq
+        is_clean_done = inside_signal.is_final_status(r.get("Kết Quả", "")) and not has_err
+        if shd and shd in locked_map and not is_clean_done:
+            r["_login_or_server_error_locked"] = True
+            r["_manual_only"] = True
+    return records
 
 task_state = {
     "status": "idle",
@@ -1109,29 +1203,31 @@ def _apply_bypass_cache_to_record(r):
     if not shd:
         return
     c_val = None
+    now_ts = time.time()
     if row_id and f"{shd}_{row_id}" in processed_bypass_cache:
-        c_val = processed_bypass_cache[f"{shd}_{row_id}"]
+        cand = processed_bypass_cache[f"{shd}_{row_id}"]
+        if isinstance(cand, dict) and (now_ts - cand.get("timestamp_epoch", 0) < 90):
+            c_val = cand
     elif not row_id and shd in processed_bypass_cache:
         cand = processed_bypass_cache[shd]
-        if isinstance(cand, dict) and (time.time() - cand.get("timestamp_epoch", 0) < 120):
+        if isinstance(cand, dict) and (now_ts - cand.get("timestamp_epoch", 0) < 90):
             c_val = cand
 
     if c_val:
-        c_status = c_val if isinstance(c_val, str) else c_val.get("status", "Đã xử lý")
+        c_status = c_val.get("status", "Đã xử lý")
         if "vi phạm" in str(c_status).lower() and inside_bypass.is_admin_staff(r):
             return
-        c_time = c_val.get("time", "") if isinstance(c_val, dict) else ""
-        c_ghi_chu = c_val.get("ghi_chu", "") if isinstance(c_val, dict) else ""
-        force_ov = c_val.get("force_override", False) if isinstance(c_val, dict) else False
+        c_time = c_val.get("time", "")
+        c_ghi_chu = c_val.get("ghi_chu", "")
 
         cur_tt = str(r.get("Thao Tác") or "").strip().lower()
-        if force_ov or not cur_tt or cur_tt in ["nan", "chưa xử lý", "chưa cập nhật", ""]:
+        is_raw_pending = (not cur_tt or cur_tt in ["nan", "chưa xử lý", "chưa cập nhật", ""])
+        if is_raw_pending:
             r["Thao Tác"] = c_status
-        if c_ghi_chu and not r.get("Ghi Chú"):
-            r["Ghi Chú"] = c_ghi_chu
-        if c_time and (not r.get("Ngày Cập Nhật") or str(r.get("Ngày Cập Nhật")).lower() in ["nan", "chưa cập nhật", ""]):
-            r["Ngày Cập Nhật"] = c_time
-            r["Ngày Cập Nhật"] = c_time
+            if c_ghi_chu and not r.get("Ghi Chú"):
+                r["Ghi Chú"] = c_ghi_chu
+            if c_time and (not r.get("Ngày Cập Nhật") or str(r.get("Ngày Cập Nhật")).lower() in ["nan", "chưa cập nhật", "chưa xử lý", ""]):
+                r["Ngày Cập Nhật"] = c_time
 @app.route("/api/bypass/sheet-data", methods=["GET"])
 def get_bypass_sheet_data():
     sheet_id = request.args.get("sheet_id", inside_bypass.DEFAULT_SHEET_ID).strip()
@@ -1491,12 +1587,13 @@ def get_cls_sheet_data():
                 r["Kết Quả"] = "Đã xử lý"
                 if shd and shd in processed_cls_cache:
                     c_val = processed_cls_cache[shd]
-                    c_tt = c_val.get("thao_tac", "Cập nhật thành công!") if isinstance(c_val, dict) else c_val
-                    c_time = c_val.get("time", "") if isinstance(c_val, dict) else ""
-                    if not r.get("Thao Tác") or raw_tt in ["nan", "chưa xử lý", ""]:
-                        r["Thao Tác"] = c_tt
-                    if c_time and (not r.get("Ngày Cập Nhật") or str(r.get("Ngày Cập Nhật")).lower() in ["nan", ""]):
-                        r["Ngày Cập Nhật"] = c_time
+                    if isinstance(c_val, dict) and (time.time() - c_val.get("timestamp_epoch", 0) < 90):
+                        c_tt = c_val.get("thao_tac", "Cập nhật thành công!")
+                        c_time = c_val.get("time", "")
+                        if not r.get("Thao Tác") or raw_tt in ["nan", "chưa xử lý", "chưa cập nhật", ""]:
+                            r["Thao Tác"] = c_tt
+                        if c_time and (not r.get("Ngày Cập Nhật") or str(r.get("Ngày Cập Nhật")).lower() in ["nan", "chưa cập nhật", ""]):
+                            r["Ngày Cập Nhật"] = c_time
 
     return jsonify(data)
 
@@ -1701,6 +1798,7 @@ def run_cls_process():
                         "ket_qua": "Đã xử lý",
                         "thao_tac": thao_tac,
                         "time": now_str,
+                        "timestamp_epoch": time.time(),
                         "is_success": is_ok,
                         "tinh_trang": tinh_trang,
                         "noi_dung": noi_dung
@@ -2021,6 +2119,7 @@ def get_clear_signal_sheet_data():
     data = inside_signal.fetch_sheet_data(sheet_id=sheet_id, gid=gid, signal_type="clear")
     if data["status"] != "ok":
         return jsonify(data), 500
+    _decorate_signal_lock_flags("clear_signal", data.get("records", []))
     return jsonify(data)
 
 @app.route("/api/clear-signal/live-status", methods=["GET"])
@@ -2103,19 +2202,38 @@ def run_clear_signal_process():
     gid             = data.get("gid", inside_signal.GID_CLEAR_SIGNAL)
     selected_records= data.get("records")
     headless        = data.get("headless", True)
+    is_manual       = bool(data.get("manual"))
 
     if selected_records:
-        to_process = selected_records
+        if is_manual:
+            to_process = list(selected_records)
+        else:
+            to_process = [
+                r for r in selected_records
+                if not inside_signal.is_final_status(r.get("Kết Quả", ""))
+                and not _is_signal_manual_locked("clear_signal", r)
+            ]
     else:
         sheet_res = inside_signal.fetch_sheet_data(sheet_id=sheet_id, gid=gid, signal_type="clear")
         if sheet_res["status"] != "ok" or not sheet_res["records"]:
             return jsonify({"status": "error", "message": "Không tìm thấy dữ liệu trên Google Sheet Clear Tín Hiệu"}), 400
-        to_process = [r for r in sheet_res["records"] if not inside_signal.is_final_status(r.get("Kết Quả", ""))]
-        if not to_process:
-            to_process = sheet_res["records"]
+        _decorate_signal_lock_flags("clear_signal", sheet_res["records"])
+        to_process = [
+            r for r in sheet_res["records"]
+            if not inside_signal.is_final_status(r.get("Kết Quả", ""))
+            and (is_manual or not _is_signal_manual_locked("clear_signal", r))
+        ]
 
     if not to_process:
-        return jsonify({"status": "error", "message": "Không có hợp đồng nào để xử lý!"}), 400
+        msg_empty = (
+            "Không có hợp đồng hợp lệ đang chờ Clear Tín Hiệu (các HĐ tồn ngày cũ / lỗi đăng nhập phải thao tác tay)!"
+            if not is_manual else
+            "Không có hợp đồng nào được chọn để Clear Tín Hiệu!"
+        )
+        return jsonify({"status": "error", "message": msg_empty}), 400
+
+    if is_manual:
+        _unlock_signal_contracts_from_manual("clear_signal", [r.get("SHD") for r in to_process])
 
     clear_signal_task_state["is_running"]           = True
     clear_signal_task_state["total"]                = len(to_process)
@@ -2160,8 +2278,11 @@ def run_clear_signal_process():
 
     def worker_clear_signal():
         bot = inside_signal.InsideSignalAutomation(signal_type="clear", headless=headless, log_cb=add_log)
+        processed_shds = set()
         try:
             bot.init_driver()
+            if not bot.driver:
+                raise RuntimeError("Không thể khởi tạo/đăng nhập trình duyệt Chrome cho Clear Tín Hiệu")
             for idx, r in enumerate(to_process):
                 shd = str(r.get("SHD", "")).strip()
                 clear_signal_task_state["current_index"] = idx + 1
@@ -2170,12 +2291,16 @@ def run_clear_signal_process():
 
                 try:
                     is_ok, kq_str, now_str = bot.process_row(r)
+                    processed_shds.add(shd)
                     r["Kết Quả"] = kq_str
                     r["Ngày Cập Nhật"] = now_str
                     # Sau khi clear thành công => Auto Cấp Lại = Bình Thường ( Tồn: 0H )
-                    if is_ok:
+                    if is_ok and "lỗi" not in str(kq_str).lower():
                         r["Auto Cấp Lại"] = "Bình Thường ( Tồn: 0H )"
                         r["Auto Cap Lai"] = "Bình Thường ( Tồn: 0H )"
+                        _unlock_signal_contracts_from_manual("clear_signal", [shd])
+                    elif not is_manual:
+                        _lock_signal_contracts_for_manual("clear_signal", [shd], reason="login_or_server_error")
                     update_sheet_remote_signal(r, kq_str, "clear")
 
                     clear_signal_task_state["processed_in_session"].append({
@@ -2188,12 +2313,15 @@ def run_clear_signal_process():
                     lvl = "success" if is_ok else "warning"
                     add_log(f"Clear Tín Hiệu HĐ {shd}: '{kq_str}'", lvl, "clear_signal")
                 except Exception as ex_single:
+                    processed_shds.add(shd)
                     now_str = time.strftime("%d/%m/%Y %H:%M:%S")
                     err_kq = f"Lỗi: {str(ex_single)[:60]}"
                     add_log(f"Lỗi Clear Tín Hiệu HĐ {shd}: {str(ex_single)[:60]}", "error", "clear_signal")
                     r["Kết Quả"] = err_kq
                     r["Ngày Cập Nhật"] = now_str
                     inside_signal.update_cache_record("clear", shd, err_kq, now_str)
+                    if not is_manual:
+                        _lock_signal_contracts_for_manual("clear_signal", [shd], reason="login_or_server_error")
                     update_sheet_remote_signal(r, err_kq, "clear")
 
                     clear_signal_task_state["processed_in_session"].append({
@@ -2210,6 +2338,9 @@ def run_clear_signal_process():
             clear_signal_task_state["message"] = f"Lỗi Clear Tín Hiệu: {e}"
             add_log(f"Tiến trình Clear Tín Hiệu bị dừng: {e}", "error")
             core_login.invalidate_session(log_cb=add_log)  # phiên nghi ngờ hỏng/đơ -> lần sau đăng nhập mới
+            if not is_manual:
+                remaining_shds = [str(r.get("SHD", "")).strip() for r in to_process if str(r.get("SHD", "")).strip() not in processed_shds]
+                _lock_signal_contracts_for_manual("clear_signal", remaining_shds, reason="login_or_server_error")
         finally:
             clear_signal_task_state["is_running"] = False
             if bot:
@@ -2230,6 +2361,7 @@ def get_reset_signal_sheet_data():
     data = inside_signal.fetch_sheet_data(sheet_id=sheet_id, gid=gid, signal_type="reset")
     if data["status"] != "ok":
         return jsonify(data), 500
+    _decorate_signal_lock_flags("reset_signal", data.get("records", []))
     return jsonify(data)
 
 @app.route("/api/reset-signal/live-status", methods=["GET"])
@@ -2311,19 +2443,38 @@ def run_reset_signal_process():
     gid             = data.get("gid", inside_signal.GID_RESET_SIGNAL)
     selected_records= data.get("records")
     headless        = data.get("headless", True)
+    is_manual       = bool(data.get("manual"))
 
     if selected_records:
-        to_process = selected_records
+        if is_manual:
+            to_process = list(selected_records)
+        else:
+            to_process = [
+                r for r in selected_records
+                if not inside_signal.is_final_status(r.get("Kết Quả", ""))
+                and not _is_signal_manual_locked("reset_signal", r)
+            ]
     else:
         sheet_res = inside_signal.fetch_sheet_data(sheet_id=sheet_id, gid=gid, signal_type="reset")
         if sheet_res["status"] != "ok" or not sheet_res["records"]:
             return jsonify({"status": "error", "message": "Không tìm thấy dữ liệu trên Google Sheet Cấp Lại Tín Hiệu"}), 400
-        to_process = [r for r in sheet_res["records"] if not inside_signal.is_final_status(r.get("Kết Quả", ""))]
-        if not to_process:
-            to_process = sheet_res["records"]
+        _decorate_signal_lock_flags("reset_signal", sheet_res["records"])
+        to_process = [
+            r for r in sheet_res["records"]
+            if not inside_signal.is_final_status(r.get("Kết Quả", ""))
+            and (is_manual or not _is_signal_manual_locked("reset_signal", r))
+        ]
 
     if not to_process:
-        return jsonify({"status": "error", "message": "Không có hợp đồng nào để xử lý!"}), 400
+        msg_empty = (
+            "Không có hợp đồng hợp lệ đang chờ Cấp Lại Tín Hiệu (các HĐ tồn ngày cũ / lỗi đăng nhập phải thao tác tay)!"
+            if not is_manual else
+            "Không có hợp đồng nào được chọn để Cấp Lại Tín Hiệu!"
+        )
+        return jsonify({"status": "error", "message": msg_empty}), 400
+
+    if is_manual:
+        _unlock_signal_contracts_from_manual("reset_signal", [r.get("SHD") for r in to_process])
 
     reset_signal_task_state["is_running"]           = True
     reset_signal_task_state["total"]                = len(to_process)
@@ -2380,8 +2531,11 @@ def run_reset_signal_process():
 
     def worker_reset_signal():
         bot = inside_signal.InsideSignalAutomation(signal_type="reset", headless=headless, log_cb=add_log)
+        processed_shds = set()
         try:
             bot.init_driver()
+            if not bot.driver:
+                raise RuntimeError("Không thể khởi tạo/đăng nhập trình duyệt Chrome cho Cấp Lại Tín Hiệu")
             for idx, r in enumerate(to_process):
                 shd = str(r.get("SHD", "")).strip()
                 reset_signal_task_state["current_index"] = idx + 1
@@ -2390,6 +2544,7 @@ def run_reset_signal_process():
 
                 try:
                     is_ok, kq_str, now_str = bot.process_row(r)
+                    processed_shds.add(shd)
                     r["Kết Quả"] = kq_str
                     r["Ngày Cập Nhật"] = now_str
                     # Đảm bảo Nguồn được ghi vào record để webhook & table lấy đúng
@@ -2397,6 +2552,17 @@ def run_reset_signal_process():
                         final_nguon_set = "Auto >72H" if (is_auto_72h or r.get("_is_auto_72h")) else "User"
                         r["Nguồn"] = final_nguon_set
                         r["Nguon"] = final_nguon_set
+                    if is_ok and "lỗi" not in str(kq_str).lower():
+                        _unlock_signal_contracts_from_manual("reset_signal", [shd])
+                        if is_auto_72h or r.get("_is_auto_72h"):
+                            try:
+                                st_72 = inside_signal.load_cache(AUTO_RESET_STATE_FILE)
+                                st_72[shd] = now_str
+                                inside_signal.save_cache(AUTO_RESET_STATE_FILE, st_72)
+                            except Exception:
+                                pass
+                    elif not is_manual:
+                        _lock_signal_contracts_for_manual("reset_signal", [shd], reason="login_or_server_error")
                     update_sheet_remote_signal(r, kq_str, "reset")
 
                     reset_signal_task_state["processed_in_session"].append({
@@ -2409,12 +2575,15 @@ def run_reset_signal_process():
                     lvl = "success" if is_ok else "warning"
                     add_log(f"Cấp Lại Tín Hiệu HĐ {shd}: '{kq_str}'", lvl, "reset_signal")
                 except Exception as ex_single:
+                    processed_shds.add(shd)
                     now_str = time.strftime("%d/%m/%Y %H:%M:%S")
                     err_kq = f"Lỗi: {str(ex_single)[:60]}"
                     add_log(f"Lỗi Cấp Lại Tín Hiệu HĐ {shd}: {str(ex_single)[:60]}", "error", "reset_signal")
                     r["Kết Quả"] = err_kq
                     r["Ngày Cập Nhật"] = now_str
                     inside_signal.update_cache_record("reset", shd, err_kq, now_str)
+                    if not is_manual:
+                        _lock_signal_contracts_for_manual("reset_signal", [shd], reason="login_or_server_error")
                     update_sheet_remote_signal(r, err_kq, "reset")
 
                     reset_signal_task_state["processed_in_session"].append({
@@ -2431,6 +2600,9 @@ def run_reset_signal_process():
             reset_signal_task_state["message"] = f"Lỗi Cấp Lại Tín Hiệu: {e}"
             add_log(f"Tiến trình Cấp Lại Tín Hiệu bị dừng: {e}", "error")
             core_login.invalidate_session(log_cb=add_log)  # phiên nghi ngờ hỏng/đơ -> lần sau đăng nhập mới
+            if not is_manual:
+                remaining_shds = [str(r.get("SHD", "")).strip() for r in to_process if str(r.get("SHD", "")).strip() not in processed_shds]
+                _lock_signal_contracts_for_manual("reset_signal", remaining_shds, reason="login_or_server_error")
         finally:
             reset_signal_task_state["is_running"] = False
             if bot:
@@ -2486,6 +2658,7 @@ def _auto_reset_after_clear_check():
     clear_cache = inside_signal.load_cache(inside_signal.CLEAR_SIGNAL_CACHE_FILE)
     limit = datetime.now() - timedelta(hours=AUTO_RESET_HOURS)
     limit_old = datetime.now() - timedelta(days=AUTO_RESET_MAX_AGE_DAYS)
+    today_date = datetime.now().date()
 
     due = []
     seen = set()
@@ -2495,11 +2668,17 @@ def _auto_reset_after_clear_check():
             continue
         if not _is_clear_success(r.get("Kết Quả", "")):
             continue
+        if _is_signal_manual_locked("reset_signal", {"SHD": shd}):
+            continue
 
         c_item = clear_cache.get(shd)
         t_str = (c_item.get("time") if isinstance(c_item, dict) else "") or r.get("Ngày Cập Nhật", "")
         dt = _parse_vn_dt(t_str)
         if not (dt and limit_old <= dt <= limit):
+            continue
+        # Rule 1: Chỉ auto với HĐ đến hạn 72H trong ngày hôm nay (HĐ tồn ngày cũ phải thao tác tay)
+        due_dt = dt + timedelta(hours=AUTO_RESET_HOURS)
+        if due_dt.date() < today_date:
             continue
 
         # Đã từng được Auto 72H xử lý cho chu kỳ Clear này
@@ -2544,15 +2723,13 @@ def _auto_reset_after_clear_check():
 
     try:
         with app.test_client() as c:
-            resp = c.post("/api/reset-signal/run", json={"records": due, "headless": True, "source": "auto_72h"})
-            if resp.status_code == 200:
-                for r in due:
-                    state[str(r.get("SHD")).strip()] = time.strftime("%d/%m/%Y %H:%M:%S")
-                inside_signal.save_cache(AUTO_RESET_STATE_FILE, state)
-            else:
+            resp = c.post("/api/reset-signal/run", json={"records": due, "headless": True, "source": "auto_72h", "manual": False})
+            if resp.status_code != 200:
                 add_log(f"Không thể tự Cấp Lại sau 72h (HTTP {resp.status_code}): {resp.get_json(silent=True)}", "error", "reset_signal")
+                _lock_signal_contracts_for_manual("reset_signal", [r.get("SHD") for r in due], reason="login_or_server_error")
     except Exception as e:
         add_log(f"Lỗi tự Cấp Lại sau 72h: {e}", "error", "reset_signal")
+        _lock_signal_contracts_for_manual("reset_signal", [r.get("SHD") for r in due], reason="login_or_server_error")
 
 def _auto_reset_after_clear_loop():
     time.sleep(30)
@@ -3905,8 +4082,16 @@ def _auto_pending_cls(r):
 def _auto_pending_assign(r):
     return not _lc(r.get("Thao Tác", ""))
 
-def _auto_pending_signal(r):
+def _auto_pending_signal(r, tab=None):
+    if _is_signal_manual_locked(tab, r):
+        return False
     return not inside_signal.is_final_status(r.get("Kết Quả", ""))
+
+def _auto_pending_clear_signal(r):
+    return _auto_pending_signal(r, "clear_signal")
+
+def _auto_pending_reset_signal(r):
+    return _auto_pending_signal(r, "reset_signal")
 
 def _auto_pending_mybae(r):
     return not _lc(r.get("Thao Tác", "")) and not inside_mybae.is_final_row(r)
@@ -3914,13 +4099,18 @@ def _auto_pending_mybae(r):
 _TT_PENDING_VALUES = ("", "nan", "chưa cập nhật", "chưa xử lý")
 
 def _auto_pending_generic(r):
-    """Quy tắc chung: Kết Quả khác 'Đã xử lý' HOẶC Thao Tác trống/'Chưa cập nhật' => cần xử lý."""
+    """Quy tắc chung: Thao Tác 'Chưa cập nhật'/'Chưa xử lý' => cần xử lý; nếu Kết Quả đã xử lý và không có Thao Tác chờ => bỏ qua."""
     kq = _lc(r.get("Kết Quả") or r.get("Kết quả") or "")
     tt = _lc(r.get("Thao Tác") or r.get("Thao tác") or "")
-    if any(x in kq for x in ("đã xử lý", "đã cấp", "đã clear", "thành công", "hoàn tất")):
-        return False
     # HĐ lỗi hoặc từ chối do vi phạm 14N coi như đã xử lý xong -> bỏ qua, không tự chạy lại
     if any(w in kq or w in tt for w in ("lỗi", "không thành công", "thất bại", "error", "vi phạm", "từ chối")):
+        return False
+    # Nếu Thao Tác đánh dấu rõ đang chờ xử lý (Chưa cập nhật / Chưa xử lý) => luôn ưu tiên xử lý trước khi xét Kết Quả
+    if tt in ("chưa cập nhật", "chưa xử lý"):
+        return True
+    if any(x in kq for x in ("đã xử lý", "đã cấp", "đã clear", "thành công", "hoàn tất")):
+        return False
+    if any(x in tt for x in ("đã xử lý", "đã cấp", "đã clear", "đã phân công", "thành công", "hoàn tất")):
         return False
     if kq and kq not in ("nan", "chưa xử lý", "chưa cập nhật"):
         return True
@@ -3933,8 +4123,8 @@ AUTO_TAB_CFG = {
     "bypass":       {"sheet": "/api/bypass/sheet-data?gid=0",           "run": "/api/bypass/run",        "pending": _auto_pending_bypass,  "label": "Bypass"},
     "cls":          {"sheet": "/api/cls/sheet-data?gid=987552880",      "run": "/api/cls/run",           "pending": _auto_pending_generic, "label": "Clear Cls"},
     "assign":       {"sheet": "/api/assign/sheet-data",                 "run": "/api/assign/run",        "pending": _auto_pending_generic, "label": "Phân Công Tay"},
-    "clear_signal": {"sheet": "/api/clear-signal/sheet-data",           "run": "/api/clear-signal/run",  "pending": _auto_pending_signal,  "label": "Clear Tín Hiệu"},
-    "reset_signal": {"sheet": "/api/reset-signal/sheet-data",           "run": "/api/reset-signal/run",  "pending": _auto_pending_signal,  "label": "Cấp Lại Tín Hiệu"},
+    "clear_signal": {"sheet": "/api/clear-signal/sheet-data",           "run": "/api/clear-signal/run",  "pending": _auto_pending_clear_signal,  "label": "Clear Tín Hiệu"},
+    "reset_signal": {"sheet": "/api/reset-signal/sheet-data",           "run": "/api/reset-signal/run",  "pending": _auto_pending_reset_signal,  "label": "Cấp Lại Tín Hiệu"},
     "mybae":        {"sheet": "/api/mybae/sheet-data",                  "run": "/api/mybae/run",         "pending": _auto_pending_mybae_generic, "label": "Bypass MyBAE"},
 }
 
@@ -4024,9 +4214,16 @@ def _is_record_today(r):
 def _auto_orchestrator_cycle():
     busy = _auto_any_running()
     modes = inside_signal.load_cache(AUTO_MODES_FILE)
-    attempts = inside_signal.load_cache(AUTO_ATTEMPT_FILE)
+    raw_attempts = inside_signal.load_cache(AUTO_ATTEMPT_FILE) or {}
     now = time.time()
-    attempts = {t: {s: ts for s, ts in m.items() if now - ts < AUTO_ATTEMPT_TTL} for t, m in attempts.items()}
+    manual_locked = raw_attempts.get("_manual_locked", {}) if isinstance(raw_attempts.get("_manual_locked"), dict) else {}
+    attempts = {
+        t: {s: ts for s, ts in m.items() if isinstance(ts, (int, float)) and now - ts < AUTO_ATTEMPT_TTL}
+        for t, m in raw_attempts.items()
+        if t != "_manual_locked" and isinstance(m, dict)
+    }
+    if manual_locked:
+        attempts["_manual_locked"] = manual_locked
     labels = {k: l for k, l, _ in _auto_task_states()}
     triggered = False
 
@@ -4127,7 +4324,10 @@ def _auto_orchestrator_cycle():
             if not pend:
                 continue
             add_log(f"🤖 Auto nền: phát hiện {len(pend)} HĐ chờ xử lý ở {cfg['label']} → tự chạy", "info")
-            r2 = c.post(cfg["run"], json={"records": pend, "headless": True})
+            run_payload = {"records": pend, "headless": True}
+            if tab in ("clear_signal", "reset_signal"):
+                run_payload["manual"] = False
+            r2 = c.post(cfg["run"], json=run_payload)
             if r2.status_code == 200:
                 attempts.setdefault(tab, {}).update({f"{str(r.get('SHD')).strip()}_{str(r.get('ID', '')).strip()}": now for r in pend})
                 inside_signal.save_cache(AUTO_ATTEMPT_FILE, attempts)

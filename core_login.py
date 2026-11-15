@@ -85,11 +85,11 @@ INSIDE_SESSION_MAX_HOURS_DEFAULT = 0.75  # Tối đa 45 phút cho 1 Token SSO In
 INSIDE_SESSION_IDLE_MAX_MINUTES = 12     # Quá 12 phút không thao tác -> Token Inside New V5 (partner.fpt.net) dễ hết hạn ngầm, cần đăng nhập mới
 
 def _cfg_keep_inside_session():
-    """Mặc định GIỮ phiên Inside. Đặt "keep_inside_session": false trong config.json để quay về xóa phiên mỗi lần."""
+    """Mặc định XÓA phiên Inside mỗi lần đăng nhập/hoàn tất tác vụ. Đặt "keep_inside_session": true trong config.json nếu muốn giữ phiên."""
     try:
-        return bool(load_config().get("keep_inside_session", True))
+        return bool(load_config().get("keep_inside_session", False))
     except Exception:
-        return True
+        return False
 
 def _read_cookie_store():
     try:
@@ -501,17 +501,17 @@ def init_chrome_driver(headless=False, keep_open=True, profile_dir=None, use_cus
     )
 
 DEFAULT_ACCOUNT = {
-    "username": "phuongnam.phongnh5",
-    "password": "Benngo@@2026",
-    "totp_secret": "J5MBXLD2IZJSJWADQU",
+    "username": os.environ.get("INSIDE_USERNAME", ""),
+    "password": os.environ.get("INSIDE_PASSWORD", ""),
+    "totp_secret": os.environ.get("INSIDE_TOTP_SECRET", ""),
     "use_otp": True,
-    "account_name": "Phuongnam.phongnh5@inside.fpt.net"
+    "account_name": os.environ.get("INSIDE_ACCOUNT_NAME", "")
 }
 
 DEFAULT_AM_ACCOUNT = {
-    "username": "phuongnam.phongnh5@fpt.net",
-    "password": "Benngo@@20262027",
-    "account_name": "phuongnam.phongnh5@fpt.net"
+    "username": os.environ.get("INSIDE_AM_USERNAME", ""),
+    "password": os.environ.get("INSIDE_AM_PASSWORD", ""),
+    "account_name": os.environ.get("INSIDE_AM_USERNAME", "")
 }
 
 def load_config():
@@ -703,12 +703,119 @@ def extract_secret_from_qr_image(image_path):
         raise ValueError(f"Định dạng QR không nhận diện được: {qr_text}")
 
 _IAM_BTN_XPATH = (
-    "//*[self::button or self::a or self::div or self::span]"
-    "[(normalize-space(.)='ĐĂNG NHẬP VỚI IAM' or normalize-space(.)='Đăng nhập với IAM' "
-    "or contains(normalize-space(.), 'ĐĂNG NHẬP VỚI IAM') or contains(normalize-space(.), 'Đăng nhập với IAM')) "
-    "and not(contains(., 'Hướng dẫn')) and not(contains(@href, '.docx')) and not(.//button) and not(.//a)] | "
-    "//input[contains(@value, 'ĐĂNG NHẬP VỚI IAM') or contains(@value, 'IAM')]"
+    "//button[contains(normalize-space(.), 'ĐĂNG NHẬP VỚI IAM') or contains(normalize-space(.), 'Đăng nhập với IAM')] | "
+    "//a[(contains(normalize-space(.), 'ĐĂNG NHẬP VỚI IAM') or contains(normalize-space(.), 'Đăng nhập với IAM')) and not(contains(@href, '.docx')) and not(contains(., 'Hướng dẫn'))] | "
+    "//input[(@type='button' or @type='submit') and (contains(@value, 'ĐĂNG NHẬP VỚI IAM') or contains(@value, 'IAM'))] | "
+    "//div[(normalize-space(.)='ĐĂNG NHẬP VỚI IAM' or normalize-space(.)='Đăng nhập với IAM') and (contains(@id, 'IAM') or contains(@id, 'iam') or contains(@id, 'btn') or contains(@class, 'btn') or contains(@class, 'Btn') or @onclick)]"
 )
+
+
+def _is_iam_redirected(driver):
+    """Kiem tra trinh duyet da roi trang login.fpt.net sang IAM/Microsoft/Inside hay chua."""
+    curr = (driver.current_url or "").lower()
+    return (
+        "iam.fpt." in curr
+        or "login.microsoftonline.com" in curr
+        or ("inside.fpt.net" in curr and "login.fpt.net" not in curr)
+    )
+
+
+def _find_iam_button_candidate(driver):
+    """Tim nut [ĐĂNG NHẬP VỚI IAM] thuc su (uu tien bottom-most, loai tru banner/huong dan/.docx)."""
+    candidates = [b for b in driver.find_elements(By.XPATH, _IAM_BTN_XPATH) if b.is_displayed()]
+    if candidates:
+        candidates.sort(key=lambda el: (el.location or {}).get("y", 0), reverse=True)
+        return candidates[0]
+
+    # Fallback JS: tim element co text/value khop chinh xac 'ĐĂNG NHẬP VỚI IAM' nam thap nhat tren man hinh
+    try:
+        return driver.execute_script("""
+            var els = Array.from(document.querySelectorAll('button, a, input, div, span'));
+            var hits = [];
+            for (var i = 0; i < els.length; i++) {
+                var el = els[i];
+                var r = el.getBoundingClientRect();
+                if (!r || r.width <= 0 || r.height <= 0) continue;
+                var href = (el.getAttribute('href') || '').toLowerCase();
+                if (href.indexOf('.docx') !== -1) continue;
+                var txt = (el.tagName === 'INPUT' ? (el.value || '') : (el.innerText || el.textContent || '')).replace(/\\s+/g, ' ').trim().toUpperCase();
+                if (txt !== 'ĐĂNG NHẬP VỚI IAM' && !(el.tagName === 'INPUT' && txt.indexOf('IAM') !== -1)) continue;
+                var parentTxt = (el.parentElement ? (el.parentElement.innerText || '') : '').replace(/\\s+/g, ' ').trim().toUpperCase();
+                if (parentTxt.length > 0 && parentTxt.length < 220 && (
+                    parentTxt.indexOf('HƯỚNG DẪN') !== -1 ||
+                    parentTxt.indexOf('THÔNG BÁO') !== -1 ||
+                    parentTxt.indexOf('BẤM NÚT') !== -1
+                )) continue;
+                hits.push({el: el, top: r.top});
+            }
+            if (!hits.length) return null;
+            hits.sort(function(a, b) { return b.top - a.top; });
+            return hits[0].el;
+        """)
+    except Exception:
+        return None
+
+
+def _click_iam_login_button(driver, log=None):
+    """Cho va bam dung nut [ĐĂNG NHẬP VỚI IAM] tren login.fpt.net/inside.fpt.net."""
+    def _log(msg, lvl="info"):
+        if log:
+            try:
+                log(msg, lvl)
+            except Exception:
+                pass
+
+    try:
+        btn_iam = WebDriverWait(driver, 10).until(lambda d: _find_iam_button_candidate(d))
+    except Exception:
+        return False
+
+    if not btn_iam:
+        return False
+
+    _log("Đang bấm nút [ĐĂNG NHẬP VỚI IAM]...", "info")
+
+    def _trigger_click(target):
+        driver.execute_script("""
+            var el = arguments[0];
+            if (!el) return;
+            try { el.scrollIntoView({block: 'center'}); } catch (e) {}
+            try { el.click(); } catch (e) {}
+            try { if (window.$) $(el).trigger('click'); } catch (e) {}
+            var inner = el.querySelector('a, button, input');
+            if (inner && inner !== el) {
+                try { inner.click(); } catch (e) {}
+                try { if (window.$) $(inner).trigger('click'); } catch (e) {}
+            }
+            var outer = el.closest('a, button, [onclick], [id]');
+            if (outer && outer !== el && (outer.innerText || '').trim().length < 60) {
+                try { outer.click(); } catch (e) {}
+                try { if (window.$) $(outer).trigger('click'); } catch (e) {}
+            }
+        """, target)
+
+    _trigger_click(btn_iam)
+    try:
+        WebDriverWait(driver, 4).until(_is_iam_redirected)
+        return True
+    except Exception:
+        pass
+
+    # Retry bang Selenium click neu lan JS click dau chua chuyen trang
+    try:
+        btn_retry = _find_iam_button_candidate(driver) or btn_iam
+        try:
+            btn_retry.click()
+        except Exception:
+            _trigger_click(btn_retry)
+    except Exception:
+        pass
+
+    try:
+        WebDriverWait(driver, 10).until(_is_iam_redirected)
+        return True
+    except Exception:
+        return False
 
 
 def _should_use_iam_login(driver):
@@ -716,8 +823,7 @@ def _should_use_iam_login(driver):
     curr = (driver.current_url or "").lower()
     if "iam.fpt." in curr or "login.microsoftonline.com" in curr:
         return True
-    iam_btns = driver.find_elements(By.XPATH, _IAM_BTN_XPATH)
-    if any(b.is_displayed() for b in iam_btns):
+    if _find_iam_button_candidate(driver) is not None:
         return True
     p_elems = driver.find_elements(By.ID, "fPassword")
     if p_elems and p_elems[0].get_attribute("disabled") is not None:
@@ -736,29 +842,7 @@ def _login_inside_via_iam_am(driver, config, log):
 
     curr_url = (driver.current_url or "").lower()
     if "login.fpt.net" in curr_url or "inside.fpt.net" in curr_url:
-        try:
-            btn_iam = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable((By.XPATH, _IAM_BTN_XPATH))
-            )
-            log("Đang bấm nút [ĐĂNG NHẬP VỚI IAM]...", "info")
-            driver.execute_script("arguments[0].click();", btn_iam)
-            try:
-                WebDriverWait(driver, 4).until(
-                    lambda d: "iam.fpt." in (d.current_url or "").lower()
-                    or "login.microsoftonline.com" in (d.current_url or "").lower()
-                )
-            except Exception:
-                try:
-                    btn_iam.click()
-                except Exception:
-                    pass
-            WebDriverWait(driver, 10).until(
-                lambda d: "iam.fpt." in (d.current_url or "").lower()
-                or "login.microsoftonline.com" in (d.current_url or "").lower()
-                or ("inside.fpt.net" in (d.current_url or "").lower() and "login.fpt.net" not in (d.current_url or "").lower())
-            )
-        except Exception:
-            pass
+        _click_iam_login_button(driver, log)
 
     curr_url = (driver.current_url or "").lower()
     if "iam.fpt." in curr_url:
@@ -915,6 +999,8 @@ def run_fpt_login(username=None, password=None, secret=None, use_otp=None, headl
     if driver is None:
         log("Đang khởi tạo trình duyệt Google Chrome...", "info")
         p_dir = get_inside_profile_dir() if use_custom_profile else None
+        if not _cfg_keep_inside_session():
+            invalidate_session(profile_dir=p_dir, log_cb=log_callback)
         try:
             driver = create_driver_with_retry(
                 headless=headless,
@@ -947,7 +1033,13 @@ def run_fpt_login(username=None, password=None, secret=None, use_otp=None, headl
                 return True, current_url, page_title
             log("Phiên không dùng được -> đăng nhập mới.", "warning")
 
-        # Xóa sạch cookie trước khi đăng nhập mới
+        # Xóa sạch cookie & file phiên trước khi đăng nhập mới
+        if not _cfg_keep_inside_session():
+            try:
+                if os.path.exists(INSIDE_COOKIE_FILE):
+                    os.remove(INSIDE_COOKIE_FILE)
+            except Exception:
+                pass
         try:
             driver.delete_all_cookies()
         except Exception:

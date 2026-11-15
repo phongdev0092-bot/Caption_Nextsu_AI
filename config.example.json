@@ -1,0 +1,43 @@
+{
+  "username": "YOUR_USERNAME",
+  "password": "YOUR_PASSWORD",
+  "totp_secret": "YOUR_TOTP_SECRET",
+  "account_name": "YOUR_USERNAME@inside.fpt.net",
+  "login_url": "http://login.fpt.net/?urlreturn=inside.fpt.net",
+  "headless": true,
+  "keep_browser_open": true,
+  "use_custom_profile": true,
+  "default_account": {
+    "username": "YOUR_USERNAME",
+    "password": "YOUR_PASSWORD",
+    "totp_secret": "YOUR_TOTP_SECRET",
+    "use_otp": true,
+    "account_name": "YOUR_USERNAME@inside.fpt.net"
+  },
+  "custom_account": {
+    "username": "",
+    "password": "",
+    "totp_secret": "",
+    "use_otp": false,
+    "account_name": ""
+  },
+  "am_account": {
+    "username": "YOUR_AM_USERNAME@fpt.net",
+    "password": "YOUR_AM_PASSWORD",
+    "account_name": "YOUR_AM_USERNAME@fpt.net"
+  },
+  "am_username": "YOUR_AM_USERNAME@fpt.net",
+  "am_password": "YOUR_AM_PASSWORD",
+  "radius_username": "YOUR_AM_USERNAME@fpt.net",
+  "radius_password": "YOUR_AM_PASSWORD",
+  "active_account": "default",
+  "use_otp": true,
+  "google_sheet_webhook_url": "",
+  "cls_webhook_url": "",
+  "clear_signal_webhook_url": "",
+  "reset_signal_webhook_url": "",
+  "assign_webhook_url": "",
+  "mybae_webhook_url": "",
+  "spampool_webhook_url": "",
+  "bypass_nat_webhook_url": ""
+}

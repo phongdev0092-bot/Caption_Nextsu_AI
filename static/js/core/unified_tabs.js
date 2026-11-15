@@ -53,15 +53,45 @@ window.UnifiedWorkTabs = (function() {
     return d ? d.getTime() : 0;
   }
 
-  // Sort records from nearest/newest to farthest/oldest (giảm dần theo thời gian)
+  function getRecordNumericId(r) {
+    if (!r) return 0;
+    const raw = r['ID'] !== undefined ? r['ID'] : (r['id'] !== undefined ? r['id'] : '');
+    const n = parseInt(String(raw).trim(), 10);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function isPendingSheetRow(r) {
+    if (!r || typeof r !== 'object') return false;
+    const hasSheetCols = (
+      'Thao Tác' in r || 'Thao tác' in r ||
+      'Kết Quả' in r || 'Kết quả' in r || 'Kết Quả' in r
+    );
+    if (!hasSheetCols) return false;
+    return !isRecordDone(r) && !isRecordError(r);
+  }
+
+  // Sort records: pending sheet requests first, then newest-to-oldest by timestamp / ID / sheet bottom order
   function sortRecordsNewestFirst(records) {
     if (!Array.isArray(records)) return [];
-    return [...records].sort((a, b) => {
-      const tA = getRecordTimestamp(a);
-      const tB = getRecordTimestamp(b);
-      if (tB !== tA) return tB - tA;
-      return 0;
-    });
+    return records
+      .map((r, idx) => ({ r, idx }))
+      .sort((a, b) => {
+        const pendA = isPendingSheetRow(a.r) ? 0 : 1;
+        const pendB = isPendingSheetRow(b.r) ? 0 : 1;
+        if (pendA !== pendB) return pendA - pendB;
+
+        const tA = getRecordTimestamp(a.r);
+        const tB = getRecordTimestamp(b.r);
+        if (tB !== tA) return tB - tA;
+
+        const idA = getRecordNumericId(a.r);
+        const idB = getRecordNumericId(b.r);
+        if (idB !== idA) return idB - idA;
+
+        // Google Sheet appends new rows at the bottom -> higher original index appears first
+        return b.idx - a.idx;
+      })
+      .map(item => item.r);
   }
 
   // Paginate an array (default 10 items per page)
@@ -181,11 +211,52 @@ window.UnifiedWorkTabs = (function() {
     return true;
   }
 
+  // Check if record failed / rejected
+  function isRecordError(r) {
+    if (!r) return false;
+    const tt = String(r['Thao Tác'] || r['Thao tác'] || '').trim().toLowerCase();
+    const kq = String(r['Kết Quả'] || r['Kết quả'] || r['Kết Quả'] || '').trim().toLowerCase();
+    return (
+      tt.includes('không thành công') || tt.includes('lỗi') || tt.includes('thất bại') ||
+      tt.includes('vi phạm') || tt.includes('từ chối') || tt.includes('error') ||
+      kq.includes('không thành công') || kq.includes('lỗi') || kq.includes('thất bại') || kq.includes('error')
+    );
+  }
+
   // Check if record is Success / Done
   function isRecordDone(r) {
+    if (!r) return false;
     const tt = String(r['Thao Tác'] || r['Thao tác'] || '').trim().toLowerCase();
-    const kq = String(r['Kết Quả'] || r['Kết quả'] || '').trim().toLowerCase();
-    return tt.includes('thành công') || tt.includes('đã xử lý') || tt.includes('spampool') || tt.includes('vi phạm') || tt.includes('từ chối') || kq.includes('đã xử lý') || kq.includes('thành công');
+    const kq = String(r['Kết Quả'] || r['Kết quả'] || r['Kết Quả'] || '').trim().toLowerCase();
+    if (tt === 'chưa cập nhật' || tt === 'chưa xử lý' || tt === 'nan') {
+      return false;
+    }
+    if (tt && isRecordError(r)) {
+      return false;
+    }
+    if (tt) {
+      return (
+        (tt.includes('thành công') && !tt.includes('không thành công')) ||
+        tt.includes('đã xử lý') ||
+        tt.includes('đã clear') ||
+        tt.includes('đã phân công') ||
+        tt.includes('hoàn tất') ||
+        tt.includes('spampool')
+      );
+    }
+    if (kq === 'chưa cập nhật' || kq === 'chưa xử lý' || kq === 'nan' || !kq) {
+      return false;
+    }
+    if (isRecordError(r)) {
+      return false;
+    }
+    return (
+      kq.includes('đã xử lý') ||
+      (kq.includes('thành công') && !kq.includes('không thành công')) ||
+      kq.includes('đã clear') ||
+      kq.includes('đã cấp') ||
+      kq.includes('hoàn tất')
+    );
   }
 
   // Get staff identifier
@@ -220,8 +291,10 @@ window.UnifiedWorkTabs = (function() {
     const query = (shdQuery || '').trim().toLowerCase();
 
     const filtered = records.filter(r => {
-      // 1. Date filter
-      if (dateRange && dateRange !== 'all') {
+      const isPending = !isRecordDone(r) && !isRecordError(r);
+
+      // 1. Date filter (luôn giữ lại các dòng đang chờ xử lý để yêu cầu mới/tồn đọng không bị ẩn)
+      if (dateRange && dateRange !== 'all' && !isPending) {
         const dStr = r['Ngày Cập Nhật'] || r['Ngày cập nhật'] || r['Ngày Cập Nhật'] || r['Thời gian'] || '';
         const dObj = parseRecordDate(dStr);
         if (dObj && !isDateInRange(dObj, dateRange)) {
@@ -244,7 +317,7 @@ window.UnifiedWorkTabs = (function() {
       if (resultStatus === 'done') {
         if (!isRecordDone(r)) return false;
       } else if (resultStatus === 'pending') {
-        if (isRecordDone(r)) return false;
+        if (!isPending) return false;
       }
 
       // 4. Hậu kiểm filter
@@ -473,6 +546,7 @@ window.UnifiedWorkTabs = (function() {
     renderPagination,
     isDateInRange,
     isRecordDone,
+    isRecordError,
     getStaff,
     filterRecords,
     updateDailyChart,

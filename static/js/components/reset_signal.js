@@ -151,9 +151,17 @@ function _isResetSignalFinalDone(r) {
       || kq.includes('không thành công');
 }
 
+function _isResetSignalAutoEligible(r) {
+  if (!r) return false;
+  if (r._is_old_day_backlog || r._manual_only || r._login_or_server_error_locked) return false;
+  const kq = String(r['Kết Quả'] || '').trim().toLowerCase();
+  if (kq.includes('lỗi')) return false;
+  return !_isResetSignalFinalDone(r);
+}
+
 function checkAndAutoTriggerResetSignal() {
   if (!autoResetSignalMode || isResetSignalRunning) return;
-  const pending = currentResetSignalRecords.filter(r => !_isResetSignalFinalDone(r));
+  const pending = currentResetSignalRecords.filter(r => _isResetSignalAutoEligible(r));
   if (pending.length === 0) return;
   if (autoResetSignalCountdownTimer) return;
 
@@ -170,7 +178,7 @@ function checkAndAutoTriggerResetSignal() {
       autoResetSignalCountdownTimer = null;
       if (autoResetSignalModeText) autoResetSignalModeText.textContent = 'Tự Động: BẬT';
       if (!isResetSignalRunning) {
-        executeResetSignalProcess(null);
+        executeResetSignalProcess(null, true);
       }
     }
   }, 1000);
@@ -189,7 +197,7 @@ async function loadResetSignalSheetData() {
     updateResetSignalKPIs();
 
     if (autoResetSignalMode && !isResetSignalRunning && !autoResetSignalCountdownTimer) {
-      const pendingCount = currentResetSignalRecords.filter(r => !_isResetSignalFinalDone(r)).length;
+      const pendingCount = currentResetSignalRecords.filter(r => _isResetSignalAutoEligible(r)).length;
       if (pendingCount > 0) {
         checkAndAutoTriggerResetSignal();
       }
@@ -375,7 +383,7 @@ function renderResetSignalTable() {
     btn.addEventListener('click', (e) => {
       const shd = e.currentTarget.dataset.shd;
       const targetRecord = currentResetSignalRecords.find(r => r['SHD'] === shd);
-      if (targetRecord) executeResetSignalProcess([targetRecord]);
+      if (targetRecord) executeResetSignalProcess([targetRecord], false);
     });
   });
 }
@@ -415,7 +423,7 @@ if (btnClearResetSignalCache) {
 }
 
 // ===================== EXECUTION RUNNER =====================
-async function executeResetSignalProcess(selectedRecords = null) {
+async function executeResetSignalProcess(selectedRecords = null, isAuto = false) {
   if (isResetSignalRunning) {
     showSnackbar('⚠️ Đang có tiến trình Cấp Lại Tín Hiệu đang chạy...');
     return;
@@ -425,7 +433,9 @@ async function executeResetSignalProcess(selectedRecords = null) {
 
   let recordsToRun = selectedRecords;
   if (!recordsToRun) {
-    if (selectedResetSignalShds.size > 0) {
+    if (isAuto) {
+      recordsToRun = currentResetSignalRecords.filter(r => _isResetSignalAutoEligible(r));
+    } else if (selectedResetSignalShds.size > 0) {
       recordsToRun = currentResetSignalRecords.filter(r => selectedResetSignalShds.has(r['SHD']));
     } else {
       recordsToRun = currentResetSignalRecords.filter(r => !_isResetSignalFinalDone(r));
@@ -447,7 +457,8 @@ async function executeResetSignalProcess(selectedRecords = null) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         records: recordsToRun,
-        headless: !isVisible
+        headless: !isVisible,
+        manual: !isAuto
       })
     });
     const data = await res.json();
@@ -462,7 +473,7 @@ async function executeResetSignalProcess(selectedRecords = null) {
 }
 
 if (btnRunAutoResetSignal) {
-  btnRunAutoResetSignal.addEventListener('click', () => executeResetSignalProcess(null));
+  btnRunAutoResetSignal.addEventListener('click', () => executeResetSignalProcess(null, false));
 }
 
 function setResetSignalRunningState(running) {

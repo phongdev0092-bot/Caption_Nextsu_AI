@@ -339,6 +339,10 @@ def fetch_sheet_data(sheet_id=DEFAULT_SHEET_ID, gid=GID_BYPASS):
 
         if overwritten_old_indices:
             for old_i in sorted(overwritten_old_indices):
+                # Chỉ nội suy Ngày Cập Nhật từ dòng lân cận nếu dòng này ĐÃ có trạng thái hoàn tất;
+                # tuyệt đối không gán ngày cũ lên dòng đang chờ xử lý.
+                if not is_bypass_final_status(standard_records[old_i].get("Thao Tác", "")):
+                    continue
                 restored_date = ""
                 for step in range(1, len(standard_records)):
                     for cand in (old_i - step, old_i + step):
@@ -352,8 +356,6 @@ def fetch_sheet_data(sheet_id=DEFAULT_SHEET_ID, gid=GID_BYPASS):
                 if restored_date:
                     standard_records[old_i]["Ngày Cập Nhật"] = restored_date
                     standard_records[old_i]["Ngày Cập Nhật"] = restored_date
-                if str(standard_records[old_i].get("Hậu kiểm", "")).strip():
-                    standard_records[old_i]["Thao Tác"] = "Đã xử lý"
 
         cols = [normalize_nfc(c) for c in df.columns]
         return {

@@ -246,7 +246,6 @@ def fetch_sheet_data(sheet_id=DEFAULT_SHEET_ID, gid=GID_PORT):
                 c_ts = c_item.get("timestamp_epoch", 0) if isinstance(c_item, dict) else 0
                 c_td = c_item.get("tap_diem", "") if isinstance(c_item, dict) else ""
                 c_port = c_item.get("port", "") if isinstance(c_item, dict) else ""
-                force_ov = c_item.get("force_override", False) if isinstance(c_item, dict) else False
 
                 current_tt = str(rec.get("Thao Tác", "")).strip()
                 current_ng = str(rec.get("Ngày Cập Nhật", "")).strip()
@@ -254,7 +253,7 @@ def fetch_sheet_data(sheet_id=DEFAULT_SHEET_ID, gid=GID_PORT):
                 is_sheet_raw_pending = ("chưa" in current_tt.lower() or not current_tt or "chưa" in current_ng.lower() or not current_ng)
                 is_recent = (time.time() - c_ts < 90) if c_ts else False
 
-                if force_ov or (is_recent and is_sheet_raw_pending):
+                if is_recent and is_sheet_raw_pending:
                     rec["Thao Tác"] = c_tt
                     if c_kq:
                         rec["Kết Quả"] = c_kq
@@ -264,10 +263,6 @@ def fetch_sheet_data(sheet_id=DEFAULT_SHEET_ID, gid=GID_PORT):
                         rec["Tập Điểm"] = c_td
                     if c_port:
                         rec["Port"] = c_port
-                elif not is_sheet_raw_pending and not current_tt and c_tt:
-                    rec["Thao Tác"] = c_tt
-                    if c_kq:
-                        rec["Kết Quả"] = c_kq
 
             records.append(rec)
 

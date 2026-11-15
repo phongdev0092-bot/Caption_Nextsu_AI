@@ -100,39 +100,13 @@ def _complete_iam_microsoft_login(driver, username: str, password: str, log_cb: 
     """Thuc hien dang nhap IAM / Azure AD / Microsoft nhu chuc nang spampool (run_radius_login)."""
     wait = WebDriverWait(driver, 15)
 
-    # 1. Neu dang o trang login.fpt.net -> cho va bam dung nut 'ĐĂNG NHẬP VỚI IAM' (tranh bam nham link Huong dan .docx)
+    # 1. Neu dang o trang login.fpt.net -> cho va bam dung nut 'ĐĂNG NHẬP VỚI IAM' (dung chung helper tu core_login)
     curr_url = (driver.current_url or "").lower()
     if "login.fpt.net" in curr_url or "inside.fpt.net" in curr_url:
-        try:
-            iam_btn_xpath = (
-                "//*[self::button or self::a or self::div or self::span]"
-                "[(normalize-space(.)='ĐĂNG NHẬP VỚI IAM' or normalize-space(.)='Đăng nhập với IAM' "
-                "or contains(normalize-space(.), 'ĐĂNG NHẬP VỚI IAM') or contains(normalize-space(.), 'Đăng nhập với IAM')) "
-                "and not(contains(., 'Hướng dẫn')) and not(contains(@href, '.docx')) and not(.//button) and not(.//a)] | "
-                "//input[contains(@value, 'ĐĂNG NHẬP VỚI IAM') or contains(@value, 'IAM')]"
-            )
-            btn_iam = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable((By.XPATH, iam_btn_xpath))
-            )
-            _emit_log(log_cb, "Dang bam nut [ĐĂNG NHẬP VỚI IAM]...", "info")
-            driver.execute_script("arguments[0].click();", btn_iam)
-            try:
-                WebDriverWait(driver, 4).until(
-                    lambda d: "iam.fpt." in (d.current_url or "").lower()
-                    or "login.microsoftonline.com" in (d.current_url or "").lower()
-                )
-            except Exception:
-                try:
-                    btn_iam.click()
-                except Exception:
-                    pass
-            WebDriverWait(driver, 10).until(
-                lambda d: "iam.fpt." in (d.current_url or "").lower()
-                or "login.microsoftonline.com" in (d.current_url or "").lower()
-                or ("inside.fpt.net" in (d.current_url or "").lower() and "login.fpt.net" not in (d.current_url or "").lower())
-            )
-        except Exception:
-            pass
+        core_login._click_iam_login_button(
+            driver,
+            lambda msg, lvl="info": _emit_log(log_cb, msg, lvl),
+        )
 
     # 2. Neu dang o trang IAM (iam.fpt.net / iam.fpt.vn) -> chon Azure AD
     curr_url = (driver.current_url or "").lower()
@@ -808,15 +782,17 @@ def fetch_tk_report_excel(
             time.sleep(2.0)
         finally:
             if driver is not None:
-                if not session_expired:
+                if session_expired or not core_login._cfg_keep_inside_session():
+                    core_login.close_driver_and_clear_session(driver, log_cb=log_cb)
+                else:
                     try:
                         core_login.save_inside_cookies(driver, new_login=False, log_cb=log_cb)
                     except Exception:
                         pass
-                try:
-                    driver.quit()
-                except Exception:
-                    pass
+                    try:
+                        driver.quit()
+                    except Exception:
+                        pass
             shutil.rmtree(run_dir, ignore_errors=True)
 
     raise RuntimeError(f"Khong the lay bao cao TK tu Inside: {last_error}")

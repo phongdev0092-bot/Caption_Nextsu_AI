@@ -144,9 +144,17 @@ function _isClearSignalFinalDone(r) {
   return kq.includes('thành công') || kq.includes('đã xử lý') || kq.includes('lỗi') || kq.includes('thất bại') || kq.includes('không thành công');
 }
 
+function _isClearSignalAutoEligible(r) {
+  if (!r) return false;
+  if (r._is_old_day_backlog || r._manual_only || r._login_or_server_error_locked) return false;
+  const kq = String(r['Kết Quả'] || '').trim().toLowerCase();
+  if (kq.includes('lỗi')) return false;
+  return !_isClearSignalFinalDone(r);
+}
+
 function checkAndAutoTriggerClearSignal() {
   if (!autoClearSignalMode || isClearSignalRunning) return;
-  const pending = currentClearSignalRecords.filter(r => !_isClearSignalFinalDone(r));
+  const pending = currentClearSignalRecords.filter(r => _isClearSignalAutoEligible(r));
   if (pending.length === 0) return;
   if (autoClearSignalCountdownTimer) return;
 
@@ -163,7 +171,7 @@ function checkAndAutoTriggerClearSignal() {
       autoClearSignalCountdownTimer = null;
       if (autoClearSignalModeText) autoClearSignalModeText.textContent = 'Tự Động: BẬT';
       if (!isClearSignalRunning) {
-        executeClearSignalProcess(null);
+        executeClearSignalProcess(null, true);
       }
     }
   }, 1000);
@@ -182,7 +190,7 @@ async function loadClearSignalSheetData() {
     updateClearSignalKPIs();
 
     if (autoClearSignalMode && !isClearSignalRunning && !autoClearSignalCountdownTimer) {
-      const pendingCount = currentClearSignalRecords.filter(r => !_isClearSignalFinalDone(r)).length;
+      const pendingCount = currentClearSignalRecords.filter(r => _isClearSignalAutoEligible(r)).length;
       if (pendingCount > 0) {
         checkAndAutoTriggerClearSignal();
       }
@@ -363,7 +371,7 @@ function renderClearSignalTable() {
     btn.addEventListener('click', (e) => {
       const shd = e.currentTarget.dataset.shd;
       const targetRecord = currentClearSignalRecords.find(r => r['SHD'] === shd);
-      if (targetRecord) executeClearSignalProcess([targetRecord]);
+      if (targetRecord) executeClearSignalProcess([targetRecord], false);
     });
   });
 }
@@ -403,7 +411,7 @@ if (btnClearClearSignalCache) {
 }
 
 // ===================== EXECUTION RUNNER =====================
-async function executeClearSignalProcess(selectedRecords = null) {
+async function executeClearSignalProcess(selectedRecords = null, isAuto = false) {
   if (isClearSignalRunning) {
     showSnackbar('⚠️ Đang có tiến trình Clear Tín Hiệu đang chạy...');
     return;
@@ -413,7 +421,9 @@ async function executeClearSignalProcess(selectedRecords = null) {
 
   let recordsToRun = selectedRecords;
   if (!recordsToRun) {
-    if (selectedClearSignalShds.size > 0) {
+    if (isAuto) {
+      recordsToRun = currentClearSignalRecords.filter(r => _isClearSignalAutoEligible(r));
+    } else if (selectedClearSignalShds.size > 0) {
       recordsToRun = currentClearSignalRecords.filter(r => selectedClearSignalShds.has(r['SHD']));
     } else {
       recordsToRun = currentClearSignalRecords.filter(r => !_isClearSignalFinalDone(r));
@@ -435,7 +445,8 @@ async function executeClearSignalProcess(selectedRecords = null) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         records: recordsToRun,
-        headless: !isVisible
+        headless: !isVisible,
+        manual: !isAuto
       })
     });
     const data = await res.json();
@@ -450,7 +461,7 @@ async function executeClearSignalProcess(selectedRecords = null) {
 }
 
 if (btnRunAutoClearSignal) {
-  btnRunAutoClearSignal.addEventListener('click', () => executeClearSignalProcess(null));
+  btnRunAutoClearSignal.addEventListener('click', () => executeClearSignalProcess(null, false));
 }
 
 function setClearSignalRunningState(running) {
