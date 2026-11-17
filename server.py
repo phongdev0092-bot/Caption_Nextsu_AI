@@ -237,46 +237,77 @@ def load_records_zstd():
     return []
 
 AUTO_ATTEMPT_FILE = os.path.join(BASE_DIR, "auto_attempts.json")
+_auto_attempts_lock = threading.RLock()
 
 def clear_auto_attempts(tab=None, shds=None):
     """Xóa các HĐ khỏi auto_attempts để Auto nền có thể thử lại ngay khi gặp lỗi."""
     try:
-        attempts = {}
-        if os.path.exists(AUTO_ATTEMPT_FILE):
-            try:
-                with open(AUTO_ATTEMPT_FILE, "r", encoding="utf-8") as f:
-                    attempts = json.load(f)
-            except Exception:
-                attempts = {}
-        if tab:
-            if tab in attempts and isinstance(attempts[tab], dict):
-                if shds:
-                    for s in shds:
-                        attempts[tab].pop(str(s).strip(), None)
-                else:
-                    attempts[tab] = {}
-        else:
-            locked_backup = attempts.get("_manual_locked") if isinstance(attempts.get("_manual_locked"), dict) else None
+        with _auto_attempts_lock:
             attempts = {}
-            if locked_backup:
-                attempts["_manual_locked"] = locked_backup
-        core_login.atomic_write_json(AUTO_ATTEMPT_FILE, attempts)
+            if os.path.exists(AUTO_ATTEMPT_FILE):
+                try:
+                    with open(AUTO_ATTEMPT_FILE, "r", encoding="utf-8") as f:
+                        attempts = json.load(f)
+                except Exception:
+                    attempts = {}
+            if not isinstance(attempts, dict):
+                attempts = {}
+            if tab:
+                if tab in attempts and isinstance(attempts[tab], dict):
+                    if shds is not None:
+                        targets = {str(s).strip() for s in shds if str(s).strip()}
+                        if not targets:
+                            return
+                        for k in list(attempts[tab].keys()):
+                            k_str = str(k).strip()
+                            if (
+                                k_str in targets
+                                or k_str.split("_", 1)[0] in targets
+                                or any(k_str.startswith(f"{t}_") or k_str.endswith(f"_{t}") for t in targets)
+                            ):
+                                attempts[tab].pop(k, None)
+                    else:
+                        attempts[tab] = {}
+            else:
+                locked_backup = attempts.get("_manual_locked") if isinstance(attempts.get("_manual_locked"), dict) else None
+                attempts = {}
+                if locked_backup:
+                    attempts["_manual_locked"] = locked_backup
+            core_login.atomic_write_json(AUTO_ATTEMPT_FILE, attempts)
     except Exception:
         pass
 
+def _release_remaining_auto_attempts(tab, to_process, processed_shds):
+    """Giải phóng các HĐ chưa kịp xử lý khỏi auto_attempts để Auto nền thử lại ở chu kỳ kế tiếp."""
+    remaining = []
+    for r in (to_process or []):
+        if not isinstance(r, dict):
+            continue
+        shd = str(r.get("SHD") or r.get("Số Hợp Đồng") or "").strip()
+        if shd and shd not in processed_shds:
+            remaining.append(shd)
+        elif not shd:
+            row_id = str(r.get("ID") or "").strip()
+            if row_id and row_id not in processed_shds:
+                remaining.append(row_id)
+    if remaining:
+        clear_auto_attempts(tab, remaining)
+
 def _load_auto_attempts_raw():
-    if os.path.exists(AUTO_ATTEMPT_FILE):
-        try:
-            with open(AUTO_ATTEMPT_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return data if isinstance(data, dict) else {}
-        except Exception:
-            return {}
-    return {}
+    with _auto_attempts_lock:
+        if os.path.exists(AUTO_ATTEMPT_FILE):
+            try:
+                with open(AUTO_ATTEMPT_FILE, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    return data if isinstance(data, dict) else {}
+            except Exception:
+                return {}
+        return {}
 
 def _save_auto_attempts_raw(data):
     try:
-        core_login.atomic_write_json(AUTO_ATTEMPT_FILE, data)
+        with _auto_attempts_lock:
+            core_login.atomic_write_json(AUTO_ATTEMPT_FILE, data)
     except Exception:
         pass
 
@@ -1537,6 +1568,7 @@ def run_bypass_process():
         global active_bypass_bot
         bot = None
         driver_ready = False
+        processed_shds = set()
         try:
             for idx, r in enumerate(to_process):
                 shd = str(r.get("SHD", "")).strip()
@@ -1582,6 +1614,8 @@ def run_bypass_process():
                         "nvkt": r.get("Email", ""),
                         "nn1": r.get("Nguyên Nhân 1", "")
                     })
+                    if shd:
+                        processed_shds.add(shd)
                     task_log(f"⛔ Vi phạm 14N – HĐ {shd} (NVKT={r.get('Email')}): {reject_msg}", "warning", "bypass")
                     time.sleep(0.5)
                     continue
@@ -1600,6 +1634,8 @@ def run_bypass_process():
 
                 try:
                     ok, msg = bot.input_bypass_row(r)
+                    if shd:
+                        processed_shds.add(shd)
                     if ok:
                         now_str = time.strftime("%d/%m/%Y %H:%M:%S")
                         row_id = str(r.get("ID", "")).strip()
@@ -1629,6 +1665,8 @@ def run_bypass_process():
                         # Ghi nhận vào task_logs và log_history
                         task_log(f"ByPass thành công HĐ {shd}: NVKT={r.get('Email')} | {r.get('Nguyên Nhân 1')}", "success", "bypass")
                 except Exception as ex_single:
+                    if shd:
+                        processed_shds.add(shd)
                     task_log(f"Lỗi khi ByPass HĐ {shd}: {ex_single}", "error", "bypass")
                     r["Thao Tác"] = "Lỗi"
                     bypass_task_state["processed_in_session"].append({
@@ -1649,8 +1687,8 @@ def run_bypass_process():
             bypass_task_state["message"] = f"Lỗi ByPass: {raw_err}"
             task_log(f"Tiến trình Auto ByPass bị dừng: {raw_err}", "error")
             core_login.invalidate_session(log_cb=task_log)  # phiên nghi ngờ hỏng/đơ -> lần sau đăng nhập mới
-            clear_auto_attempts("bypass", [r.get("SHD") for r in to_process])
         finally:
+            _release_remaining_auto_attempts("bypass", to_process, processed_shds)
             bypass_task_state["is_running"] = False
             if bot:
                 try:
@@ -1944,6 +1982,7 @@ def run_cls_process():
         global active_cls_bot
         bot = inside_cls.InsideClearClsAutomation(headless=headless, keep_open=True, log_cb=task_log)
         active_cls_bot = bot
+        processed_shds = set()
         try:
             bot.init_driver()
             bot.navigate_to_clear_cls_page()
@@ -1956,6 +1995,8 @@ def run_cls_process():
 
                 try:
                     is_ok, tinh_trang, noi_dung, thao_tac = bot.process_row(r)
+                    if shd:
+                        processed_shds.add(shd)
                     now_str = time.strftime("%d/%m/%Y %H:%M:%S")
 
                     processed_cls_cache[shd] = {
@@ -1987,6 +2028,8 @@ def run_cls_process():
                     task_log(f"Clear Cls HĐ {shd}: Kết quả='Đã xử lý' | Thao tác='{thao_tac}'", lvl, "clear_cls")
 
                 except Exception as ex_single:
+                    if shd:
+                        processed_shds.add(shd)
                     clean_ex = re.sub(r"^không\s+thành\s+công\s*[:\-]?", "", str(ex_single).strip(), flags=re.IGNORECASE).strip()
                     err_thao_tac = f"Không thành công : {clean_ex[:60]}"
                     task_log(f"Lỗi khi Clear Cls HĐ {shd}: {clean_ex[:60]}", "error", "clear_cls")
@@ -2015,8 +2058,8 @@ def run_cls_process():
             cls_task_state["message"] = f"Lỗi Clear Cls: {raw_err}"
             task_log(f"Tiến trình Auto Clear Cls bị dừng: {raw_err}", "error")
             core_login.invalidate_session(log_cb=task_log)  # phiên nghi ngờ hỏng/đơ -> lần sau đăng nhập mới
-            clear_auto_attempts("cls", [r.get("SHD") for r in to_process])
         finally:
+            _release_remaining_auto_attempts("cls", to_process, processed_shds)
             cls_task_state["is_running"] = False
             if bot:
                 try:
@@ -2057,6 +2100,41 @@ def get_assign_sheet_data():
     data = inside_assign.fetch_sheet_data(sheet_id=sheet_id, gid=gid)
     if data["status"] != "ok":
         return jsonify(data), 500
+    session_items = list(assign_task_state.get("processed_in_session") or [])
+    if session_items and data.get("records"):
+        now_ts = time.time()
+        by_shd_id = {}
+        by_shd = {}
+        for it in session_items:
+            if not isinstance(it, dict):
+                continue
+            ts_ep = it.get("timestamp_epoch")
+            if isinstance(ts_ep, (int, float)) and (now_ts - ts_ep > 300):
+                continue
+            s = str(it.get("shd") or "").strip()
+            rid = str(it.get("row_id") or "").strip()
+            if not s:
+                continue
+            if rid:
+                by_shd_id[(s, rid)] = it
+            by_shd[s] = it
+        for r in data["records"]:
+            raw_tt = str(r.get("Thao Tác") or "").strip().lower()
+            if raw_tt and raw_tt not in ("nan", "chưa cập nhật", "chưa xử lý"):
+                continue
+            s = str(r.get("SHD") or "").strip()
+            rid = str(r.get("ID") or "").strip()
+            hit = by_shd_id.get((s, rid)) if (s and rid) else None
+            if not hit and s:
+                cand = by_shd.get(s)
+                if cand and (not rid or not cand.get("row_id") or str(cand.get("row_id")).strip() == rid):
+                    hit = cand
+            if hit:
+                if hit.get("thao_tac"):
+                    r["Thao Tác"] = hit["thao_tac"]
+                raw_ngay = str(r.get("Ngày Cập Nhật") or "").strip().lower()
+                if hit.get("time") and raw_ngay in ("", "nan", "chưa cập nhật", "chưa xử lý"):
+                    r["Ngày Cập Nhật"] = hit["time"]
     return jsonify(data)
 
 @app.route("/api/assign/live-status", methods=["GET"])
@@ -2212,6 +2290,7 @@ def run_assign_process():
         global active_assign_bot
         bot = inside_assign.InsideAssignAutomation(headless=headless, keep_open=True, log_cb=task_log)
         active_assign_bot = bot
+        processed_shds = set()
         try:
             bot.init_driver()
             bot.navigate_to_assign_page()
@@ -2224,6 +2303,8 @@ def run_assign_process():
 
                 try:
                     is_ok, thao_tac = bot.process_row(r)
+                    if shd:
+                        processed_shds.add(shd)
                     now_str = time.strftime("%d/%m/%Y %H:%M:%S")
 
                     r["Thao Tác"]       = thao_tac
@@ -2231,16 +2312,20 @@ def run_assign_process():
                     update_sheet_remote_assign(r, thao_tac)
 
                     assign_task_state["processed_in_session"].append({
-                        "shd":        shd,
-                        "thao_tac":   thao_tac,
-                        "is_success": is_ok,
-                        "time":       now_str
+                        "shd":             shd,
+                        "row_id":          str(r.get("ID", "")).strip(),
+                        "thao_tac":        thao_tac,
+                        "is_success":      is_ok,
+                        "time":            now_str,
+                        "timestamp_epoch": time.time()
                     })
 
                     lvl = "success" if is_ok else "warning"
                     task_log(f"Phân Công HĐ {shd}: '{thao_tac}'", lvl, "manual_assign")
 
                 except Exception as ex_single:
+                    if shd:
+                        processed_shds.add(shd)
                     now_str = time.strftime("%d/%m/%Y %H:%M:%S")
                     err_thao_tac = inside_assign.format_assign_thao_tac(False, str(ex_single)[:80])
                     task_log(f"Lỗi Phân Công Tay HĐ {shd}: {str(ex_single)[:60]}", "error", "manual_assign")
@@ -2248,10 +2333,12 @@ def run_assign_process():
                     r["Ngày Cập Nhật"] = now_str
                     update_sheet_remote_assign(r, err_thao_tac)
                     assign_task_state["processed_in_session"].append({
-                        "shd":        shd,
-                        "thao_tac":   err_thao_tac,
-                        "is_success": False,
-                        "time":       now_str
+                        "shd":             shd,
+                        "row_id":          str(r.get("ID", "")).strip(),
+                        "thao_tac":        err_thao_tac,
+                        "is_success":      False,
+                        "time":            now_str,
+                        "timestamp_epoch": time.time()
                     })
 
                 time.sleep(2)
@@ -2263,8 +2350,8 @@ def run_assign_process():
             assign_task_state["message"] = f"Lỗi Phân Công Tay: {e}"
             task_log(f"Tiến trình Phân Công Tay bị dừng: {e}", "error")
             core_login.invalidate_session(log_cb=task_log)  # phiên nghi ngờ hỏng/đơ -> lần sau đăng nhập mới
-            clear_auto_attempts("assign", [r.get("SHD") for r in to_process])
         finally:
+            _release_remaining_auto_attempts("assign", to_process, processed_shds)
             assign_task_state["is_running"] = False
             if bot:
                 try:
@@ -3269,6 +3356,7 @@ def run_mybae_process():
     def worker_mybae():
         global active_mybae_bot
         bot = None
+        processed_shds = set()
         try:
             bot = inside_mybae.InsideMyBaeAutomation(headless=headless, keep_open=True, log_cb=task_log)
             active_mybae_bot = bot
@@ -3287,6 +3375,8 @@ def run_mybae_process():
                     task_log(f"Lỗi Bypass MyBAE HĐ {shd}: {ex_single}", "error")
                     is_ok = False
                     thao_tac = inside_mybae.format_mybae_thao_tac(False, str(ex_single)[:100])
+                if shd:
+                    processed_shds.add(shd)
 
                 now_str = time.strftime("%d/%m/%Y %H:%M:%S")
                 r["Thao Tác"] = thao_tac
@@ -3314,6 +3404,7 @@ def run_mybae_process():
             task_log(f"Tiến trình Bypass MyBAE bị dừng: {e}", "error")
             core_login.invalidate_session(log_cb=task_log)  # phiên nghi ngờ hỏng/đơ -> lần sau đăng nhập mới
         finally:
+            _release_remaining_auto_attempts("mybae", to_process, processed_shds)
             mybae_task_state["is_running"] = False
             if bot:
                 try:
@@ -3634,6 +3725,7 @@ def start_spampool_task():
         global active_spampool_bot
         bot = inside_spampool.InsideSpamPoolAutomation(headless=headless, keep_open=False, log_cb=task_log)
         active_spampool_bot = bot
+        processed_shds = set()
         try:
             bot.init_driver()
             bot.navigate_to_network_connection()
@@ -3651,6 +3743,8 @@ def start_spampool_task():
 
                 try:
                     ok, thao_tac, ket_qua = bot.process_spampool_contract(shd, tac_vu=tac_vu)
+                    if shd:
+                        processed_shds.add(shd)
                     now_str = time.strftime("%d/%m/%Y %H:%M:%S")
 
                     r["Thao Tác"] = thao_tac
@@ -3682,6 +3776,8 @@ def start_spampool_task():
                     })
                     task_log(f"SpamPool HĐ {shd}: Kết quả='{ket_qua}' | Thao tác='{thao_tac}'", "success", "spampool")
                 except Exception as ex_single:
+                    if shd:
+                        processed_shds.add(shd)
                     err_msg = str(ex_single)[:80]
                     task_log(f"Lỗi xử lý HĐ {shd}: {err_msg}", "error")
                     r["Thao Tác"] = f"Lỗi: {err_msg}"
@@ -3705,6 +3801,7 @@ def start_spampool_task():
             spampool_task_state["message"] = f"Lỗi SpamPool: {e}"
             task_log(f"Tiến trình SpamPool bị dừng: {e}", "error")
         finally:
+            _release_remaining_auto_attempts("spampool", to_process, processed_shds)
             spampool_task_state["is_running"] = False
             if bot:
                 try:
@@ -3978,6 +4075,7 @@ def start_bypass_nat_task():
         global active_bypass_nat_bot
         bot = inside_bypass_nat.InsideBypassNatAutomation(headless=headless, keep_open=False, log_cb=task_log)
         active_bypass_nat_bot = bot
+        processed_shds = set()
         try:
             bot.init_driver()
             bot.navigate_to_network_connection()
@@ -3994,6 +4092,8 @@ def start_bypass_nat_task():
 
                 try:
                     ok, thao_tac, ket_qua = bot.process_bypass_nat_contract(shd, nguyen_nhan_1)
+                    if shd:
+                        processed_shds.add(shd)
                     now_str = time.strftime("%d/%m/%Y %H:%M:%S")
 
                     r["Thao Tác"] = thao_tac
@@ -4019,6 +4119,8 @@ def start_bypass_nat_task():
                     })
                     task_log(f"Bypass NAT HĐ {shd}: Kết quả='{ket_qua}' | Thao tác='{thao_tac}'", "success", "bypass_nat")
                 except Exception as ex_single:
+                    if shd:
+                        processed_shds.add(shd)
                     err_msg = str(ex_single)[:80]
                     task_log(f"Lỗi xử lý HĐ {shd}: {err_msg}", "error")
                     r["Thao Tác"] = f"Lỗi: {err_msg}"
@@ -4038,6 +4140,7 @@ def start_bypass_nat_task():
             bypass_nat_task_state["message"] = f"Lỗi Bypass NAT: {e}"
             task_log(f"Tiến trình Bypass NAT bị dừng: {e}", "error")
         finally:
+            _release_remaining_auto_attempts("bypass_nat", to_process, processed_shds)
             bypass_nat_task_state["is_running"] = False
             if bot:
                 try:
@@ -4338,6 +4441,7 @@ def start_port_auto():
         global active_port_bot
         bot = None
         driver_ready = False
+        processed_shds = set()
         try:
             for idx, r in enumerate(to_process):
                 if bot and bot._stop_requested:
@@ -4394,6 +4498,8 @@ def start_port_auto():
                         "thao_tac": thao_tac,
                         "time": now_str
                     })
+                    if row_id:
+                        processed_shds.add(row_id)
                     task_log(f"⚠️ Dòng ID={row_id} (Tập điểm={tap_diem_in}, Port={port_in}) trống SHD -> {thao_tac}", "warning", "port")
                     time.sleep(0.5)
                     continue
@@ -4414,6 +4520,8 @@ def start_port_auto():
                     port_task_state["message"] = f"Đang xử lý Thu hồi Port {idx + 1}/{len(to_process)}: {shd or tap_diem_in}..."
 
                     ok, thao_tac = bot.process_port_contract(shd, tac_vu=tac_vu)
+                    if shd:
+                        processed_shds.add(shd)
                     now_str = time.strftime("%d/%m/%Y %H:%M:%S")
                     tap_diem_val = bot.last_tap_diem
                     port_val = bot.last_port
@@ -4462,6 +4570,8 @@ def start_port_auto():
                     })
                     task_log(f"Thu hồi Port HĐ {shd}: Thao tác='{thao_tac}'", "success", "port")
                 except Exception as ex_single:
+                    if shd:
+                        processed_shds.add(shd)
                     err_msg = str(ex_single)[:80]
                     task_log(f"Lỗi xử lý Thu hồi Port HĐ {shd}: {err_msg}", "error")
                     r["Thao Tác"] = f"Lỗi: {err_msg}"
@@ -4479,6 +4589,7 @@ def start_port_auto():
             port_task_state["message"] = f"Lỗi Thu hồi Port: {e}"
             task_log(f"Tiến trình Thu hồi Port bị dừng: {e}", "error")
         finally:
+            _release_remaining_auto_attempts("port", to_process, processed_shds)
             port_task_state["is_running"] = False
             if bot:
                 try:
@@ -4834,6 +4945,7 @@ def start_background_threads():
         if _BG_THREADS_STARTED:
             return
         _BG_THREADS_STARTED = True
+        clear_auto_attempts()
         threading.Thread(target=_log_flusher_loop, daemon=True).start()
         threading.Thread(target=_auto_reset_after_clear_loop, daemon=True).start()
         threading.Thread(target=_auto_orchestrator_loop, daemon=True).start()

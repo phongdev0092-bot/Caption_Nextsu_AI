@@ -302,6 +302,84 @@ class TestConcurrencyAndSafeguards(unittest.TestCase):
             logs = body.get("logs") or []
             self.assertTrue(any(l.get("task_id") == "bypass" and l.get("seq", 0) > 0 for l in logs))
 
+    def test_clear_auto_attempts_removes_composite_shd_id_keys(self):
+        seed = {
+            "assign": {
+                "SGAFX5364": 1794877428.0,
+                "SGAFX5364_335": 1794877428.0,
+                "SGAFY3733_336": 1794877428.0,
+                "SGAFY4057_337": 1794877428.0,
+            },
+            "bypass": {
+                "SGA1_10": 1794877428.0,
+            },
+            "_manual_locked": {
+                "clear_signal": {
+                    "SGA_LOCKED": {"ts": 1794877000.0, "reason": "login_or_server_error"}
+                }
+            },
+        }
+        core_login.atomic_write_json(server.AUTO_ATTEMPT_FILE, seed)
+
+        server.clear_auto_attempts("assign", ["SGAFX5364"])
+        with open(server.AUTO_ATTEMPT_FILE, "r", encoding="utf-8") as f:
+            after_partial = json.load(f)
+
+        self.assertNotIn("SGAFX5364", after_partial["assign"])
+        self.assertNotIn("SGAFX5364_335", after_partial["assign"])
+        self.assertIn("SGAFY3733_336", after_partial["assign"])
+        self.assertIn("SGAFY4057_337", after_partial["assign"])
+        self.assertIn("SGA_LOCKED", after_partial["_manual_locked"]["clear_signal"])
+
+        to_process = [
+            {"SHD": "SGAFY3733", "ID": "336"},
+            {"SHD": "SGAFY4057", "ID": "337"},
+        ]
+        server._release_remaining_auto_attempts("assign", to_process, {"SGAFY3733"})
+        with open(server.AUTO_ATTEMPT_FILE, "r", encoding="utf-8") as f:
+            after_rem = json.load(f)
+        self.assertIn("SGAFY3733_336", after_rem["assign"])
+        self.assertNotIn("SGAFY4057_337", after_rem["assign"])
+        self.assertIn("SGA_LOCKED", after_rem["_manual_locked"]["clear_signal"])
+
+        server.clear_auto_attempts()
+        with open(server.AUTO_ATTEMPT_FILE, "r", encoding="utf-8") as f:
+            after_full = json.load(f)
+        self.assertNotIn("assign", after_full)
+        self.assertNotIn("bypass", after_full)
+        self.assertIn("SGA_LOCKED", after_full["_manual_locked"]["clear_signal"])
+
+    def test_assign_sheet_data_merges_processed_in_session(self):
+        orig_session = list(server.assign_task_state.get("processed_in_session") or [])
+        try:
+            server.assign_task_state["processed_in_session"] = [{
+                "shd": "SGAFX5364",
+                "row_id": "335",
+                "thao_tac": "Cập nhật thành công!",
+                "is_success": True,
+                "time": "17/11/2026 08:10:00",
+            }]
+            mock_sheet = {
+                "status": "ok",
+                "count": 2,
+                "columns": ["ID", "SHD", "Ngày Cập Nhật", "Thao Tác"],
+                "col_indices": {"shd": 1, "ngay": 2, "thao_tac": 3},
+                "records": [
+                    {"ID": "335", "SHD": "SGAFX5364", "Ngày Cập Nhật": "", "Thao Tác": ""},
+                    {"ID": "340", "SHD": "SGAFX5364", "Ngày Cập Nhật": "", "Thao Tác": ""},
+                ],
+            }
+            with server.app.test_client() as client:
+                with patch.object(inside_assign, "fetch_sheet_data", return_value=mock_sheet):
+                    resp = client.get("/api/assign/sheet-data")
+                    self.assertEqual(resp.status_code, 200)
+                    recs = (resp.get_json() or {}).get("records") or []
+                    self.assertEqual(recs[0]["Thao Tác"], "Cập nhật thành công!")
+                    self.assertEqual(recs[0]["Ngày Cập Nhật"], "17/11/2026 08:10:00")
+                    self.assertEqual(recs[1]["Thao Tác"], "")
+        finally:
+            server.assign_task_state["processed_in_session"] = orig_session
+
 
 if __name__ == "__main__":
     unittest.main()
