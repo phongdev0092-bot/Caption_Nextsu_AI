@@ -2,6 +2,7 @@
   "use strict";
 
   const el = (id) => document.getElementById(id);
+  const API_BASE = String(window.AHT_API_BASE || "").replace(/\/+$/, "");
 
   let allRecords = [];
   let selectedShds = new Set();
@@ -126,7 +127,7 @@
     el("btnReload").disabled = true;
     el("progressText").textContent = "Đang tải dữ liệu từ Google Sheet...";
     try {
-      const resp = await fetch("/api/sheet");
+      const resp = await fetch(`${API_BASE}/api/sheet`);
       const data = await resp.json();
       if (!resp.ok || data.status !== "ok") {
         throw new Error(data.message || "Không tải được Google Sheet");
@@ -150,7 +151,7 @@
 
   async function pollStatus() {
     try {
-      const resp = await fetch("/api/status");
+      const resp = await fetch(`${API_BASE}/api/status`);
       const st = await resp.json();
 
       resultsByShd = st.results_by_shd || {};
@@ -203,7 +204,7 @@
 
     el("btnRun").disabled = true;
     try {
-      const resp = await fetch("/api/run", {
+      const resp = await fetch(`${API_BASE}/api/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -267,16 +268,16 @@
   });
 
   el("btnStop").addEventListener("click", async () => {
-    await fetch("/api/stop", { method: "POST" });
+    await fetch(`${API_BASE}/api/stop`, { method: "POST" });
     pollStatus();
   });
 
   el("btnExportCsv").addEventListener("click", () => {
-    window.location.href = "/api/export-csv";
+    window.location.href = `${API_BASE}/api/export-csv`;
   });
 
   el("btnClearLogs").addEventListener("click", async () => {
-    await fetch("/api/logs/clear", { method: "POST" });
+    await fetch(`${API_BASE}/api/logs/clear`, { method: "POST" });
     renderLogs([]);
   });
 

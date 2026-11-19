@@ -27,6 +27,12 @@ else:
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 
+try:
+    from auto_hoan_tat.blueprint import create_blueprint as _create_aht_blueprint
+    app.register_blueprint(_create_aht_blueprint(), url_prefix="/auto-hoan-tat")
+except Exception:
+    pass
+
 # Logging & state management
 log_history = []
 task_logs = []

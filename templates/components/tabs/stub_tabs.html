@@ -1,4 +1,10 @@
 {% from "components/tabs/stub_tab.html" import stub_panel %}
 {% for t in STUB_TABS %}
+{% if t.key == "finish-ptc" and auto_hoan_tat_mounted %}
+<section class="tab-panel" id="{{ t.panel_id }}" data-key="{{ t.key }}">
+  <iframe src="/auto-hoan-tat/?embed=1" title="Auto Hoàn Tất PTC/PBT" style="width:100%;min-height:920px;border:0;border-radius:16px;background:transparent;"></iframe>
+</section>
+{% else %}
 {{ stub_panel(t) }}
+{% endif %}
 {% endfor %}

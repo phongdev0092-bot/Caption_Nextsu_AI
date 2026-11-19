@@ -344,16 +344,22 @@ def open_ticket_readonly(
 
 _JS_CLICK_FOX_ERP_LINK = """
 (function() {
-  function norm(s) { return String(s || '').replace(/\\s+/g, ' ').trim().toLowerCase(); }
-  var links = Array.from(document.querySelectorAll('a[href]'));
-  for (var i = 0; i < links.length; i++) {
-    var a = links[i];
-    var href = String(a.getAttribute('href') || '');
-    var txt = norm(a.innerText || a.textContent);
-    var parentTxt = norm((a.parentElement && (a.parentElement.innerText || a.parentElement.textContent)) || '');
+  function norm(s) {
+    var str = String(s || '');
+    return (str.normalize ? str.normalize('NFC') : str).replace(/\\s+/g, ' ').trim().toLowerCase();
+  }
+  var candidates = Array.from(document.querySelectorAll('a, button, span[role="button"], [onclick]'));
+  for (var i = 0; i < candidates.length; i++) {
+    var el = candidates[i];
+    var href = String(el.getAttribute('href') || '');
+    var txt = norm(el.innerText || el.textContent);
+    var parentTxt = norm((el.parentElement && (el.parentElement.innerText || el.parentElement.textContent)) || '');
+    var grandTxt = norm((el.parentElement && el.parentElement.parentElement && (el.parentElement.parentElement.innerText || el.parentElement.parentElement.textContent)) || '');
+    var ctx = parentTxt + ' ' + grandTxt;
     if (href.toLowerCase().indexOf('fox-erp.fpt.net') !== -1 ||
-        (txt === 'đây' && (parentTxt.indexOf('fox-erp') !== -1 || parentTxt.indexOf('phiên bản mới') !== -1))) {
-      a.click();
+        (txt === 'đây' && (ctx.indexOf('fox-erp') !== -1 || ctx.indexOf('phiên bản mới') !== -1))) {
+      el.scrollIntoView({block: 'center'});
+      el.click();
       return { found: true, href: href, text: txt };
     }
   }
@@ -362,18 +368,49 @@ _JS_CLICK_FOX_ERP_LINK = """
 """
 
 
+def _try_click_fox_erp_banner(driver) -> Dict:
+    """Tìm và bấm link 'Đây' trên top document hoặc bên trong các iframe con."""
+    try:
+        res = driver.execute_script(_JS_CLICK_FOX_ERP_LINK) or {}
+        if isinstance(res, dict) and res.get("found"):
+            return res
+    except Exception:
+        pass
+
+    try:
+        frames = driver.find_elements("tag name", "iframe")
+    except Exception:
+        frames = []
+
+    for frame in frames:
+        try:
+            driver.switch_to.frame(frame)
+            res = driver.execute_script(_JS_CLICK_FOX_ERP_LINK) or {}
+            if isinstance(res, dict) and res.get("found"):
+                return res
+        except Exception:
+            pass
+        finally:
+            try:
+                driver.switch_to.default_content()
+            except Exception:
+                pass
+    return {"found": False, "href": "", "text": ""}
+
+
 def _switch_to_fox_erp_if_needed(
     driver,
     shd: str,
-    timeout_sec: float = 12.0,
+    timeout_sec: float = 45.0,
+    banner_wait_sec: float = 6.0,
     log_cb: Optional[Callable[[str, str], None]] = None,
 ) -> bool:
     """
     Bước 2 (chuyển giao diện mới FOX-ERP cho PBT):
     - Nếu URL đã ở fox-erp.fpt.net (hoặc hệ thống sau này tự mở thẳng giao diện mới) -> bỏ qua, đi tiếp luôn.
-    - Nếu trang cũ hiển thị banner 'Đã có phiên bản mới trên FOX-ERP, nhấn vào Đây để sử dụng.' ->
-      bấm vào chữ 'Đây' và chuyển sang tab/trang FOX-ERP mới.
-    Trả về True nếu vừa bấm chuyển sang FOX-ERP, False nếu đã ở sẵn giao diện mới hoặc không có banner.
+    - Chờ tối đa banner_wait_sec để trang cũ tải xong banner 'Đã có phiên bản mới trên FOX-ERP, nhấn vào Đây để sử dụng.'
+      rồi bấm chữ 'Đây' (nếu cần fallback mở trực tiếp href) và chuyển sang tab/trang FOX-ERP mới.
+    - Chờ tối đa timeout_sec để SPA FOX-ERP tải xong dữ liệu phiếu.
     """
     curr_url = str(getattr(driver, "current_url", "") or "").lower()
     if _FOX_ERP_HOST in curr_url:
@@ -385,41 +422,85 @@ def _switch_to_fox_erp_if_needed(
     except Exception:
         handles_before = []
 
-    try:
-        click_res = driver.execute_script(_JS_CLICK_FOX_ERP_LINK) or {}
-    except Exception:
-        click_res = {}
+    # Chờ tối đa banner_wait_sec để banner 'Đây' xuất hiện (ưu tiên kiểm tra banner trước)
+    click_res: Dict = {"found": False, "href": "", "text": ""}
+    banner_deadline = time.monotonic() + max(0.5, float(banner_wait_sec))
+    while time.monotonic() < banner_deadline:
+        now_url = str(getattr(driver, "current_url", "") or "").lower()
+        if _FOX_ERP_HOST in now_url:
+            _emit(log_cb, f"Module 2: HĐ {shd} đã tự chuyển sang FOX-ERP.", "info")
+            return False
 
-    if not isinstance(click_res, dict) or not click_res.get("found"):
+        click_res = _try_click_fox_erp_banner(driver)
+        if click_res.get("found"):
+            break
+
+        try:
+            markers = driver.execute_script(_JS_READ_PBT_MARKERS) or {}
+            if isinstance(markers, dict) and markers.get("has_ghi_nhan") and markers.get("has_thay_doi_tt"):
+                return False
+        except Exception:
+            pass
+        time.sleep(0.4)
+
+    if not click_res.get("found"):
         return False
 
+    fox_href = str(click_res.get("href") or "").strip()
     _emit(log_cb, f"Module 2: Đã bấm link 'Đây' để chuyển HĐ {shd} sang giao diện mới FOX-ERP...", "info")
 
     deadline = time.monotonic() + max(1.0, float(timeout_sec))
+    last_log_t = time.monotonic()
+    clicked_at = time.monotonic()
+    fallback_navigated = False
     switched = False
+
     while time.monotonic() < deadline:
         try:
             handles_now = list(getattr(driver, "window_handles", []) or [])
             new_handles = [h for h in handles_now if h not in handles_before]
             if new_handles:
-                driver.switch_to.window(new_handles[-1])
+                target_h = new_handles[-1]
+                if getattr(driver, "current_window_handle", None) != target_h:
+                    driver.switch_to.window(target_h)
+                    _emit(log_cb, f"Module 2: Đã chuyển sang tab FOX-ERP mới ({getattr(driver, 'current_url', '')}).", "info")
                 switched = True
         except Exception:
             pass
 
         now_url = str(getattr(driver, "current_url", "") or "").lower()
-        if _FOX_ERP_HOST in now_url:
-            switched = True
-            # Chờ thêm nhẹ cho SPA render xong các khối chính
+
+        # Fallback: sau 3.5s nếu chưa mở tab mới và URL vẫn chưa sang fox-erp.fpt.net mà có href hợp lệ -> mở trực tiếp
+        if (
+            not switched
+            and not fallback_navigated
+            and _FOX_ERP_HOST not in now_url
+            and fox_href.lower().startswith("http")
+            and _FOX_ERP_HOST in fox_href.lower()
+            and (time.monotonic() - clicked_at) >= 3.5
+        ):
+            fallback_navigated = True
+            _emit(log_cb, f"Module 2: Mở trực tiếp link FOX-ERP cho HĐ {shd}...", "info")
             try:
-                info = driver.execute_script(_JS_READ_PBT_MARKERS) or {}
-                if isinstance(info, dict) and (
-                    info.get("has_ghi_nhan") or info.get("has_phan_cong") or info.get("has_thay_doi_tt")
-                ):
-                    break
+                driver.get(fox_href)
             except Exception:
                 pass
-        time.sleep(0.35)
+
+        if _FOX_ERP_HOST in now_url:
+            switched = True
+            info = _read_pbt_markers_any_frame(driver, keep_in_matching_frame=True)
+            if info.get("has_ghi_nhan") or info.get("has_phan_cong") or info.get("has_thay_doi_tt"):
+                _emit(log_cb, f"Module 2: Giao diện FOX-ERP cho HĐ {shd} đã tải xong.", "success")
+                break
+
+        if time.monotonic() - last_log_t >= 5.0:
+            last_log_t = time.monotonic()
+            _emit(
+                log_cb,
+                f"Module 2: Đang chờ FOX-ERP tải dữ liệu phiếu {shd}... (URL={getattr(driver, 'current_url', '')})",
+                "info",
+            )
+        time.sleep(0.4)
 
     return switched
 
@@ -445,7 +526,7 @@ def close_extra_ticket_tabs(driver, main_handle: str) -> None:
 _JS_READ_PBT_MARKERS = """
 (function() {
   var body = (document.body && (document.body.innerText || document.body.textContent)) || '';
-  var norm = body.replace(/\\s+/g, ' ').trim();
+  var norm = body.normalize ? body.normalize('NFC').replace(/\\s+/g, ' ').trim() : body.replace(/\\s+/g, ' ').trim();
   var low = norm.toLowerCase();
   var statusText = '';
   var m = norm.match(/Tình trạng phiếu\\s*:\\s*([^\\n]+?)(?:Thay đổi tình trạng|$)/i);
@@ -457,43 +538,88 @@ _JS_READ_PBT_MARKERS = """
     has_phan_cong: low.indexOf('thông tin phân công') !== -1 || low.indexOf('lịch sử phân công') !== -1,
     has_thay_doi_tt: low.indexOf('thay đổi tình trạng') !== -1,
     has_thong_tin_chung: low.indexOf('thông tin chung') !== -1,
-    ticket_status: statusText
+    ticket_status: statusText,
+    body_preview: norm.slice(0, 180),
+    ready_state: document.readyState || '',
+    iframe_count: document.querySelectorAll('iframe').length
   };
 })();
 """
 
 
+def _read_pbt_markers_any_frame(driver, keep_in_matching_frame: bool = False) -> Dict:
+    """
+    Đọc dấu hiệu trang chi tiết PBT trên document hiện tại; nếu chưa thấy thì quét thêm các iframe con.
+    Nếu keep_in_matching_frame=True và tìm thấy trong iframe con -> giữ driver ở đúng iframe đó để Module 3/4 thao tác.
+    """
+    top_info: Dict = {}
+    try:
+        raw = driver.execute_script(_JS_READ_PBT_MARKERS) or {}
+        if isinstance(raw, dict):
+            top_info = raw
+    except Exception:
+        top_info = {}
+
+    if top_info.get("has_ghi_nhan") or top_info.get("has_phan_cong") or top_info.get("has_thay_doi_tt"):
+        return top_info
+
+    try:
+        frames = driver.find_elements("tag name", "iframe")
+    except Exception:
+        frames = []
+
+    for frame in frames:
+        matched = False
+        try:
+            driver.switch_to.frame(frame)
+            sub = driver.execute_script(_JS_READ_PBT_MARKERS) or {}
+            if isinstance(sub, dict) and (
+                sub.get("has_ghi_nhan") or sub.get("has_phan_cong") or sub.get("has_thay_doi_tt")
+            ):
+                matched = True
+                if not keep_in_matching_frame:
+                    driver.switch_to.default_content()
+                return sub
+        except Exception:
+            pass
+        finally:
+            if not matched:
+                try:
+                    driver.switch_to.default_content()
+                except Exception:
+                    pass
+
+    return top_info
+
+
 def _read_footer_ticket_status(driver) -> str:
     """Đọc nhanh trạng thái phiếu ở thanh footer 'Tình trạng phiếu: ...' (chỉ-đọc)."""
-    try:
-        info = driver.execute_script(_JS_READ_PBT_MARKERS) or {}
-        if isinstance(info, dict):
-            return normalize_nfc(info.get("ticket_status") or "")
-    except Exception:
-        pass
-    return ""
+    info = _read_pbt_markers_any_frame(driver, keep_in_matching_frame=False)
+    return normalize_nfc(info.get("ticket_status") or "")
 
 
 def _verify_pbt_detail_markers(driver, shd: str) -> Dict:
     """
-    Xác nhận đã vào đúng màn hình chi tiết PBT trên Inside New V5 bằng các dấu hiệu đặc trưng:
+    Xác nhận đã vào đúng màn hình chi tiết PBT trên FOX-ERP bằng các dấu hiệu đặc trưng:
     - Card 'Ghi nhận ban đầu'
     - Card 'Thông tin phân công' / nút 'Lịch sử phân công'
     - Footer 'Thay đổi tình trạng'
-    Nếu thiếu toàn bộ dấu hiệu -> ném WrongPageError.
+    Nếu thiếu toàn bộ dấu hiệu -> ném WrongPageError kèm URL & trích đoạn trang để chẩn đoán.
     """
-    try:
-        info = driver.execute_script(_JS_READ_PBT_MARKERS) or {}
-    except Exception as exc:
-        raise WrongPageError(f"Không thể kiểm tra dấu hiệu trang chi tiết PBT cho HĐ {shd}: {exc}") from exc
-
+    info = _read_pbt_markers_any_frame(driver, keep_in_matching_frame=True)
     if not isinstance(info, dict):
         return {"ticket_status": ""}
 
     if not (info.get("has_ghi_nhan") or info.get("has_phan_cong") or info.get("has_thay_doi_tt")):
+        curr_url = str(getattr(driver, "current_url", "") or "")
+        curr_title = str(getattr(driver, "title", "") or "")
+        preview = normalize_nfc(info.get("body_preview") or "")
+        iframe_cnt = info.get("iframe_count", 0)
+        ready = info.get("ready_state", "")
         raise WrongPageError(
             f"Trang mở cho HĐ {shd} không có dấu hiệu màn hình chi tiết PBT "
-            "(thiếu 'Ghi nhận ban đầu', 'Thông tin phân công' và 'Thay đổi tình trạng')."
+            f"(thiếu 'Ghi nhận ban đầu', 'Thông tin phân công' và 'Thay đổi tình trạng'). "
+            f"[URL={curr_url} | Title={curr_title} | ready={ready} | iframes={iframe_cnt} | Nội dung='{preview}']"
         )
     return info
 
