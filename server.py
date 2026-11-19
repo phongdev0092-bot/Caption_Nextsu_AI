@@ -2266,25 +2266,33 @@ def run_assign_process():
         cfg = core_login.load_config()
         webhook_url = cfg.get("assign_webhook_url", "") or cfg.get("google_sheet_webhook_url", "")
         if webhook_url:
-            try:
-                payload = {
-                    "sheet_id": sheet_id,
-                    "gid": gid,
-                    "row_id": record.get("ID"),
-                    "shd": record.get("SHD"),
-                    "status": thao_tac_val,
-                    "thao_tac": thao_tac_val,
-                    "timestamp": time.strftime("%d/%m/%Y %H:%M:%S")
-                }
-                req = urllib.request.Request(
-                    webhook_url,
-                    data=json.dumps(payload).encode("utf-8"),
-                    headers={"Content-Type": "application/json"}
-                )
-                urllib.request.urlopen(req, timeout=8)
-                task_log(f"Đã cập nhật Webhook Phân Công Tay cho HĐ {record.get('SHD')}: '{thao_tac_val}'", "success")
-            except Exception as e_hook:
-                task_log(f"Không thể đẩy Webhook cho HĐ {record.get('SHD')}: {e_hook}", "warning")
+            payload = {
+                "sheet_id": sheet_id,
+                "gid": gid,
+                "row_id": record.get("ID"),
+                "shd": record.get("SHD"),
+                "status": thao_tac_val,
+                "thao_tac": thao_tac_val,
+                "timestamp": time.strftime("%d/%m/%Y %H:%M:%S")
+            }
+            last_err = None
+            for attempt_idx in range(3):
+                try:
+                    req = urllib.request.Request(
+                        webhook_url,
+                        data=json.dumps(payload).encode("utf-8"),
+                        headers={"Content-Type": "application/json"}
+                    )
+                    urllib.request.urlopen(req, timeout=10)
+                    task_log(f"Đã cập nhật Webhook Phân Công Tay cho HĐ {record.get('SHD')}: '{thao_tac_val}'", "success")
+                    last_err = None
+                    break
+                except Exception as e_hook:
+                    last_err = e_hook
+                    if attempt_idx < 2:
+                        time.sleep(2)
+            if last_err is not None:
+                task_log(f"Không thể đẩy Webhook cho HĐ {record.get('SHD')}: {last_err}", "warning")
 
     def worker_assign():
         global active_assign_bot
@@ -4928,7 +4936,11 @@ def _auto_orchestrator_loop():
     time.sleep(AUTO_SCAN_INTERVAL)
     while True:
         try:
-            _auto_orchestrator_cycle()
+            cycle_t = threading.Thread(target=_auto_orchestrator_cycle, daemon=True)
+            cycle_t.start()
+            cycle_t.join(timeout=45)
+            if cycle_t.is_alive():
+                add_log("⚠️ Chu kỳ quét Auto nền phản hồi quá 45s (mạng chậm/chập chờn) → tự động mở chu kỳ quét mới", "warning")
         except Exception as e:
             add_log(f"Lỗi Auto nền: {e}", "warning")
         time.sleep(AUTO_SCAN_INTERVAL)

@@ -83,7 +83,11 @@ def fetch_sheet_data(sheet_id=DEFAULT_SHEET_ID, gid=GID_CLEAR_CLS):
     """
     url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&gid={gid}&_t={int(time.time() * 1000)}"
     try:
-        df = pd.read_csv(url, encoding="utf-8")
+        import io
+        import urllib.request
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        content = urllib.request.urlopen(req, timeout=12).read().decode("utf-8", errors="ignore")
+        df = pd.read_csv(io.StringIO(content))
         df = df.fillna("")
 
         col_indices = {}

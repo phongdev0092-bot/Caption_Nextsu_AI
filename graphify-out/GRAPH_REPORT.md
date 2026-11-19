@@ -1,17 +1,17 @@
-# Graph Report - Data Retrieval Tool  (2026-11-17)
+# Graph Report - Data Retrieval Tool  (2026-11-19)
 
 ## Corpus Check
-- 44 files · ~117,810 words
+- 44 files · ~117,924 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 11 file(s) not represented in the graph (top: .bat 4, (none) 2, .css 2)
 
 ## Summary
 - 1397 nodes · 2760 edges · 57 communities (41 shown, 16 thin omitted)
-- Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 73 edges (avg confidence: 0.85)
+- Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 74 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `9ac9ead9`
+- Built from commit: `260d288a`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -81,9 +81,9 @@
 10. `fetch_sheet_data()` - 18 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `Quy Tắc Thực Thi` --references--> `check_14d_hau_kiem_violation()`  [INFERRED]
-  .agents/rules/admin_privileges.md → inside_bypass.py
 - `Quy Tắc Thực Thi` --references--> `is_admin_staff()`  [INFERRED]
+  .agents/rules/admin_privileges.md → inside_bypass.py
+- `Quy Tắc Thực Thi` --references--> `check_14d_hau_kiem_violation()`  [INFERRED]
   .agents/rules/admin_privileges.md → inside_bypass.py
 - `export_bypass_excel()` --indirect_call--> `writer()`  [INFERRED]
   server.py → test_concurrency_and_safeguards.py
@@ -268,15 +268,15 @@ Nodes (8): transfer_contract_to_reset_sheet(), update_clear_sheet_auto_cap_lai_c
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `InsideScraper` connect `InsideScraper` to `route`, `release_inside_task`, `core_login.py`?**
-  _High betweenness centrality (0.018) - this node is a cross-community bridge._
+  _High betweenness centrality (0.023) - this node is a cross-community bridge._
 - **Should `dom.js` be split into smaller, more focused modules?**
   _Cohesion score 0.015873015873015872 - nodes in this community are weakly interconnected._
 - **Why does `InsideAssignAutomation` connect `InsideAssignAutomation` to `InsideMyBaeAutomation`, `InsideClearClsAutomation`, `inside_assign.py`, `remove_accents`?**
-  _High betweenness centrality (0.017) - this node is a cross-community bridge._
+  _High betweenness centrality (0.021) - this node is a cross-community bridge._
 - **Should `inside_report_crawler.py` be split into smaller, more focused modules?**
   _Cohesion score 0.12310606060606061 - nodes in this community are weakly interconnected._
 - **Why does `InsideMyBaeAutomation` connect `InsideMyBaeAutomation` to `InsideAssignAutomation`, `release_inside_task`, `inside_assign.py`?**
-  _High betweenness centrality (0.013) - this node is a cross-community bridge._
+  _High betweenness centrality (0.016) - this node is a cross-community bridge._
 - **Should `mybae.js` be split into smaller, more focused modules?**
   _Cohesion score 0.05152394775036284 - nodes in this community are weakly interconnected._
 - **Should `settings.js` be split into smaller, more focused modules?**

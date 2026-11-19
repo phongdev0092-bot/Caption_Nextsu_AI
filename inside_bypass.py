@@ -54,7 +54,10 @@ def load_admin_staff_set(force_refresh=False):
 
     url = f"https://docs.google.com/spreadsheets/d/{ADMIN_ROLES_SHEET_ID}/gviz/tq?tqx=out:csv&gid={ADMIN_ROLES_GID}&_t={int(now * 1000)}"
     try:
-        df = pd.read_csv(url, dtype=str, encoding="utf-8").fillna("")
+        import io
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        content = urllib.request.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")
+        df = pd.read_csv(io.StringIO(content), dtype=str).fillna("")
         emails = {"phuongnam.phongnh5@fpt.net", "phuongnam.phongnh5@inside.fpt.net"}
         accounts = {"pnc01.phongnh5", "phuongnam.phongnh5"}
         msnvs = {"110827", "00110827"}
@@ -276,7 +279,10 @@ def fetch_sheet_data(sheet_id=DEFAULT_SHEET_ID, gid=GID_BYPASS):
     """
     url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&gid={gid}&_t={int(time.time() * 1000)}"
     try:
-        df = pd.read_csv(url, encoding="utf-8")
+        import io
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        content = urllib.request.urlopen(req, timeout=12).read().decode("utf-8", errors="ignore")
+        df = pd.read_csv(io.StringIO(content))
         df = df.fillna("")
 
         # Ánh xạ tên cột sang chuẩn
