@@ -127,6 +127,15 @@ def run_batch(
     os.makedirs(cfg.log_dir, exist_ok=True)
     audit_path = os.path.join(cfg.log_dir, f"audit_{mode_str.lower()}_{stamp}.jsonl")
     csv_path = os.path.join(cfg.log_dir, f"ket_qua_{mode_str.lower()}_{stamp}.csv")
+    run_log_path = os.path.join(cfg.log_dir, f"run_{mode_str.lower()}_{stamp}.log")
+
+    def _tee_log(msg: str, level: str = "info") -> None:
+        try:
+            with open(run_log_path, "a", encoding="utf-8") as lf:
+                lf.write(f"[{time.strftime('%H:%M:%S')}] [{level.upper()}] {msg}\n")
+        except Exception:
+            pass
+        _emit(log_cb, msg, level)
 
     summary = BatchRunSummary(
         mode=mode_str,
@@ -139,21 +148,20 @@ def run_batch(
         return summary
 
     consecutive_errors = 0
-    _emit(
-        log_cb,
+    _tee_log(
         f"Bắt đầu xử lý {len(rows)} phiếu | Chế độ: {mode_str} | Rate limit: {cfg.rate_limit_sec}s | Dừng sau {cfg.max_consecutive_errors} lỗi liên tiếp.",
         "info",
     )
 
-    with session_factory(headless=headless, keep_open=True, settings=cfg, log_cb=log_cb) as session:
-        adapter = _build_assign_adapter(session, log_cb=log_cb)
+    with session_factory(headless=headless, keep_open=True, settings=cfg, log_cb=_tee_log) as session:
+        adapter = _build_assign_adapter(session, log_cb=_tee_log)
         navigated_once = False
 
         for idx, row in enumerate(rows, start=1):
             if stop_event and stop_event.is_set():
                 summary.stopped_early = True
                 summary.stop_reason = "Người dùng yêu cầu dừng tác vụ."
-                _emit(log_cb, "Đã nhận lệnh DỪNG từ người dùng.", "warn")
+                _tee_log("Đã nhận lệnh DỪNG từ người dùng.", "warn")
                 break
 
             shd = normalize_nfc(row.get("shd") or row.get("ma_phieu") or "")
@@ -191,7 +199,7 @@ def run_batch(
                     settings=cfg,
                     adapter=adapter,
                     already_on_general_info=navigated_once,
-                    log_cb=log_cb,
+                    log_cb=_tee_log,
                 )
                 navigated_once = True
 
@@ -200,7 +208,7 @@ def run_batch(
                     nav_ctx=nav_ctx,
                     sheet_record=row,
                     settings=cfg,
-                    log_cb=log_cb,
+                    log_cb=_tee_log,
                 )
                 exec_res: ExecutionResult = execute_complete_ticket(
                     session=session,
@@ -208,7 +216,7 @@ def run_batch(
                     validation=val,
                     dry_run=is_dry_run,
                     settings=cfg,
-                    log_cb=log_cb,
+                    log_cb=_tee_log,
                 )
                 rec = exec_res.to_dict()
                 rec["timestamp"] = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -244,7 +252,7 @@ def run_batch(
                     "post_status": "",
                     "elapsed_ms": 0,
                 }
-                _emit(log_cb, f"Lỗi xử lý HĐ {shd}: {exc}", "error")
+                _tee_log(f"Lỗi xử lý HĐ {shd}: {exc}", "error")
             finally:
                 if nav_ctx and nav_ctx.main_handle:
                     close_extra_ticket_tabs(session.driver, nav_ctx.main_handle)
@@ -260,15 +268,14 @@ def run_batch(
                     f"Tự động dừng vì gặp {consecutive_errors} lỗi liên tiếp "
                     f"(ngưỡng cấu hình: {cfg.max_consecutive_errors})."
                 )
-                _emit(log_cb, summary.stop_reason, "error")
+                _tee_log(summary.stop_reason, "error")
                 break
 
             if idx < len(rows) and cfg.rate_limit_sec > 0:
                 time.sleep(cfg.rate_limit_sec)
 
     export_results_csv(summary.results, csv_path)
-    _emit(
-        log_cb,
+    _tee_log(
         f"Hoàn tất batch [{mode_str}]: Tổng={summary.total}, Thành công={summary.success}, "
         f"DryRunSẵnSàng={summary.dry_run_ready}, KhôngĐủĐK={summary.not_eligible}, "
         f"BỏQua={summary.skipped}, Lỗi={summary.errors}. CSV: {csv_path}",

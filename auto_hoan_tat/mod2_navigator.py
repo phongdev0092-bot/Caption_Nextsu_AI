@@ -403,6 +403,7 @@ def _switch_to_fox_erp_if_needed(
     shd: str,
     timeout_sec: float = 45.0,
     banner_wait_sec: float = 6.0,
+    post_click_wait_sec: float = 5.0,
     log_cb: Optional[Callable[[str, str], None]] = None,
 ) -> bool:
     """
@@ -447,7 +448,9 @@ def _switch_to_fox_erp_if_needed(
         return False
 
     fox_href = str(click_res.get("href") or "").strip()
-    _emit(log_cb, f"Module 2: Đã bấm link 'Đây' để chuyển HĐ {shd} sang giao diện mới FOX-ERP...", "info")
+    _emit(log_cb, f"Module 2: Đã bấm link 'Đây' để chuyển HĐ {shd} sang giao diện mới FOX-ERP (chờ {post_click_wait_sec:.0f}s ổn định trang)...", "info")
+    if post_click_wait_sec > 0:
+        time.sleep(post_click_wait_sec)
 
     deadline = time.monotonic() + max(1.0, float(timeout_sec))
     last_log_t = time.monotonic()
