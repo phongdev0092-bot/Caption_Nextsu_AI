@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Auto Hoàn Tất PTC/PBT — FPT Inside Tool</title>
+  <link rel="stylesheet" href="/shared-static/style.css" />
+  <link rel="stylesheet" href="/shared-static/ui-polish.css" />
+  <style>
+    body {
+      background: #f3f6fb;
+      color: #1e293b;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 18px 22px 40px;
+    }
+    .aht-container { max-width: 1440px; margin: 0 auto; }
+    .aht-header {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+      gap: 12px; background: #fff; border: 1px solid #e2e8f0; border-radius: 14px;
+      padding: 16px 20px; box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04); margin-bottom: 16px;
+    }
+    .aht-title-wrap { display: flex; align-items: center; gap: 12px; }
+    .aht-title { font-size: 20px; font-weight: 700; margin: 0; color: #0f172a; }
+    .aht-sub { font-size: 12.5px; color: #64748b; margin-top: 2px; }
+    .aht-pill {
+      display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;
+      padding: 4px 10px; border-radius: 999px;
+    }
+    .pill-port { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+    .pill-dry { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+    .pill-real { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+    .pill-off { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+
+    .aht-card {
+      background: #fff; border: 1px solid #e2e8f0; border-radius: 14px;
+      padding: 16px 18px; box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04); margin-bottom: 16px;
+    }
+    .aht-toolbar {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 10px; justify-content: space-between;
+    }
+    .aht-group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .aht-input, .aht-select {
+      height: 36px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0 10px;
+      font-size: 13px; background: #fff; color: #0f172a;
+    }
+    .aht-btn {
+      height: 36px; padding: 0 14px; border-radius: 8px; border: 1px solid transparent;
+      font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .aht-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #1d4ed8; }
+    .btn-success { background: #059669; color: #fff; }
+    .btn-success:hover:not(:disabled) { background: #047857; }
+    .btn-danger { background: #dc2626; color: #fff; }
+    .btn-danger:hover:not(:disabled) { background: #b91c1c; }
+    .btn-ghost { background: #fff; color: #334155; border-color: #cbd5e1; }
+    .btn-ghost:hover:not(:disabled) { background: #f8fafc; }
+
+    .aht-stats {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px; margin-bottom: 14px;
+    }
+    .aht-stat {
+      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px;
+    }
+    .aht-stat-label { font-size: 11.5px; color: #64748b; font-weight: 600; text-transform: uppercase; }
+    .aht-stat-val { font-size: 22px; font-weight: 700; color: #0f172a; margin-top: 2px; }
+
+    .aht-progress-wrap { margin-top: 12px; }
+    .aht-progress-bar {
+      width: 100%; height: 10px; background: #e2e8f0; border-radius: 999px; overflow: hidden;
+    }
+    .aht-progress-fill {
+      height: 100%; width: 0%; background: linear-gradient(90deg, #2563eb, #10b981);
+      transition: width 0.25s ease;
+    }
+    .aht-progress-meta {
+      display: flex; justify-content: space-between; font-size: 12.5px; color: #475569; margin-top: 6px;
+    }
+
+    .aht-table-wrap { overflow-x: auto; max-height: 460px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 10px; }
+    table.aht-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    table.aht-table th {
+      position: sticky; top: 0; background: #f1f5f9; color: #334155; text-align: left;
+      padding: 10px 10px; font-weight: 600; border-bottom: 1px solid #cbd5e1; z-index: 2;
+    }
+    table.aht-table td { padding: 9px 10px; border-bottom: 1px solid #eef2f7; vertical-align: top; }
+    table.aht-table tr:hover td { background: #f8fafc; }
+
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600;
+    }
+    .b-pbt { background: #dbeafe; color: #1d4ed8; }
+    .b-ptc { background: #ede9fe; color: #6d28d9; }
+    .b-invalid { background: #f1f5f9; color: #64748b; }
+    .b-ok { background: #dcfce7; color: #15803d; }
+    .b-warn { background: #fef3c7; color: #b45309; }
+    .b-err { background: #fee2e2; color: #b91c1c; }
+
+    .aht-logs {
+      background: #0f172a; color: #e2e8f0; border-radius: 10px; padding: 12px 14px;
+      font-family: Consolas, Monaco, monospace; font-size: 12.5px; height: 220px;
+      overflow-y: auto; line-height: 1.5;
+    }
+    .log-info { color: #cbd5e1; }
+    .log-success { color: #4ade80; }
+    .log-warn, .log-warning { color: #fbbf24; }
+    .log-error { color: #f87171; }
+
+    .aht-modal-backdrop {
+      position: fixed; inset: 0; background: rgba(15, 23, 42, 0.55);
+      display: none; align-items: center; justify-content: center; z-index: 9999;
+    }
+    .aht-modal-backdrop.open { display: flex; }
+    .aht-modal {
+      background: #fff; border-radius: 14px; padding: 22px 24px; max-width: 480px; width: 92%;
+      box-shadow: 0 20px 45px rgba(15, 23, 42, 0.25);
+    }
+    .aht-modal h3 { margin: 0 0 10px; font-size: 17px; color: #b91c1c; }
+    .aht-modal p { margin: 0 0 14px; font-size: 13.5px; color: #334155; line-height: 1.5; }
+    .aht-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+  </style>
+</head>
+<body>
+  <div class="aht-container">
+    <div class="aht-header">
+      <div class="aht-title-wrap">
+        <div>
+          <h1 class="aht-title">Auto Hoàn Tất PTC / PBT</h1>
+          <div class="aht-sub">
+            Google Sheet GID: <code>{{ sheet_gid }}</code> • Cô lập hoàn toàn, không ảnh hưởng hệ thống cũ (cổng 5001)
+          </div>
+        </div>
+      </div>
+      <div class="aht-group">
+        <span class="aht-pill pill-port">Cổng độc lập: {{ port }}</span>
+        <span id="modeBadge" class="aht-pill pill-dry">Chế độ: DRY-RUN (Mô phỏng)</span>
+        {% if not enabled %}
+        <span class="aht-pill pill-off">Tính năng đang TẮT</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="aht-card">
+      <div class="aht-stats">
+        <div class="aht-stat">
+          <div class="aht-stat-label">Tổng phiếu Sheet</div>
+          <div class="aht-stat-val" id="statTotal">0</div>
+        </div>
+        <div class="aht-stat">
+          <div class="aht-stat-label">PBT (Bảo trì / XMTT)</div>
+          <div class="aht-stat-val" id="statPbt" style="color:#1d4ed8;">0</div>
+        </div>
+        <div class="aht-stat">
+          <div class="aht-stat-label">PTC (Triển khai)</div>
+          <div class="aht-stat-val" id="statPtc" style="color:#6d28d9;">0</div>
+        </div>
+        <div class="aht-stat">
+          <div class="aht-stat-label">Đủ ĐK / Thành công</div>
+          <div class="aht-stat-val" id="statSuccess" style="color:#059669;">0</div>
+        </div>
+        <div class="aht-stat">
+          <div class="aht-stat-label">Không đủ ĐK</div>
+          <div class="aht-stat-val" id="statNotEligible" style="color:#d97706;">0</div>
+        </div>
+        <div class="aht-stat">
+          <div class="aht-stat-label">Lỗi</div>
+          <div class="aht-stat-val" id="statErrors" style="color:#dc2626;">0</div>
+        </div>
+      </div>
+
+      <div class="aht-toolbar">
+        <div class="aht-group">
+          <button id="btnReload" class="aht-btn btn-primary">↻ Tải lại Sheet</button>
+          <input id="searchShd" class="aht-input" type="text" placeholder="Tìm SHD..." style="width:150px;" />
+          <select id="filterLoai" class="aht-select">
+            <option value="">Tất cả loại</option>
+            <option value="PBT">PBT</option>
+            <option value="PTC">PTC</option>
+            <option value="INVALID">Không hợp lệ</option>
+          </select>
+          <select id="filterTacVu" class="aht-select">
+            <option value="">Tất cả Tác Vụ</option>
+            <option value="XÁC MINH THÔNG TIN">Xác Minh Thông Tin</option>
+            <option value="BẢO TRÌ">Bảo Trì</option>
+            <option value="TRIỂN KHAI">Triển Khai</option>
+          </select>
+        </div>
+
+        <div class="aht-group">
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer;">
+            <input id="chkDryRun" type="checkbox" checked />
+            DRY-RUN (Chỉ kiểm tra, không ghi)
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+            <input id="chkVisible" type="checkbox" checked />
+            Hiện Chrome
+          </label>
+          <button id="btnRun" class="aht-btn btn-success">▶ Chạy xử lý</button>
+          <button id="btnStop" class="aht-btn btn-danger" disabled>■ Dừng</button>
+          <button id="btnExportCsv" class="aht-btn btn-ghost">⬇ Xuất CSV</button>
+        </div>
+      </div>
+
+      <div class="aht-progress-wrap">
+        <div class="aht-progress-bar">
+          <div id="progressFill" class="aht-progress-fill"></div>
+        </div>
+        <div class="aht-progress-meta">
+          <span id="progressText">Sẵn sàng — nhấn "Tải lại Sheet" để nạp dữ liệu mới nhất.</span>
+          <span id="sheetFetchedAt"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="aht-card">
+      <div class="aht-table-wrap">
+        <table class="aht-table">
+          <thead>
+            <tr>
+              <th style="width:36px;"><input id="chkSelectAll" type="checkbox" checked /></th>
+              <th style="width:54px;">ID</th>
+              <th style="width:130px;">SHD</th>
+              <th style="width:170px;">Tác Vụ</th>
+              <th style="width:120px;">Loại / Tab</th>
+              <th style="width:170px;">Kết Quả (Sheet)</th>
+              <th style="width:160px;">Trạng thái chạy</th>
+              <th>Chi tiết kiểm tra / Thực thi</th>
+            </tr>
+          </thead>
+          <tbody id="ticketTableBody">
+            <tr>
+              <td colspan="8" style="text-align:center;color:#64748b;padding:24px;">Đang tải dữ liệu Google Sheet...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="aht-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <strong style="font-size:13.5px;">📋 Nhật ký hoạt động trực tiếp (Live Logs)</strong>
+        <button id="btnClearLogs" class="aht-btn btn-ghost" style="height:28px;font-size:12px;">Xóa nhật ký</button>
+      </div>
+      <div id="liveLogs" class="aht-logs"></div>
+    </div>
+  </div>
+
+  <!-- Modal xác nhận khi tắt DRY-RUN để CHẠY THẬT -->
+  <div id="confirmRealModal" class="aht-modal-backdrop">
+    <div class="aht-modal">
+      <h3>⚠️ Xác nhận CHẠY THẬT trên Inside / FOX-ERP</h3>
+      <p>
+        Bạn đang tắt chế độ <strong>DRY-RUN</strong>. Hệ thống sẽ thực sự bấm
+        <strong>Thay đổi tình trạng → Đã xử lý</strong>, cập nhật <em>Thông tin bảo trì</em>,
+        <em>Thông tin dịch vụ</em> và bấm <strong>Xác nhận</strong> cho các phiếu đủ điều kiện.
+      </p>
+      <p id="confirmRealCount" style="font-weight:600;color:#0f172a;"></p>
+      <div class="aht-modal-actions">
+        <button id="btnCancelReal" class="aht-btn btn-ghost">Hủy (giữ DRY-RUN)</button>
+        <button id="btnConfirmReal" class="aht-btn btn-danger">Xác nhận CHẠY THẬT</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/hoan-tat-static/hoan_tat_ptc_pbt.js"></script>
+</body>
+</html>

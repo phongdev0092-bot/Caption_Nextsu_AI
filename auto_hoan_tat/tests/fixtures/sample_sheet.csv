@@ -1,0 +1,6 @@
+ID,Tác Vụ,Email,MSNV,Account Inside,SHD,Nguyên Nhân,Hình ảnh,Ngày Cập Nhật,Kết Quả,Location,Address of Location,Địa chỉ KH,Đánh Giá Xác Thực
+1,TRIỂN KHAI,nvkt01@fpt.net,100001,PNC01.NVKT01,SGATEST001,Hoàn tất triển khai mới,https://example.com/img1.jpg,,,"10.8012, 106.7123",123 Đường A Quận 9,123 Đường A TP Thủ Đức,Đạt
+2,BẢO TRÌ,nvkt02@fpt.net,100002,PNC01.NVKT02,SGATEST002,Hoàn tất bảo trì đứt cáp,https://example.com/img2.jpg,,Chưa xử lý,"10.8123, 106.7234",45 Đường B Quận 9,45 Đường B TP Thủ Đức,Đạt
+3,  xác minh   thông tin  ,nvkt03@fpt.net,100003,PNC01.NVKT03,SGATEST003,Xác minh thông tin KH,https://example.com/img3.jpg,19/11/2026 09:00:00,Đã hoàn tất,"10.8234, 106.7345",67 Đường C Quận 9,67 Đường C TP Thủ Đức,Đạt
+4,Tác Vụ Lạ,nvkt04@fpt.net,100004,PNC01.NVKT04,SGATEST004,Không rõ loại,,,Chưa xử lý,"10.8345, 106.7456",89 Đường D Quận 9,89 Đường D TP Thủ Đức,Không đạt
+5,,nvkt05@fpt.net,100005,PNC01.NVKT05,SGATEST005,Trống cột tác vụ,,,,"10.8456, 106.7567",10 Đường E Quận 9,10 Đường E TP Thủ Đức,
