@@ -174,6 +174,13 @@ def fetch_sheet_data(sheet_id=DEFAULT_SHEET_ID, gid=GID_CLEAR_SIGNAL, signal_typ
                 c_nguon = c_item.get("nguon", "") if isinstance(c_item, dict) else ""
                 raw_kq = str(rec.get("Kết Quả", "")).strip()
                 c_has_err = "lỗi" in normalize_nfc(c_st).lower()
+                # Yêu cầu MỚI cho cùng SHD: sheet đang chờ xử lý và ngày trên sheet mới hơn ngày trong cache
+                # -> bỏ qua cache cũ để Auto xử lý lại (tránh log cũ đè lên ca vụ mới gửi)
+                sheet_dt = parse_vn_datetime(rec.get("Ngày Cập Nhật", ""))
+                cache_dt = parse_vn_datetime(c_time) if c_time else None
+                if not is_final_status(raw_kq) and sheet_dt and (not cache_dt or sheet_dt > cache_dt):
+                    records.append(rec)
+                    continue
                 if not is_final_status(raw_kq) or (is_final_status(c_st) and not c_has_err):
                     if c_st:
                         rec["Kết Quả"] = c_st

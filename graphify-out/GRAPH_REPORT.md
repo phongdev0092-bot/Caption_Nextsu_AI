@@ -1,7 +1,7 @@
-# Graph Report - Data Retrieval Tool  (2026-11-19)
+# Graph Report - Data Retrieval Tool  (2026-11-25)
 
 ## Corpus Check
-- 63 files · ~135,973 words
+- 63 files · ~136,041 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 14 file(s) not represented in the graph (top: .bat 5, (none) 3, .css 2)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `8da28369`
+- Built from commit: `cdfaf0ab`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -82,8 +82,8 @@
 2. `InsideAssignAutomation` - 40 edges
 3. `add_log()` - 39 edges
 4. `load_config()` - 34 edges
-5. `open_ticket_readonly()` - 29 edges
-6. `create_inside_session()` - 29 edges
+5. `create_inside_session()` - 29 edges
+6. `open_ticket_readonly()` - 29 edges
 7. `release_inside_task()` - 29 edges
 8. `normalize_nfc()` - 29 edges
 9. `InsideSession` - 28 edges
@@ -96,9 +96,9 @@
   .agents/rules/admin_privileges.md → inside_bypass.py
 - `_build_assign_adapter()` --calls--> `InsideAssignAutomation`  [EXTRACTED]
   auto_hoan_tat/mod2_navigator.py → inside_assign.py
-- `open_ticket_readonly()` --references--> `InsideAssignAutomation`  [EXTRACTED]
-  auto_hoan_tat/mod2_navigator.py → inside_assign.py
 - `navigate_to_ticket()` --references--> `InsideAssignAutomation`  [EXTRACTED]
+  auto_hoan_tat/mod2_navigator.py → inside_assign.py
+- `open_ticket_readonly()` --references--> `InsideAssignAutomation`  [EXTRACTED]
   auto_hoan_tat/mod2_navigator.py → inside_assign.py
 
 ## Import Cycles
@@ -289,16 +289,16 @@ Nodes (9): create_blueprint(), api_config(), api_run(), _worker(), _on_progress(
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `InsideAssignAutomation` connect `InsideAssignAutomation` to `InsideClearClsAutomation`, `core_login.py`, `orchestrator.py`, `mod2_navigator.py`?**
-  _High betweenness centrality (0.044) - this node is a cross-community bridge._
+  _High betweenness centrality (0.039) - this node is a cross-community bridge._
 - **Are the 5 inferred relationships involving `AutoHoanTatSettings` (e.g. with `fetch_sheet_data()` and `fetch_sheet_from_file()`) actually correct?**
   _`AutoHoanTatSettings` has 5 INFERRED edges - model-reasoned connections that need verification._
 - **Should `dom.js` be split into smaller, more focused modules?**
   _Cohesion score 0.015873015873015872 - nodes in this community are weakly interconnected._
-- **Why does `load_config()` connect `load_config` to `InsideBypassAutomation`, `inside_spampool.py`, `inside_signal.py`, `route`, `release_inside_task`, `InsideBypassNatAutomation`, `core_login.py`, `InsideScraper`, `atomic_write_json`, `InsideClearClsAutomation`, `InsidePortAutomation`, `InsideSignalAutomation`, `ModernInsideFPTApp`?**
-  _High betweenness centrality (0.017) - this node is a cross-community bridge._
+- **Why does `create_inside_session()` connect `AutoHoanTatSettings` to `load_config`, `release_inside_task`, `invalidate_session`, `validate_ticket_readonly`, `orchestrator.py`, `mod2_navigator.py`?**
+  _High betweenness centrality (0.015) - this node is a cross-community bridge._
 - **Should `inside_report_crawler.py` be split into smaller, more focused modules?**
   _Cohesion score 0.11088709677419355 - nodes in this community are weakly interconnected._
-- **Why does `InsideBypassAutomation` connect `InsideBypassAutomation` to `core_login.py`, `release_inside_task`?**
-  _High betweenness centrality (0.014) - this node is a cross-community bridge._
+- **Why does `InsideScraper` connect `InsideScraper` to `InsideClearClsAutomation`, `release_inside_task`, `core_login.py`, `route`?**
+  _High betweenness centrality (0.015) - this node is a cross-community bridge._
 - **Should `mybae.js` be split into smaller, more focused modules?**
   _Cohesion score 0.05152394775036284 - nodes in this community are weakly interconnected._
