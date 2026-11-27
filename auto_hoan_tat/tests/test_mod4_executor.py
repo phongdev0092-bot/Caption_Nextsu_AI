@@ -1,13 +1,16 @@
 """
-Unit tests cho Module 4 (mod4_executor.py) và Orchestrator (orchestrator.py).
-Đảm bảo:
-- DRY-RUN mặc định BẬT và không bấm nút thay đổi dữ liệu.
-- Idempotent (bỏ qua phiếu đã hoàn tất).
-- Thực thi đủ các bước Điều kiện 3 (Thông tin bảo trì) + Thông tin dịch vụ + Xác nhận + xác minh sau hoàn tất.
-- Orchestrator dừng ngay sau N lỗi liên tiếp, ghi audit JSONL và xuất CSV.
+Unit tests cho Module 4 (mod4_executor.py) và Orchestrator (orchestrator.py)
+theo luồng mới trực tiếp trên trang THÔNG TIN BẢO TRÌ (Inside):
+- DRY-RUN mặc định BẬT và tuyệt đối không bấm nút thay đổi dữ liệu / không gửi Webhook.
+- Idempotent (bỏ qua phiếu đã xử lý).
+- Thực thi đủ Bước 4 (Xem thêm), 4a (Mỹ Bảo), 4b (Nguyên nhân lỗi -> Internet -> Thêm),
+  4c (4 cột Tình trạng ban đầu / Phần tử lỗi / Nguyên nhân lỗi / Hướng xử lý),
+  5 (Kết quả xử lý -> Đã xử lý -> Cập nhật) và xác minh sau hoàn tất.
+- Orchestrator dừng ngay sau N lỗi liên tiếp, ghi audit JSONL và xuất CSV có cột Ghi Chú.
 """
 
 from contextlib import contextmanager
+import itertools
 import json
 import os
 import tempfile
@@ -18,28 +21,31 @@ from auto_hoan_tat.config import AutoHoanTatSettings
 from auto_hoan_tat.mod1_auth import InsideSession
 from auto_hoan_tat.mod2_navigator import NavigationContext
 from auto_hoan_tat.mod4_executor import (
-    HI_FPT_TARGET,
+    DICH_VU_TARGET,
+    HUONG_XU_LY_TARGET,
+    KET_QUA_XU_LY_TARGET,
     MY_BAO_TARGET,
     NGUYEN_NHAN_LOI_TARGET,
+    PHAN_TU_LOI_TARGET,
     STATUS_DRY_RUN_READY,
     STATUS_ERROR,
     STATUS_NOT_ELIGIBLE,
     STATUS_SKIPPED_ALREADY_DONE,
     STATUS_SUCCESS,
+    TINH_TRANG_BAN_DAU_TARGET,
     execute_complete_ticket,
 )
 from auto_hoan_tat.orchestrator import run_batch
 
 
 class _FakeDriverExec:
-    def __init__(self, post_status: str = "Đã xử lý - 19/11/2026 14:40:00", hi_fpt: str = "Không chọn", my_bao: str = "Không chọn"):
-        self.current_url = "https://fox-erp.fpt.net/app/tkbt/bt/ticket?q=test"
-        self.current_window_handle = "WIN_FOX"
-        self.window_handles = ["WIN_MAIN", "WIN_FOX"]
+    def __init__(self, post_status: str = "Đã xử lý", toast_ok: bool = False):
+        self.current_url = "http://inside.fpt.net/bt/checklist?shd=SGAFS1925"
+        self.current_window_handle = "WIN_BT"
+        self.window_handles = ["WIN_MAIN", "WIN_BT"]
         self.post_status = post_status
-        self.hi_fpt = hi_fpt
-        self.my_bao = my_bao
-        self.confirmed = False
+        self.toast_ok = toast_ok
+        self.updated = False
         self.calls = []
         self.switch_to = self
 
@@ -49,36 +55,35 @@ class _FakeDriverExec:
     def close(self):
         pass
 
+    def find_elements(self, *args, **kwargs):
+        return []
+
     def execute_script(self, script: str, *args):
-        if "has_ghi_nhan" in script:
+        if "has_tinh_trang_ban_dau" in script:
             return {
-                "has_ghi_nhan": True,
-                "has_phan_cong": True,
-                "has_thay_doi_tt": True,
-                "ticket_status": self.post_status if self.confirmed else "Đã phân công",
+                "has_tinh_trang_ban_dau": True,
+                "has_lich_su_nhan_nha": True,
+                "has_thong_tin_bao_tri": True,
+                "ticket_status": self.post_status if self.updated else "Đang xử lý",
             }
-        if "Nguyên nhân chưa cài đặt Hi FPT" in script and "raw:" in script:
-            return {"hi_fpt": self.hi_fpt, "my_bao": self.my_bao, "raw": ""}
-        if "card: cardTitle" in script:
-            self.calls.append(("pencil", args[0]))
-            return {"clicked": True, "card": args[0]}
-        if "wantLabel" in script:
-            self.calls.append(("select_label", args[0], args[1]))
+        if "already_expanded" in script:
+            self.calls.append(("xem_them",))
+            return {"already_expanded": False, "clicked": True, "text": "xem thêm"}
+        if "wantSec" in script and "wantLabel" in script:
+            self.calls.append(("select_label", args[0], args[1], args[2]))
             return {"ok": True, "mode": "native_select", "selected": args[1]}
+        if "wantSec" in script and "wantBtn" in script:
+            self.calls.append(("click_in_section", args[0], args[1]))
+            if args[1] == "Cập nhật":
+                self.updated = True
+            return {"clicked": True, "text": args[1].lower(), "section": args[0]}
         if "wantCol" in script:
             self.calls.append(("select_table", args[0], args[1]))
             return {"ok": True, "mode": "native_select", "selected": args[1]}
-        if "serviceText" in script:
-            self.calls.append(("select_service", args[0]))
-            return {"ok": True, "mode": "native_select", "selected": args[0]}
-        if "titleKeyword" in script:
-            return True
-        if "withinModalOnly" in script:
-            btn = args[0]
-            self.calls.append(("click_btn", btn, args[1]))
-            if btn == "Xác nhận":
-                self.confirmed = True
-            return {"clicked": True, "text": btn.lower()}
+        if "has_success_toast" in script:
+            return {"has_success_toast": self.toast_ok}
+        if "swal2-popup" in script:
+            return False
         return {}
 
 
@@ -96,27 +101,29 @@ class TestMod4Executor(unittest.TestCase):
         self.session = InsideSession(
             driver=self.driver,
             url=self.driver.current_url,
-            title="FOX-ERP",
+            title="THÔNG TIN BẢO TRÌ",
             task_lock_name="auto_hoan_tat",
         )
         self.nav_ctx = NavigationContext(
             shd="SGAFS1925",
-            tac_vu="XÁC MINH THÔNG TIN",
+            tac_vu="Xác Minh Thông Tin",
             loai="PBT",
             tab_dich="BẢO TRÌ",
             url=self.driver.current_url,
-            title="FOX-ERP",
-            window_handle="WIN_FOX",
+            title="THÔNG TIN BẢO TRÌ",
+            window_handle="WIN_BT",
             main_handle="WIN_MAIN",
             adapter=object(),
-            ticket_status="Đã phân công",
+            ticket_status="Đang xử lý",
         )
         self.eligible_val = {
             "ma_phieu": "SGAFS1925",
-            "tac_vu": "XÁC MINH THÔNG TIN",
+            "tac_vu": "Xác Minh Thông Tin",
             "loai": "PBT",
             "du_dieu_kien": True,
             "da_hoan_tat": False,
+            "ket_qua": "",
+            "ghi_chu": "",
             "ly_do_neu_khong_du": "",
             "chi_tiet": {},
         }
@@ -138,10 +145,12 @@ class TestMod4Executor(unittest.TestCase):
     def test_idempotent_skips_already_completed(self):
         done_val = {
             "ma_phieu": "SGAFS1925",
-            "tac_vu": "XÁC MINH THÔNG TIN",
+            "tac_vu": "Xác Minh Thông Tin",
             "loai": "PBT",
             "du_dieu_kien": False,
             "da_hoan_tat": True,
+            "ket_qua": "Đã xử lý",
+            "ghi_chu": "Phiếu đã hoàn tất trước đó.",
             "ly_do_neu_khong_du": "Phiếu đã hoàn tất trước đó.",
             "chi_tiet": {},
         }
@@ -155,14 +164,16 @@ class TestMod4Executor(unittest.TestCase):
         self.assertEqual(res.status, STATUS_SKIPPED_ALREADY_DONE)
         self.assertEqual(self.driver.calls, [])
 
-    def test_not_eligible_returns_exact_reason_without_clicking(self):
+    def test_not_eligible_returns_ket_qua_and_ghi_chu_without_clicking(self):
         bad_val = {
             "ma_phieu": "SGAFS1925",
-            "tac_vu": "XÁC MINH THÔNG TIN",
+            "tac_vu": "Xác Minh Thông Tin",
             "loai": "PBT",
             "du_dieu_kien": False,
             "da_hoan_tat": False,
-            "ly_do_neu_khong_du": "Không thành công: Phiếu bảo trì chưa checkin. Vui lòng check in và thử lại",
+            "ket_qua": "Không Thành Công",
+            "ghi_chu": "Vui lòng check in và thử lại",
+            "ly_do_neu_khong_du": "Không Thành Công: Vui lòng check in và thử lại",
             "chi_tiet": {},
         }
         res = execute_complete_ticket(
@@ -173,10 +184,11 @@ class TestMod4Executor(unittest.TestCase):
             settings=self.cfg,
         )
         self.assertEqual(res.status, STATUS_NOT_ELIGIBLE)
-        self.assertEqual(res.ket_qua, bad_val["ly_do_neu_khong_du"])
+        self.assertEqual(res.ket_qua, "Không Thành Công")
+        self.assertEqual(res.ghi_chu, "Vui lòng check in và thử lại")
         self.assertEqual(self.driver.calls, [])
 
-    def test_real_run_executes_full_flow_and_verifies_post_status(self):
+    def test_real_run_executes_exact_steps_4_and_5_and_verifies_post_status(self):
         with patch("auto_hoan_tat.mod4_executor.time.sleep", return_value=None):
             res = execute_complete_ticket(
                 session=self.session,
@@ -187,22 +199,20 @@ class TestMod4Executor(unittest.TestCase):
             )
         self.assertEqual(res.mode, "REAL")
         self.assertEqual(res.status, STATUS_SUCCESS)
-        self.assertIn("Đã xử lý", res.post_status)
-        self.assertIn(("click_btn", "Thay đổi tình trạng", False), self.driver.calls)
-        self.assertIn(("click_btn", "Đã xử lý", False), self.driver.calls)
-        self.assertIn(("pencil", "Thông tin bảo trì"), self.driver.calls)
-        self.assertIn(("select_label", "Nguyên nhân chưa cài đặt Hi FPT", HI_FPT_TARGET), self.driver.calls)
-        self.assertIn(("select_label", "Nguyên nhân chưa nghiệm thu Mỹ Bảo", MY_BAO_TARGET), self.driver.calls)
-        self.assertIn(("pencil", "Thông tin dịch vụ"), self.driver.calls)
-        self.assertIn(("select_service", "Internet"), self.driver.calls)
-        self.assertIn(("click_btn", "Thêm", True), self.driver.calls)
-        self.assertIn(("select_table", "NGUYÊN NHÂN LỖI", NGUYEN_NHAN_LOI_TARGET), self.driver.calls)
-        self.assertIn(("click_btn", "Xác nhận", True), self.driver.calls)
+        self.assertEqual(res.ket_qua, "Đã xử lý")
+        self.assertIn(("xem_them",), self.driver.calls)
+        self.assertIn(("select_label", "Nguyên nhân chưa nghiệm thu Mỹ Bảo", MY_BAO_TARGET, "Thông tin bảo trì"), self.driver.calls)
+        self.assertIn(("select_label", "Dịch vụ", DICH_VU_TARGET, "Nguyên nhân lỗi"), self.driver.calls)
+        self.assertIn(("click_in_section", "Nguyên nhân lỗi", "Thêm"), self.driver.calls)
+        self.assertIn(("select_table", "Tình trạng ban đầu", TINH_TRANG_BAN_DAU_TARGET), self.driver.calls)
+        self.assertIn(("select_table", "Phần tử lỗi", PHAN_TU_LOI_TARGET), self.driver.calls)
+        self.assertIn(("select_table", "Nguyên nhân lỗi", NGUYEN_NHAN_LOI_TARGET), self.driver.calls)
+        self.assertIn(("select_table", "Hướng xử lý", HUONG_XU_LY_TARGET), self.driver.calls)
+        self.assertIn(("select_label", "Kết quả xử lý", KET_QUA_XU_LY_TARGET, "Cập nhật kết quả xử lý của phiếu"), self.driver.calls)
+        self.assertIn(("click_in_section", "Cập nhật kết quả xử lý của phiếu", "Cập nhật"), self.driver.calls)
 
     def test_real_run_fails_if_post_status_not_updated(self):
-        import itertools
-
-        self.driver.post_status = "Đã phân công"
+        self.driver.post_status = "Đang xử lý"
         with patch("auto_hoan_tat.mod4_executor.time.sleep", return_value=None), patch(
             "auto_hoan_tat.mod4_executor.time.monotonic",
             side_effect=itertools.count(0.0, 2.0),
@@ -215,13 +225,13 @@ class TestMod4Executor(unittest.TestCase):
                 settings=self.cfg,
             )
         self.assertEqual(res.status, STATUS_ERROR)
-        self.assertIn("chưa xác minh được trạng thái", res.ket_qua)
+        self.assertIn("chưa xác minh được trạng thái", res.ghi_chu)
 
     def test_orchestrator_stops_after_n_consecutive_errors_and_exports_audit_and_csv(self):
         rows = [
-            {"shd": "SGAERR01", "tac_vu": "XÁC MINH THÔNG TIN", "loai": "PBT", "tab_dich": "BẢO TRÌ", "ket_qua": ""},
-            {"shd": "SGAERR02", "tac_vu": "XÁC MINH THÔNG TIN", "loai": "PBT", "tab_dich": "BẢO TRÌ", "ket_qua": ""},
-            {"shd": "SGASKIP03", "tac_vu": "XÁC MINH THÔNG TIN", "loai": "PBT", "tab_dich": "BẢO TRÌ", "ket_qua": ""},
+            {"shd": "SGAERR01", "tac_vu": "Xác Minh Thông Tin", "loai": "PBT", "tab_dich": "BẢO TRÌ", "ket_qua": "Chưa xử lý"},
+            {"shd": "SGAERR02", "tac_vu": "Xác Minh Thông Tin", "loai": "PBT", "tab_dich": "BẢO TRÌ", "ket_qua": "Chưa xử lý"},
+            {"shd": "SGASKIP03", "tac_vu": "Xác Minh Thông Tin", "loai": "PBT", "tab_dich": "BẢO TRÌ", "ket_qua": "Chưa xử lý"},
         ]
 
         @contextmanager
@@ -241,9 +251,13 @@ class TestMod4Executor(unittest.TestCase):
 
         self.assertTrue(summary.stopped_early)
         self.assertEqual(summary.errors, 2)
-        self.assertEqual(len(summary.results), 2)  # Dừng trước phiếu thứ 3
+        self.assertEqual(len(summary.results), 2)
         self.assertTrue(os.path.exists(summary.audit_log_path))
         self.assertTrue(os.path.exists(summary.csv_export_path))
+
+        with open(summary.csv_export_path, "r", encoding="utf-8-sig") as f:
+            csv_text = f.read()
+        self.assertIn("Ghi Chú", csv_text)
 
         with open(summary.audit_log_path, "r", encoding="utf-8") as f:
             lines = [json.loads(line) for line in f if line.strip()]

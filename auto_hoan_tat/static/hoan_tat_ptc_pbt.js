@@ -7,6 +7,7 @@
   let allRecords = [];
   let selectedShds = new Set();
   let resultsByShd = {};
+  let autoEnabled = false;
   let pollTimer = null;
 
   function normUpper(s) {
@@ -29,7 +30,22 @@
       badge.textContent = "Chế độ: DRY-RUN (Mô phỏng)";
     } else {
       badge.className = "aht-pill pill-real";
-      badge.textContent = "Chế độ: CHẠY THẬT (Ghi dữ liệu)";
+      badge.textContent = "Chế độ: CHẠY THẬT (Đóng ca)";
+    }
+  }
+
+  function updateAutoToggleUI() {
+    const btn = el("btnAutoToggle");
+    const txt = el("autoToggleText");
+    const dot = el("autoToggleDot");
+    if (autoEnabled) {
+      btn.className = "aht-btn btn-auto-on";
+      txt.textContent = "Tự Động: BẬT";
+      dot.style.background = "#10b981";
+    } else {
+      btn.className = "aht-btn btn-auto-off";
+      txt.textContent = "Tự Động: TẮT";
+      dot.style.background = "#94a3b8";
     }
   }
 
@@ -40,8 +56,8 @@
 
     return allRecords.filter((r) => {
       if (q && !normUpper(r.shd).includes(q)) return false;
-      if (loai === "INVALID" && r.loai) return false;
-      if (loai && loai !== "INVALID" && r.loai !== loai) return false;
+      if (loai === "PENDING_AUTO" && !r.is_pending_auto) return false;
+      if (loai && loai !== "PENDING_AUTO" && r.loai !== loai) return false;
       if (tv && normUpper(r.tac_vu) !== tv) return false;
       return true;
     });
@@ -49,9 +65,9 @@
 
   function statusBadgeHtml(st) {
     if (!st) return '<span class="badge b-invalid">Chưa chạy</span>';
-    if (st === "SUCCESS") return '<span class="badge b-ok">✓ Đã hoàn tất</span>';
+    if (st === "SUCCESS") return '<span class="badge b-ok">✓ Đã xử lý</span>';
     if (st === "DRY_RUN_READY") return '<span class="badge b-ok">✓ Đủ ĐK (DRY-RUN)</span>';
-    if (st === "NOT_ELIGIBLE") return '<span class="badge b-warn">⚠ Không đủ ĐK</span>';
+    if (st === "NOT_ELIGIBLE") return '<span class="badge b-warn">⚠ Không Thành Công</span>';
     if (st === "SKIPPED_ALREADY_DONE") return '<span class="badge b-invalid">Đã xong trước đó</span>';
     if (st === "SKIPPED_UNSUPPORTED") return '<span class="badge b-invalid">Bỏ qua</span>';
     return '<span class="badge b-err">✕ Lỗi</span>';
@@ -80,9 +96,13 @@
           loaiBadge = `<span class="badge b-ptc">PTC</span> <small style="color:#64748b;">${escapeHtml(r.tab_dich)}</small>`;
         }
 
-        const detailText = runRec
-          ? escapeHtml(runRec.ket_qua || "")
-          : escapeHtml(r.loai_ly_do || "Sẵn sàng kiểm tra");
+        const kqDisplay = runRec
+          ? escapeHtml(runRec.ket_qua || r.ket_qua || "")
+          : escapeHtml(r.ket_qua || "");
+
+        const ghiChuText = runRec
+          ? escapeHtml(runRec.ghi_chu || runRec.ket_qua || "")
+          : escapeHtml(r.ghi_chu || (r.is_pending_auto ? "Đủ điều kiện kích hoạt Auto" : r.loai_ly_do || ""));
 
         return `
           <tr>
@@ -91,9 +111,9 @@
             <td><strong>${escapeHtml(r.shd || "")}</strong></td>
             <td>${escapeHtml(r.tac_vu || "")}</td>
             <td>${loaiBadge}</td>
-            <td>${escapeHtml(r.ket_qua || "")}</td>
+            <td>${kqDisplay}</td>
             <td>${statusBadgeHtml(runRec ? runRec.status : "")}</td>
-            <td style="font-size:12.5px;color:#334155;">${detailText}</td>
+            <td style="font-size:12.5px;color:#334155;">${ghiChuText}</td>
           </tr>
         `;
       })
@@ -123,6 +143,38 @@
     box.scrollTop = box.scrollHeight;
   }
 
+  async function loadConfig() {
+    try {
+      const resp = await fetch(`${API_BASE}/api/config`);
+      const cfg = await resp.json();
+      autoEnabled = !!cfg.auto_enabled;
+      el("chkDryRun").checked = cfg.dry_run_default !== false;
+      if (el("inputWebhookUrl")) {
+        el("inputWebhookUrl").value = cfg.webhook_url || "";
+        el("webhookStatus").textContent = cfg.webhook_url ? "✅ Đã cấu hình" : "Chưa cấu hình (chỉ xuất CSV)";
+      }
+      updateAutoToggleUI();
+      updateModeBadge();
+    } catch (e) {}
+  }
+
+  async function saveSettings(partial) {
+    const resp = await fetch(`${API_BASE}/api/settings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(partial),
+    });
+    const data = await resp.json();
+    if (resp.ok && data.status === "ok") {
+      autoEnabled = !!data.auto_enabled;
+      updateAutoToggleUI();
+      if (el("webhookStatus")) {
+        el("webhookStatus").textContent = data.webhook_url ? "✅ Đã lưu Webhook" : "Đã xóa Webhook (chỉ xuất CSV)";
+      }
+    }
+    return data;
+  }
+
   async function loadSheet() {
     el("btnReload").disabled = true;
     el("progressText").textContent = "Đang tải dữ liệu từ Google Sheet...";
@@ -137,10 +189,10 @@
       el("chkSelectAll").checked = true;
 
       el("statTotal").textContent = data.counts.total;
+      el("statPendingAuto").textContent = data.counts.pending_auto || 0;
       el("statPbt").textContent = data.counts.pbt;
-      el("statPtc").textContent = data.counts.ptc;
       el("sheetFetchedAt").textContent = "Cập nhật: " + (data.fetched_at || "");
-      el("progressText").textContent = `Đã nạp ${data.counts.total} phiếu từ Google Sheet.`;
+      el("progressText").textContent = `Đã nạp ${data.counts.total} phiếu (${data.counts.pending_auto || 0} phiếu chờ Auto XMTT).`;
       renderTable();
     } catch (err) {
       el("progressText").textContent = "Lỗi tải Sheet: " + err.message;
@@ -174,17 +226,14 @@
       el("btnStop").disabled = !st.running;
 
       if (st.running) {
-        el("progressText").textContent = `Đang chạy [${st.mode}] ${done}/${total} phiếu${
+        const srcTag = st.trigger_source === "AUTO" ? "AUTO NỀN" : "CHẠY TAY";
+        el("progressText").textContent = `Đang chạy [${srcTag} • ${st.mode}] ${done}/${total} phiếu${
           st.current_shd ? " — HĐ: " + st.current_shd : ""
         }...`;
       } else if (st.finished_at) {
         el("progressText").textContent = st.error
           ? `Dừng do lỗi: ${st.error}`
           : `Hoàn tất lượt [${st.mode}] lúc ${st.finished_at} (${done}/${total} phiếu).`;
-        if (pollTimer) {
-          clearInterval(pollTimer);
-          pollTimer = null;
-        }
       }
     } catch (err) {
       // Bỏ qua lỗi mạng thoáng qua khi poll
@@ -220,8 +269,6 @@
         return;
       }
       el("btnStop").disabled = false;
-      if (pollTimer) clearInterval(pollTimer);
-      pollTimer = setInterval(pollStatus, 1000);
       pollStatus();
     } catch (err) {
       alert("Lỗi kết nối server: " + err.message);
@@ -230,7 +277,21 @@
   }
 
   // Event bindings
-  el("chkDryRun").addEventListener("change", updateModeBadge);
+  el("chkDryRun").addEventListener("change", async () => {
+    updateModeBadge();
+    await saveSettings({ dry_run_default: el("chkDryRun").checked });
+  });
+
+  el("btnAutoToggle").addEventListener("click", async () => {
+    await saveSettings({ auto_enabled: !autoEnabled, dry_run_default: el("chkDryRun").checked });
+    pollStatus();
+  });
+
+  el("btnSaveWebhook").addEventListener("click", async () => {
+    await saveSettings({ webhook_url: el("inputWebhookUrl").value.trim() });
+    pollStatus();
+  });
+
   el("btnReload").addEventListener("click", loadSheet);
   el("searchShd").addEventListener("input", renderTable);
   el("filterLoai").addEventListener("change", renderTable);
@@ -281,8 +342,11 @@
     renderLogs([]);
   });
 
-  // Init
-  updateModeBadge();
-  loadSheet();
-  pollStatus();
+  // Init + giữ nhịp poll nhẹ 3s để cập nhật live khi Auto nền chạy
+  loadConfig().then(() => {
+    loadSheet();
+    pollStatus();
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(pollStatus, 3000);
+  });
 })();

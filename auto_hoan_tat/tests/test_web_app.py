@@ -25,7 +25,9 @@ class TestWebApp(unittest.TestCase):
                     "loai": "PBT",
                     "tab_dich": "BẢO TRÌ",
                     "loai_ly_do": "",
-                    "ket_qua": "",
+                    "ket_qua": "Chưa xử lý",
+                    "ghi_chu": "",
+                    "is_pending_auto": True,
                     "raw": {},
                 }
             ],
@@ -49,7 +51,16 @@ class TestWebApp(unittest.TestCase):
         self.assertEqual(r_sheet["status"], "ok")
         self.assertEqual(r_sheet["counts"]["total"], 1)
         self.assertEqual(r_sheet["counts"]["pbt"], 1)
+        self.assertEqual(r_sheet["counts"]["pending_auto"], 1)
         self.assertEqual(r_sheet["records"][0]["shd"], "SGAFS1925")
+
+        r_set = client.post(
+            "/api/settings",
+            json={"auto_enabled": True, "webhook_url": "https://script.google.com/macros/s/test/exec"},
+        ).get_json()
+        self.assertEqual(r_set["status"], "ok")
+        self.assertTrue(r_set["auto_enabled"])
+        self.assertEqual(r_set["webhook_url"], "https://script.google.com/macros/s/test/exec")
 
     def test_run_blocked_when_feature_flag_disabled(self):
         cfg = AutoHoanTatSettings(enabled=False)

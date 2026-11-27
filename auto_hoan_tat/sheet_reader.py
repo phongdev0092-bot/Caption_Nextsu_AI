@@ -44,6 +44,7 @@ COLUMN_TO_FIELD: Dict[str, str] = {
     "hinh anh": "hinh_anh",
     "ngay cap nhat": "ngay_cap_nhat",
     "ket qua": "ket_qua",
+    "ghi chu": "ghi_chu",
     "location": "location",
     "address of location": "address_of_location",
     "dia chi kh": "dia_chi_kh",
@@ -85,6 +86,21 @@ def classify_ticket_type(
     return None, None, f"Giá trị cột Tác Vụ không hợp lệ/chưa khai báo: '{raw}'"
 
 
+def is_pending_hoan_tat(rec: Dict) -> bool:
+    """
+    Điều kiện kích hoạt Auto Hoàn Tất (yêu cầu 1):
+    - Cột F (SHD) có giá trị
+    - Cột B (Tác Vụ) là 'Xác Minh Thông Tin' (sau chuẩn hóa NFC, bỏ khoảng trắng thừa, không phân biệt hoa thường)
+    - Cột J (Kết Quả) là 'Chưa xử lý'
+    """
+    shd = normalize_nfc(rec.get("shd") or rec.get("ma_phieu") or "")
+    if not shd:
+        return False
+    tv = _norm_match_key(rec.get("tac_vu") or "")
+    kq = _norm_match_key(rec.get("ket_qua") or "")
+    return tv == "xác minh thông tin" and kq == "chưa xử lý"
+
+
 def parse_csv_text(
     csv_text: str,
     settings: Optional[AutoHoanTatSettings] = None,
@@ -124,6 +140,7 @@ def parse_csv_text(
         rec["loai"] = loai
         rec["tab_dich"] = tab_dich
         rec["loai_ly_do"] = loai_ly_do
+        rec["is_pending_auto"] = is_pending_hoan_tat(rec)
         rec["raw"] = raw_nfc
         records.append(rec)
 

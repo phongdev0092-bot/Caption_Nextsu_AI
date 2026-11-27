@@ -6,9 +6,16 @@ Không lưu mật khẩu, token hay bí mật trong file này.
 from dataclasses import dataclass, field
 import json
 import os
+import sys
 from typing import Tuple
 
-PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
+if getattr(sys, "frozen", False):
+    RESOURCE_DIR = os.path.join(getattr(sys, "_MEIPASS", os.path.dirname(sys.executable)), "auto_hoan_tat")
+    PACKAGE_DIR = os.path.join(os.path.dirname(sys.executable), "auto_hoan_tat_data")
+else:
+    RESOURCE_DIR = os.path.dirname(os.path.abspath(__file__))
+    PACKAGE_DIR = RESOURCE_DIR
+
 DEFAULT_SETTINGS_PATH = os.path.join(PACKAGE_DIR, "settings.json")
 
 DEFAULT_SHEET_ID = "1Sw-qSbLzvVdcW4rj7ywEZBEzKI6w5M82EQeYJUpdx7M"
@@ -31,6 +38,9 @@ class AutoHoanTatSettings:
     ptc_values: Tuple[str, ...] = ("TRIỂN KHAI",)
     pbt_values: Tuple[str, ...] = ("BẢO TRÌ", "XÁC MINH THÔNG TIN")
     write_sheet_webhook: bool = False
+    webhook_url: str = ""
+    auto_enabled: bool = False
+    auto_scan_interval_sec: int = 10
     log_dir: str = field(default_factory=lambda: os.path.join(PACKAGE_DIR, "logs"))
     probe_output_dir: str = field(default_factory=lambda: os.path.join(PACKAGE_DIR, "probe_output"))
 
@@ -78,6 +88,12 @@ def load_settings(settings_path: str = DEFAULT_SETTINGS_PATH) -> AutoHoanTatSett
                     cfg.pbt_values = tuple(str(x).strip().lower() for x in raw["pbt_values"] if str(x).strip())
                 if "write_sheet_webhook" in raw:
                     cfg.write_sheet_webhook = _parse_bool(raw["write_sheet_webhook"], False)
+                if "webhook_url" in raw:
+                    cfg.webhook_url = str(raw["webhook_url"] or "").strip()
+                if "auto_enabled" in raw:
+                    cfg.auto_enabled = _parse_bool(raw["auto_enabled"], False)
+                if "auto_scan_interval_sec" in raw:
+                    cfg.auto_scan_interval_sec = max(5, int(raw["auto_scan_interval_sec"]))
         except Exception:
             pass
 
@@ -87,6 +103,40 @@ def load_settings(settings_path: str = DEFAULT_SETTINGS_PATH) -> AutoHoanTatSett
         cfg.dry_run_default = _parse_bool(os.environ.get("AUTO_HOAN_TAT_DRY_RUN"), cfg.dry_run_default)
 
     return cfg
+
+
+def save_settings(updates: dict, settings_path: str = DEFAULT_SETTINGS_PATH) -> AutoHoanTatSettings:
+    """Lưu cấu hình an toàn (không chứa mật khẩu/token) vào auto_hoan_tat/settings.json."""
+    existing = {}
+    if settings_path and os.path.exists(settings_path):
+        try:
+            with open(settings_path, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            if isinstance(raw, dict):
+                existing = raw
+        except Exception:
+            existing = {}
+
+    allowed_keys = {
+        "enabled",
+        "sheet_id",
+        "sheet_gid",
+        "dry_run_default",
+        "rate_limit_sec",
+        "max_consecutive_errors",
+        "write_sheet_webhook",
+        "webhook_url",
+        "auto_enabled",
+        "auto_scan_interval_sec",
+    }
+    for k, v in (updates or {}).items():
+        if k in allowed_keys:
+            existing[k] = v
+
+    os.makedirs(os.path.dirname(settings_path), exist_ok=True)
+    with open(settings_path, "w", encoding="utf-8") as f:
+        json.dump(existing, f, ensure_ascii=False, indent=2)
+    return load_settings(settings_path)
 
 
 def is_enabled(settings_path: str = DEFAULT_SETTINGS_PATH) -> bool:

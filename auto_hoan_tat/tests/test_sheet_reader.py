@@ -92,6 +92,23 @@ class TestSheetReader(unittest.TestCase):
         self.assertEqual(r["dia_chi_kh"], "ĐC KH")
         self.assertEqual(r["danh_gia_xac_thuc"], "Đạt")
 
+    def test_ghi_chu_column_and_is_pending_hoan_tat_rule(self):
+        csv_text = (
+            '"ID","Ta\u0301c Vu\u0323","SHD","Kết Quả","Ghi Chú"\n'
+            '"1","Xác Minh Thông Tin","SGAFS1925","Chưa xử lý",""\n'
+            '"2","Xác Minh Thông Tin","SGAFS1926","Đã xử lý","Xong"\n'
+            '"3","BẢO TRÌ","SGAFS1927","Chưa xử lý",""\n'
+            '"4","Xác Minh Thông Tin","SGAFS1928","Không Thành Công","Vui lòng check in và thử lại"\n'
+        )
+        res = parse_csv_text(csv_text)
+        recs = res["records"]
+        self.assertEqual(len(recs), 4)
+        self.assertTrue(recs[0]["is_pending_auto"])
+        self.assertFalse(recs[1]["is_pending_auto"])
+        self.assertFalse(recs[2]["is_pending_auto"])
+        self.assertFalse(recs[3]["is_pending_auto"])
+        self.assertEqual(recs[3]["ghi_chu"], "Vui lòng check in và thử lại")
+
 
 if __name__ == "__main__":
     unittest.main()

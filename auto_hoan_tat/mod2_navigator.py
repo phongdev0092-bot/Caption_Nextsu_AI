@@ -314,7 +314,7 @@ def open_ticket_readonly(
         _verify_active_tab(session.driver, tab_dich)
         nav._fill_nhap_hop_dong(clean_shd)
         nav._open_cl_window()
-        _switch_to_fox_erp_if_needed(session.driver, clean_shd, log_cb=log_cb)
+        _wait_for_classic_pbt_ready(session.driver, clean_shd, log_cb=log_cb)
     else:
         raise UnsupportedTicketTypeError(f"Tab đích không hỗ trợ: '{tab_dich}'")
 
@@ -526,17 +526,60 @@ def close_extra_ticket_tabs(driver, main_handle: str) -> None:
         pass
 
 
+def _wait_for_classic_pbt_ready(
+    driver,
+    shd: str,
+    timeout_sec: float = 15.0,
+    log_cb: Optional[Callable[[str, str], None]] = None,
+) -> bool:
+    """
+    Chờ trang chi tiết THÔNG TIN BẢO TRÌ vừa mở sau khi bấm 'Xem CL' tải xong dữ liệu phiếu.
+    Làm việc trực tiếp trên trang THÔNG TIN BẢO TRÌ của Inside (KHÔNG bấm chuyển sang FOX-ERP).
+    """
+    deadline = time.monotonic() + max(1.0, float(timeout_sec))
+    while time.monotonic() < deadline:
+        info = _read_pbt_markers_any_frame(driver, keep_in_matching_frame=True)
+        if _has_valid_pbt_marker(info):
+            _emit(log_cb, f"Module 2: Trang THÔNG TIN BẢO TRÌ cho HĐ {shd} đã tải xong.", "info")
+            return True
+        time.sleep(0.35)
+    return False
+
+
+def _has_valid_pbt_marker(info: Dict) -> bool:
+    if not isinstance(info, dict):
+        return False
+    return bool(
+        info.get("has_tinh_trang_ban_dau")
+        or info.get("has_lich_su_nhan_nha")
+        or info.get("has_thong_tin_bao_tri")
+        or info.get("has_ghi_nhan")
+        or info.get("has_phan_cong")
+        or info.get("has_thay_doi_tt")
+    )
+
+
 _JS_READ_PBT_MARKERS = """
 (function() {
   var body = (document.body && (document.body.innerText || document.body.textContent)) || '';
   var norm = body.normalize ? body.normalize('NFC').replace(/\\s+/g, ' ').trim() : body.replace(/\\s+/g, ' ').trim();
   var low = norm.toLowerCase();
   var statusText = '';
-  var m = norm.match(/Tình trạng phiếu\\s*:\\s*([^\\n]+?)(?:Thay đổi tình trạng|$)/i);
-  if (m && m[1]) {
-    statusText = m[1].replace(/[•·]/g, '').trim();
+  // Ưu tiên đọc từ nhãn ">> Đang xử lý" / ">> Đã xử lý" / ">> Đã phân công" trên trang THÔNG TIN BẢO TRÌ
+  var mArrow = norm.match(/>>\\s*(Đang xử lý|Đã xử lý|Đã hoàn tất|Đã phân công|Chưa phân công|Đã nhận ca|Đang di chuyển)/i);
+  if (mArrow && mArrow[1]) {
+    statusText = mArrow[1].trim();
+  }
+  if (!statusText) {
+    var mFooter = norm.match(/Tình trạng phiếu\\s*:\\s*([^\\n]+?)(?:Thay đổi tình trạng|$)/i);
+    if (mFooter && mFooter[1]) {
+      statusText = mFooter[1].replace(/[•·]/g, '').trim();
+    }
   }
   return {
+    has_tinh_trang_ban_dau: low.indexOf('tình trạng ban đầu') !== -1 || low.indexOf('tình trạng sự cố ban đầu') !== -1,
+    has_lich_su_nhan_nha: low.indexOf('lịch sử nhận/nhả tuyến') !== -1 || low.indexOf('phân công / đối tác') !== -1,
+    has_thong_tin_bao_tri: low.indexOf('thông tin bảo trì') !== -1 || low.indexOf('danh sách phiếu bảo trì') !== -1 || low.indexOf('cập nhật kết quả xử lý') !== -1,
     has_ghi_nhan: low.indexOf('ghi nhận ban đầu') !== -1,
     has_phan_cong: low.indexOf('thông tin phân công') !== -1 || low.indexOf('lịch sử phân công') !== -1,
     has_thay_doi_tt: low.indexOf('thay đổi tình trạng') !== -1,
@@ -563,7 +606,7 @@ def _read_pbt_markers_any_frame(driver, keep_in_matching_frame: bool = False) ->
     except Exception:
         top_info = {}
 
-    if top_info.get("has_ghi_nhan") or top_info.get("has_phan_cong") or top_info.get("has_thay_doi_tt"):
+    if _has_valid_pbt_marker(top_info):
         return top_info
 
     try:
@@ -576,9 +619,7 @@ def _read_pbt_markers_any_frame(driver, keep_in_matching_frame: bool = False) ->
         try:
             driver.switch_to.frame(frame)
             sub = driver.execute_script(_JS_READ_PBT_MARKERS) or {}
-            if isinstance(sub, dict) and (
-                sub.get("has_ghi_nhan") or sub.get("has_phan_cong") or sub.get("has_thay_doi_tt")
-            ):
+            if _has_valid_pbt_marker(sub):
                 matched = True
                 if not keep_in_matching_frame:
                     driver.switch_to.default_content()
@@ -596,32 +637,32 @@ def _read_pbt_markers_any_frame(driver, keep_in_matching_frame: bool = False) ->
 
 
 def _read_footer_ticket_status(driver) -> str:
-    """Đọc nhanh trạng thái phiếu ở thanh footer 'Tình trạng phiếu: ...' (chỉ-đọc)."""
+    """Đọc nhanh trạng thái phiếu trên trang THÔNG TIN BẢO TRÌ (chỉ-đọc)."""
     info = _read_pbt_markers_any_frame(driver, keep_in_matching_frame=False)
     return normalize_nfc(info.get("ticket_status") or "")
 
 
 def _verify_pbt_detail_markers(driver, shd: str) -> Dict:
     """
-    Xác nhận đã vào đúng màn hình chi tiết PBT trên FOX-ERP bằng các dấu hiệu đặc trưng:
-    - Card 'Ghi nhận ban đầu'
-    - Card 'Thông tin phân công' / nút 'Lịch sử phân công'
-    - Footer 'Thay đổi tình trạng'
+    Xác nhận đã vào đúng màn hình chi tiết THÔNG TIN BẢO TRÌ sau khi bấm 'Xem CL':
+    - Bảng 'Tình trạng ban đầu' / 'Tình trạng sự cố ban đầu'
+    - Nút 'Lịch sử nhận/nhả tuyến' / 'Phân công / Đối tác'
+    - 'THÔNG TIN BẢO TRÌ' / 'Cập nhật kết quả xử lý'
     Nếu thiếu toàn bộ dấu hiệu -> ném WrongPageError kèm URL & trích đoạn trang để chẩn đoán.
     """
     info = _read_pbt_markers_any_frame(driver, keep_in_matching_frame=True)
     if not isinstance(info, dict):
         return {"ticket_status": ""}
 
-    if not (info.get("has_ghi_nhan") or info.get("has_phan_cong") or info.get("has_thay_doi_tt")):
+    if not _has_valid_pbt_marker(info):
         curr_url = str(getattr(driver, "current_url", "") or "")
         curr_title = str(getattr(driver, "title", "") or "")
         preview = normalize_nfc(info.get("body_preview") or "")
         iframe_cnt = info.get("iframe_count", 0)
         ready = info.get("ready_state", "")
         raise WrongPageError(
-            f"Trang mở cho HĐ {shd} không có dấu hiệu màn hình chi tiết PBT "
-            f"(thiếu 'Ghi nhận ban đầu', 'Thông tin phân công' và 'Thay đổi tình trạng'). "
+            f"Trang mở cho HĐ {shd} không có dấu hiệu màn hình THÔNG TIN BẢO TRÌ "
+            f"(thiếu 'Tình trạng ban đầu', 'Lịch sử nhận/nhả tuyến' và 'Thông tin bảo trì'). "
             f"[URL={curr_url} | Title={curr_title} | ready={ready} | iframes={iframe_cnt} | Nội dung='{preview}']"
         )
     return info

@@ -17,6 +17,7 @@ import sys
 import threading
 import time
 from typing import Callable, Dict, List, Optional
+import urllib.request
 
 from .config import AutoHoanTatSettings, load_settings
 from .mod1_auth import FeatureDisabledError, create_inside_session
@@ -80,6 +81,7 @@ def export_results_csv(results: List[Dict], csv_path: str) -> str:
         "Chế độ",
         "Trạng thái xử lý",
         "Kết Quả",
+        "Ghi Chú",
         "Trạng thái sau xử lý",
         "Thời lượng (ms)",
     ]
@@ -96,11 +98,62 @@ def export_results_csv(results: List[Dict], csv_path: str) -> str:
                     r.get("mode", ""),
                     r.get("status", ""),
                     r.get("ket_qua", ""),
+                    r.get("ghi_chu", ""),
                     r.get("post_status", ""),
                     r.get("elapsed_ms", 0),
                 ]
             )
     return csv_path
+
+
+def _send_sheet_webhook(
+    cfg: AutoHoanTatSettings,
+    row: Dict,
+    exec_res: ExecutionResult,
+    log_cb: Optional[Callable[[str, str], None]] = None,
+) -> bool:
+    """
+    Chỉ gọi khi CHẠY THẬT (DRY-RUN tuyệt đối không gọi) và người dùng đã cấu hình webhook_url.
+    Cập nhật cột Kết Quả (J), Ghi Chú (K) và Ngày Cập Nhật (I) lên Google Sheet qua Apps Script Webhook.
+    """
+    url = (cfg.webhook_url or "").strip()
+    if not url:
+        return False
+
+    payload = {
+        "sheet_id": cfg.sheet_id,
+        "gid": cfg.sheet_gid,
+        "row_id": row.get("row_id") or row.get("ID") or "",
+        "shd": exec_res.ma_phieu,
+        "status": exec_res.ket_qua,
+        "ket_qua": exec_res.ket_qua,
+        "ghi_chu": exec_res.ghi_chu,
+        "timestamp": time.strftime("%d/%m/%Y %H:%M:%S"),
+    }
+    data_bytes = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    last_err = None
+    for attempt in range(1, 4):
+        try:
+            req = urllib.request.Request(
+                url,
+                data=data_bytes,
+                headers={"Content-Type": "application/json; charset=utf-8", "User-Agent": "Mozilla/5.0"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                if 200 <= resp.status < 300:
+                    _emit(
+                        log_cb,
+                        f"Webhook Sheet: Đã cập nhật HĐ {exec_res.ma_phieu} -> Kết Quả='{exec_res.ket_qua}' | Ghi Chú='{exec_res.ghi_chu}'.",
+                        "success",
+                    )
+                    return True
+        except Exception as exc:
+            last_err = exc
+            if attempt < 3:
+                time.sleep(1.0 * attempt)
+    _emit(log_cb, f"Webhook Sheet: Không ghi được kết quả cho HĐ {exec_res.ma_phieu}: {last_err}", "warning")
+    return False
 
 
 def run_batch(
@@ -225,12 +278,16 @@ def run_batch(
                 if exec_res.status == STATUS_SUCCESS:
                     summary.success += 1
                     consecutive_errors = 0
+                    if not is_dry_run:
+                        _send_sheet_webhook(cfg, row, exec_res, log_cb=_tee_log)
                 elif exec_res.status == STATUS_DRY_RUN_READY:
                     summary.dry_run_ready += 1
                     consecutive_errors = 0
                 elif exec_res.status == STATUS_NOT_ELIGIBLE:
                     summary.not_eligible += 1
                     consecutive_errors = 0
+                    if not is_dry_run:
+                        _send_sheet_webhook(cfg, row, exec_res, log_cb=_tee_log)
                 elif exec_res.status == STATUS_SKIPPED_ALREADY_DONE:
                     summary.skipped += 1
                     consecutive_errors = 0
@@ -248,7 +305,8 @@ def run_batch(
                     "loai": loai or "",
                     "mode": mode_str,
                     "status": STATUS_ERROR,
-                    "ket_qua": f"Lỗi: {exc}",
+                    "ket_qua": "Không Thành Công",
+                    "ghi_chu": f"Lỗi: {exc}",
                     "post_status": "",
                     "elapsed_ms": 0,
                 }

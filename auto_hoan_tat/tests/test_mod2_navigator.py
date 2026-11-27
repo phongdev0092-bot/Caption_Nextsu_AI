@@ -2,7 +2,7 @@ import json
 import os
 import tempfile
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from inside_assign import InsideAssignAutomation
 
@@ -225,59 +225,34 @@ class TestMod2Navigator(unittest.TestCase):
         orig_exec = self.driver.execute_script
 
         def _missing_markers(script, *args):
-            if "has_ghi_nhan" in script:
-                return {"has_ghi_nhan": False, "has_phan_cong": False, "has_thay_doi_tt": False, "ticket_status": ""}
+            if "has_tinh_trang_ban_dau" in script:
+                return {
+                    "has_tinh_trang_ban_dau": False,
+                    "has_lich_su_nhan_nha": False,
+                    "has_thong_tin_bao_tri": False,
+                    "has_ghi_nhan": False,
+                    "has_phan_cong": False,
+                    "has_thay_doi_tt": False,
+                    "ticket_status": "",
+                }
             return orig_exec(script, *args)
 
         self.driver.execute_script = _missing_markers
-        with self.assertRaises(WrongPageError):
-            navigate_to_ticket(
-                session=self.session,
-                shd="SGAEQ7509",
-                tac_vu="XÁC MINH THÔNG TIN",
-                settings=self.cfg,
-                adapter=self.adapter,
-            )
+        with patch("auto_hoan_tat.mod2_navigator.time.sleep", return_value=None), patch(
+            "auto_hoan_tat.mod2_navigator._wait_for_classic_pbt_ready",
+            return_value=False,
+        ):
+            with self.assertRaises(WrongPageError):
+                navigate_to_ticket(
+                    session=self.session,
+                    shd="SGAEQ7509",
+                    tac_vu="XÁC MINH THÔNG TIN",
+                    settings=self.cfg,
+                    adapter=self.adapter,
+                )
 
-    def test_switch_to_fox_erp_banner_link_when_on_old_ui(self):
-        self.driver.window_handles = ["WIN_MAIN", "WIN_CL_OLD"]
-        switched_to = []
-
-        def _fake_switch_window(handle):
-            switched_to.append(handle)
-            self.driver.current_window_handle = handle
-            if handle == "WIN_FOX_NEW":
-                self.driver.current_url = "https://fox-erp.fpt.net/app/tkbt/bt/ticket?q=abc"
-
-        self.driver.switch_to.window = _fake_switch_window
-        orig_exec = self.driver.execute_script
-
-        def _exec_with_banner(script, *args):
-            if "fox-erp.fpt.net" in script and "phiên bản mới" in script:
-                self.driver.window_handles.append("WIN_FOX_NEW")
-                return {"found": True, "href": "https://fox-erp.fpt.net/app/tkbt/bt/ticket?q=abc", "text": "đây"}
-            return orig_exec(script, *args)
-
-        self.driver.execute_script = _exec_with_banner
-
-        ctx = navigate_to_ticket(
-            session=self.session,
-            shd="SGAFS1925",
-            tac_vu="XÁC MINH THÔNG TIN",
-            settings=self.cfg,
-            adapter=self.adapter,
-        )
-        self.assertIn("WIN_FOX_NEW", switched_to)
-        self.assertIn("fox-erp.fpt.net", ctx.url)
-
-    def test_skips_fox_erp_banner_when_already_on_new_fox_erp_url(self):
+    def test_stays_on_classic_inside_pbt_without_clicking_fox_erp_banner(self):
         banner_clicked = {"called": False}
-
-        def _open_cl_direct_fox():
-            self.adapter.calls.append("_open_cl_window")
-            self.driver.current_url = "https://fox-erp.fpt.net/app/tkbt/bt/ticket?q=direct"
-
-        self.adapter._open_cl_window = _open_cl_direct_fox
         orig_exec = self.driver.execute_script
 
         def _exec_spy(script, *args):
@@ -294,7 +269,7 @@ class TestMod2Navigator(unittest.TestCase):
             adapter=self.adapter,
         )
         self.assertFalse(banner_clicked["called"])
-        self.assertIn("fox-erp.fpt.net", ctx.url)
+        self.assertIn("inside.fpt.net", ctx.url)
 
     def test_contract_inside_assign_methods_exist_and_callable(self):
         """Test hợp đồng: đảm bảo mọi phương thức của InsideAssignAutomation mà Module 2 gọi vẫn tồn tại."""

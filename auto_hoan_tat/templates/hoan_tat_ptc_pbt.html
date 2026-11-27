@@ -18,10 +18,10 @@
     .aht-header {
       display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
       gap: 12px; background: #fff; border: 1px solid #e2e8f0; border-radius: 14px;
-      padding: 16px 20px; box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04); margin-bottom: 16px;
+      padding: 16px 20px; box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04); margin-bottom: 14px;
     }
     .aht-title-wrap { display: flex; align-items: center; gap: 12px; }
-    .aht-title { font-size: 20px; font-weight: 700; margin: 0; color: #0f172a; }
+    .aht-title { font-size: 19px; font-weight: 700; margin: 0; color: #0f172a; }
     .aht-sub { font-size: 12.5px; color: #64748b; margin-top: 2px; }
     .aht-pill {
       display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;
@@ -34,7 +34,7 @@
 
     .aht-card {
       background: #fff; border: 1px solid #e2e8f0; border-radius: 14px;
-      padding: 16px 18px; box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04); margin-bottom: 16px;
+      padding: 15px 18px; box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04); margin-bottom: 14px;
     }
     .aht-toolbar {
       display: flex; flex-wrap: wrap; align-items: center; gap: 10px; justify-content: space-between;
@@ -45,7 +45,7 @@
       font-size: 13px; background: #fff; color: #0f172a;
     }
     .aht-btn {
-      height: 36px; padding: 0 14px; border-radius: 8px; border: 1px solid transparent;
+      height: 36px; padding: 0 13px; border-radius: 8px; border: 1px solid transparent;
       font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
       transition: all 0.15s ease;
     }
@@ -58,20 +58,28 @@
     .btn-danger:hover:not(:disabled) { background: #b91c1c; }
     .btn-ghost { background: #fff; color: #334155; border-color: #cbd5e1; }
     .btn-ghost:hover:not(:disabled) { background: #f8fafc; }
+    .btn-auto-on { background: #ecfdf5; color: #047857; border: 1.5px solid #10b981; }
+    .btn-auto-off { background: #fff; color: #475569; border: 1.5px solid #cbd5e1; }
+    .auto-dot { width: 8px; height: 8px; border-radius: 999px; display: inline-block; }
 
     .aht-stats {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
       gap: 10px; margin-bottom: 14px;
     }
     .aht-stat {
       background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px;
     }
-    .aht-stat-label { font-size: 11.5px; color: #64748b; font-weight: 600; text-transform: uppercase; }
+    .aht-stat-label { font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; }
     .aht-stat-val { font-size: 22px; font-weight: 700; color: #0f172a; margin-top: 2px; }
+
+    .aht-webhook-bar {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+      margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e2e8f0; font-size: 12.5px;
+    }
 
     .aht-progress-wrap { margin-top: 12px; }
     .aht-progress-bar {
-      width: 100%; height: 10px; background: #e2e8f0; border-radius: 999px; overflow: hidden;
+      width: 100%; height: 9px; background: #e2e8f0; border-radius: 999px; overflow: hidden;
     }
     .aht-progress-fill {
       height: 100%; width: 0%; background: linear-gradient(90deg, #2563eb, #10b981);
@@ -81,17 +89,17 @@
       display: flex; justify-content: space-between; font-size: 12.5px; color: #475569; margin-top: 6px;
     }
 
-    .aht-table-wrap { overflow-x: auto; max-height: 460px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 10px; }
-    table.aht-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .aht-table-wrap { overflow-x: auto; max-height: 440px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 10px; }
+    table.aht-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
     table.aht-table th {
       position: sticky; top: 0; background: #f1f5f9; color: #334155; text-align: left;
-      padding: 10px 10px; font-weight: 600; border-bottom: 1px solid #cbd5e1; z-index: 2;
+      padding: 9px 10px; font-weight: 600; border-bottom: 1px solid #cbd5e1; z-index: 2;
     }
-    table.aht-table td { padding: 9px 10px; border-bottom: 1px solid #eef2f7; vertical-align: top; }
+    table.aht-table td { padding: 8px 10px; border-bottom: 1px solid #eef2f7; vertical-align: top; }
     table.aht-table tr:hover td { background: #f8fafc; }
 
     .badge {
-      display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600;
+      display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
     }
     .b-pbt { background: #dbeafe; color: #1d4ed8; }
     .b-ptc { background: #ede9fe; color: #6d28d9; }
@@ -102,7 +110,7 @@
 
     .aht-logs {
       background: #0f172a; color: #e2e8f0; border-radius: 10px; padding: 12px 14px;
-      font-family: Consolas, Monaco, monospace; font-size: 12.5px; height: 220px;
+      font-family: Consolas, Monaco, monospace; font-size: 12px; height: 210px;
       overflow-y: auto; line-height: 1.5;
     }
     .log-info { color: #cbd5e1; }
@@ -116,11 +124,11 @@
     }
     .aht-modal-backdrop.open { display: flex; }
     .aht-modal {
-      background: #fff; border-radius: 14px; padding: 22px 24px; max-width: 480px; width: 92%;
+      background: #fff; border-radius: 14px; padding: 22px 24px; max-width: 500px; width: 92%;
       box-shadow: 0 20px 45px rgba(15, 23, 42, 0.25);
     }
     .aht-modal h3 { margin: 0 0 10px; font-size: 17px; color: #b91c1c; }
-    .aht-modal p { margin: 0 0 14px; font-size: 13.5px; color: #334155; line-height: 1.5; }
+    .aht-modal p { margin: 0 0 12px; font-size: 13.5px; color: #334155; line-height: 1.5; }
     .aht-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
   </style>
 </head>
@@ -129,9 +137,9 @@
     <div class="aht-header">
       <div class="aht-title-wrap">
         <div>
-          <h1 class="aht-title">Auto Hoàn Tất PTC / PBT</h1>
+          <h1 class="aht-title">✅ Auto Hoàn Tất PTC / PBT (Đóng ca Bảo Trì)</h1>
           <div class="aht-sub">
-            Google Sheet GID: <code>{{ sheet_gid }}</code> • Cô lập hoàn toàn, không ảnh hưởng hệ thống cũ (cổng 5001)
+            Sheet GID: <code>{{ sheet_gid }}</code> • Tự chạy khi Cột B = <strong>Xác Minh Thông Tin</strong> &amp; Cột J = <strong>Chưa xử lý</strong>
           </div>
         </div>
       </div>
@@ -139,6 +147,11 @@
         {% if not embed %}
         <span class="aht-pill pill-port">Cổng độc lập: {{ port }}</span>
         {% endif %}
+        <button id="btnAutoToggle" class="aht-btn btn-auto-off" type="button">
+          <span>🤖</span>
+          <span id="autoToggleText">Tự Động: TẮT</span>
+          <span id="autoToggleDot" class="auto-dot" style="background:#94a3b8;"></span>
+        </button>
         <span id="modeBadge" class="aht-pill pill-dry">Chế độ: DRY-RUN (Mô phỏng)</span>
         {% if not enabled %}
         <span class="aht-pill pill-off">Tính năng đang TẮT</span>
@@ -153,23 +166,23 @@
           <div class="aht-stat-val" id="statTotal">0</div>
         </div>
         <div class="aht-stat">
+          <div class="aht-stat-label">Chờ Auto (XMTT)</div>
+          <div class="aht-stat-val" id="statPendingAuto" style="color:#d97706;">0</div>
+        </div>
+        <div class="aht-stat">
           <div class="aht-stat-label">PBT (Bảo trì / XMTT)</div>
           <div class="aht-stat-val" id="statPbt" style="color:#1d4ed8;">0</div>
         </div>
         <div class="aht-stat">
-          <div class="aht-stat-label">PTC (Triển khai)</div>
-          <div class="aht-stat-val" id="statPtc" style="color:#6d28d9;">0</div>
-        </div>
-        <div class="aht-stat">
-          <div class="aht-stat-label">Đủ ĐK / Thành công</div>
+          <div class="aht-stat-label">Đủ ĐK / Đã xử lý</div>
           <div class="aht-stat-val" id="statSuccess" style="color:#059669;">0</div>
         </div>
         <div class="aht-stat">
-          <div class="aht-stat-label">Không đủ ĐK</div>
-          <div class="aht-stat-val" id="statNotEligible" style="color:#d97706;">0</div>
+          <div class="aht-stat-label">Không Thành Công</div>
+          <div class="aht-stat-val" id="statNotEligible" style="color:#ea580c;">0</div>
         </div>
         <div class="aht-stat">
-          <div class="aht-stat-label">Lỗi</div>
+          <div class="aht-stat-label">Lỗi hệ thống</div>
           <div class="aht-stat-val" id="statErrors" style="color:#dc2626;">0</div>
         </div>
       </div>
@@ -177,12 +190,12 @@
       <div class="aht-toolbar">
         <div class="aht-group">
           <button id="btnReload" class="aht-btn btn-primary">↻ Tải lại Sheet</button>
-          <input id="searchShd" class="aht-input" type="text" placeholder="Tìm SHD..." style="width:150px;" />
+          <input id="searchShd" class="aht-input" type="text" placeholder="Tìm SHD..." style="width:140px;" />
           <select id="filterLoai" class="aht-select">
             <option value="">Tất cả loại</option>
+            <option value="PENDING_AUTO">Chỉ phiếu Chờ Auto</option>
             <option value="PBT">PBT</option>
             <option value="PTC">PTC</option>
-            <option value="INVALID">Không hợp lệ</option>
           </select>
           <select id="filterTacVu" class="aht-select">
             <option value="">Tất cả Tác Vụ</option>
@@ -195,7 +208,7 @@
         <div class="aht-group">
           <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer;">
             <input id="chkDryRun" type="checkbox" checked />
-            DRY-RUN (Chỉ kiểm tra, không ghi)
+            DRY-RUN (Chỉ kiểm tra)
           </label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
             <input id="chkVisible" type="checkbox" checked />
@@ -205,6 +218,13 @@
           <button id="btnStop" class="aht-btn btn-danger" disabled>■ Dừng</button>
           <button id="btnExportCsv" class="aht-btn btn-ghost">⬇ Xuất CSV</button>
         </div>
+      </div>
+
+      <div class="aht-webhook-bar">
+        <span style="font-weight:600;color:#334155;">🔗 Webhook ghi Sheet (Cột I/J/K khi chạy thật):</span>
+        <input id="inputWebhookUrl" class="aht-input" type="text" placeholder="Dán URL Google Apps Script Webhook (tùy chọn)..." style="flex:1;min-width:260px;height:32px;font-size:12.5px;" />
+        <button id="btnSaveWebhook" class="aht-btn btn-ghost" style="height:32px;font-size:12px;">Lưu Webhook</button>
+        <span id="webhookStatus" style="color:#64748b;font-size:12px;"></span>
       </div>
 
       <div class="aht-progress-wrap">
@@ -223,14 +243,14 @@
         <table class="aht-table">
           <thead>
             <tr>
-              <th style="width:36px;"><input id="chkSelectAll" type="checkbox" checked /></th>
-              <th style="width:54px;">ID</th>
-              <th style="width:130px;">SHD</th>
-              <th style="width:170px;">Tác Vụ</th>
-              <th style="width:120px;">Loại / Tab</th>
-              <th style="width:170px;">Kết Quả (Sheet)</th>
-              <th style="width:160px;">Trạng thái chạy</th>
-              <th>Chi tiết kiểm tra / Thực thi</th>
+              <th style="width:34px;"><input id="chkSelectAll" type="checkbox" checked /></th>
+              <th style="width:46px;">ID</th>
+              <th style="width:115px;">SHD</th>
+              <th style="width:150px;">Tác Vụ (Cột B)</th>
+              <th style="width:110px;">Loại / Tab</th>
+              <th style="width:130px;">Kết Quả (Cột J)</th>
+              <th style="width:145px;">Trạng thái chạy</th>
+              <th>Ghi Chú (Cột K / Chi tiết)</th>
             </tr>
           </thead>
           <tbody id="ticketTableBody">
@@ -254,11 +274,10 @@
   <!-- Modal xác nhận khi tắt DRY-RUN để CHẠY THẬT -->
   <div id="confirmRealModal" class="aht-modal-backdrop">
     <div class="aht-modal">
-      <h3>⚠️ Xác nhận CHẠY THẬT trên Inside / FOX-ERP</h3>
+      <h3>⚠️ Xác nhận CHẠY THẬT (Đóng ca Bảo Trì trên Inside)</h3>
       <p>
-        Bạn đang tắt chế độ <strong>DRY-RUN</strong>. Hệ thống sẽ thực sự bấm
-        <strong>Thay đổi tình trạng → Đã xử lý</strong>, cập nhật <em>Thông tin bảo trì</em>,
-        <em>Thông tin dịch vụ</em> và bấm <strong>Xác nhận</strong> cho các phiếu đủ điều kiện.
+        Bạn đang tắt chế độ <strong>DRY-RUN</strong>. Với các phiếu đạt đủ 2 điều kiện (Tình trạng ban đầu + Thời gian checkin), hệ thống sẽ thực sự bấm
+        <strong>Xem thêm</strong> → chọn nguyên nhân <em>Mỹ Bảo</em> → thêm <em>Nguyên nhân lỗi (Internet)</em> → đổi <em>Kết quả xử lý</em> sang <strong>Đã xử lý</strong> → bấm <strong>Cập nhật</strong>.
       </p>
       <p id="confirmRealCount" style="font-weight:600;color:#0f172a;"></p>
       <div class="aht-modal-actions">

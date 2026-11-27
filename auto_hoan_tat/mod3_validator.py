@@ -1,19 +1,18 @@
 """
-Module 3 - Kiểm tra điều kiện hoàn tất PTC/PBT (CHỈ ĐỌC, tuyệt đối không thay đổi dữ liệu).
+Module 3 - Kiểm tra điều kiện hoàn tất PBT trên màn hình THÔNG TIN BẢO TRÌ (CHỈ ĐỌC).
 
-Quy tắc đã xác nhận cho PBT - Tác Vụ "XÁC MINH THÔNG TIN":
-- Kiểm tra Idempotent: Nếu trạng thái phiếu trên Inside hoặc cột Kết Quả trên Sheet đã là "Đã xử lý"/"Đã hoàn tất"
+Quy tắc đã xác nhận cho PBT - Tác Vụ "Xác Minh Thông Tin" (cột J = "Chưa xử lý"):
+- Idempotent: Nếu trạng thái phiếu trên Inside hoặc cột Kết Quả trên Sheet đã là "Đã xử lý" / "Đã hoàn tất"
   -> bỏ qua (du_dieu_kien=False, da_hoan_tat=True).
-- Điều kiện 0 (Tiên quyết): Card "Ghi nhận ban đầu" phải chứa:
-  "KH không cung cấp rõ tình trạng lỗi hoặc KH có khiếu nại RM".
-  Nếu không thỏa -> trả đúng thông báo:
-  "Không thành công: Phiếu bảo trì có tình trạng ban đầu không thỏa: KH không cung cấp rõ tình trạng lỗi hoặc KH có khiếu nại RM"
-- Điều kiện 1 (Check-in): Bấm nút "Lịch sử phân công" (chỉ mở popup xem bảng) -> kiểm tra cột "TG CHECKIN" có giá trị -> đóng popup.
-  Nếu trống -> trả đúng thông báo:
-  "Không thành công: Phiếu bảo trì chưa checkin. Vui lòng check in và thử lại"
-- Điều kiện 2 (Giục tiến độ): Nếu nút "Giục tiến độ" có >= 1 lần -> bấm mở popup "Thông tin giục tiến độ" -> đọc "Kết quả xử lý" -> đóng popup.
-  Nếu đang ở trạng thái "Đang xử lý" (chưa "Đã xử lý") -> trả đúng thông báo:
-  "Không thành công: Phiếu bảo trì chưa đóng Giục Tiến Độ. Vui lòng cập nhật Giục Tiến Độ và thử lại"
+- Điều kiện 3a (Tình trạng ban đầu):
+  Đọc bảng cột "Tình trạng ban đầu" (khối "Tình trạng sự cố ban đầu/Hiện tại"):
+  Phải là "KH không cung cấp rõ tình trạng lỗi hoặc KH có khiếu nại RM".
+  Nếu sai -> Kết Quả = "Không Thành Công",
+  Ghi Chú = "Cập nhật lại tình trạng ban đầu KH không cung cấp rõ tình trạng lỗi hoặc KH có khiếu nại RM và thử lại".
+- Điều kiện 3b (Lịch sử nhận/nhả tuyến -> Thời gian checkin):
+  Bấm nút "Lịch sử nhận/nhả tuyến" -> đọc cột "Thời gian checkin" trong popup -> đóng popup.
+  Nếu trống / chưa có giá trị -> Kết Quả = "Không Thành Công",
+  Ghi Chú = "Vui lòng check in và thử lại".
 
 Đầu ra mỗi phiếu:
   {
@@ -21,13 +20,14 @@ Quy tắc đã xác nhận cho PBT - Tác Vụ "XÁC MINH THÔNG TIN":
     "loai": "PTC" | "PBT" | None,
     "tac_vu": str,
     "du_dieu_kien": bool,
+    "ket_qua": str,
+    "ghi_chu": str,
     "ly_do_neu_khong_du": str,
     "da_hoan_tat": bool,
     "chi_tiet": dict,
   }
 """
 
-import re
 import time
 from typing import Callable, Dict, Optional
 
@@ -38,49 +38,100 @@ from .sheet_reader import normalize_nfc
 
 REQUIRED_INITIAL_NOTE = "KH không cung cấp rõ tình trạng lỗi hoặc KH có khiếu nại RM"
 
-ERR_COND0_INITIAL_NOTE = (
-    "Không thành công: Phiếu bảo trì có tình trạng ban đầu không thỏa: "
-    "KH không cung cấp rõ tình trạng lỗi hoặc KH có khiếu nại RM"
-)
-ERR_COND1_NOT_CHECKED_IN = (
-    "Không thành công: Phiếu bảo trì chưa checkin. Vui lòng check in và thử lại"
-)
-ERR_COND2_GIUC_TIEN_DO_OPEN = (
-    "Không thành công: Phiếu bảo trì chưa đóng Giục Tiến Độ. Vui lòng cập nhật Giục Tiến Độ và thử lại"
-)
+KET_QUA_KHONG_THANH_CONG = "Không Thành Công"
 
-_JS_READ_INITIAL_NOTE = """
+GHI_CHU_SAI_TINH_TRANG_BAN_DAU = (
+    "Cập nhật lại tình trạng ban đầu KH không cung cấp rõ tình trạng lỗi hoặc KH có khiếu nại RM và thử lại"
+)
+GHI_CHU_CHUA_CHECKIN = "Vui lòng check in và thử lại"
+
+ERR_COND0_INITIAL_NOTE = f"{KET_QUA_KHONG_THANH_CONG}: {GHI_CHU_SAI_TINH_TRANG_BAN_DAU}"
+ERR_COND1_NOT_CHECKED_IN = f"{KET_QUA_KHONG_THANH_CONG}: {GHI_CHU_CHUA_CHECKIN}"
+
+_JS_READ_INITIAL_STATUS_TABLE = """
 (function() {
-  function norm(s) { return String(s || '').replace(/\\s+/g, ' ').trim(); }
-  var headings = Array.from(document.querySelectorAll('div, span, h1, h2, h3, h4, h5, h6, p'));
-  var card = null;
-  for (var i = 0; i < headings.length; i++) {
-    var t = norm(headings[i].innerText || headings[i].textContent);
-    if (t.toLowerCase() === 'ghi nhận ban đầu') {
-      var cur = headings[i];
-      for (var k = 0; k < 5 && cur && cur.parentElement; k++) {
-        cur = cur.parentElement;
-        var ct = norm(cur.innerText || cur.textContent);
-        if (ct.length > t.length + 5 && ct.length < 2500) {
-          card = cur;
-          break;
-        }
+  function norm(s) {
+    var str = String(s || '');
+    return (str.normalize ? str.normalize('NFC') : str).replace(/\\s+/g, ' ').trim();
+  }
+  function isVis(el) {
+    if (!el) return false;
+    try {
+      var st = window.getComputedStyle(el);
+      if (st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0') return false;
+      var r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    } catch (e) { return false; }
+  }
+
+  // 1. Tìm bảng có cột 'Tình trạng ban đầu' (nhưng KHÔNG phải bảng dưới khối 'Nguyên nhân lỗi')
+  var tables = Array.from(document.querySelectorAll('table')).filter(isVis);
+  var foundValues = [];
+  for (var t = 0; t < tables.length; t++) {
+    var tbl = tables[t];
+    var ths = Array.from(tbl.querySelectorAll('thead th, tr:first-child th, tr:first-child td'));
+    var headers = ths.map(function(h) { return norm(h.innerText || h.textContent).toLowerCase(); });
+    // Bỏ qua bảng 'Nguyên nhân lỗi' (có thêm cột 'phần tử lỗi' / 'hướng xử lý')
+    if (headers.some(function(h) { return h.indexOf('phần tử lỗi') !== -1 || h.indexOf('hướng xử lý') !== -1; })) {
+      continue;
+    }
+    var ttIdx = -1;
+    for (var c = 0; c < headers.length; c++) {
+      if (headers[c].indexOf('tình trạng ban đầu') !== -1) {
+        ttIdx = c;
+        break;
       }
-      if (card) break;
+    }
+    if (ttIdx === -1) continue;
+
+    var rows = Array.from(tbl.querySelectorAll('tbody tr'));
+    if (!rows.length) {
+      rows = Array.from(tbl.querySelectorAll('tr')).slice(1);
+    }
+    for (var r = 0; r < rows.length; r++) {
+      var tds = rows[r].querySelectorAll('td');
+      if (tds.length > ttIdx) {
+        var cell = tds[ttIdx];
+        var txt = norm(cell.innerText || cell.textContent);
+        // Nếu cell chứa input/select thì đọc cả value
+        if (!txt) {
+          var inp = cell.querySelector('input, select, textarea');
+          if (inp) txt = norm(inp.value || '');
+        }
+        // Bỏ dấu 'x' nút xóa chip nếu bị dính ở cuối
+        txt = txt.replace(/\\s*[×x]\\s*$/i, '').trim();
+        if (txt) foundValues.push(txt);
+      }
+    }
+    if (foundValues.length) {
+      return { found_table: true, values: foundValues, text: foundValues.join(' | ') };
     }
   }
-  if (card) {
-    return norm(card.innerText || card.textContent);
+
+  // 2. Fallback: tìm khu vực có nhãn 'Tình trạng sự cố ban đầu' hoặc 'Ghi nhận ban đầu'
+  var allCells = Array.from(document.querySelectorAll('td, div, section')).filter(isVis);
+  for (var i = 0; i < allCells.length; i++) {
+    var ct = norm(allCells[i].innerText || allCells[i].textContent);
+    var low = ct.toLowerCase();
+    if ((low.indexOf('tình trạng sự cố ban đầu') !== -1 || low.indexOf('ghi nhận ban đầu') !== -1) && ct.length < 1500) {
+      var next = allCells[i].nextElementSibling;
+      var combined = next ? (ct + ' | ' + norm(next.innerText || next.textContent)) : ct;
+      return { found_table: false, values: [combined], text: combined };
+    }
   }
-  return norm((document.body && document.body.innerText) || '').slice(0, 4000);
+
+  return { found_table: false, values: [], text: '' };
 })();
 """
 
 _JS_CLICK_BUTTON_BY_TEXT = """
 (function(needle) {
-  function norm(s) { return String(s || '').replace(/\\s+/g, ' ').trim().toLowerCase(); }
+  function norm(s) {
+    var str = String(s || '');
+    return (str.normalize ? str.normalize('NFC') : str).replace(/\\s+/g, ' ').trim().toLowerCase();
+  }
   var targetKey = norm(needle);
-  var btns = Array.from(document.querySelectorAll('button, a, [role="button"]'));
+  var btns = Array.from(document.querySelectorAll('button, a, input[type="button"], input[type="submit"], [role="button"]'));
   for (var i = 0; i < btns.length; i++) {
     var el = btns[i];
     var txt = norm(el.innerText || el.textContent || el.value || '');
@@ -97,24 +148,43 @@ _JS_CLICK_BUTTON_BY_TEXT = """
 
 _JS_READ_ASSIGN_HISTORY_CHECKIN = """
 (function() {
-  function norm(s) { return String(s || '').replace(/\\s+/g, ' ').trim(); }
-  var tables = Array.from(document.querySelectorAll('table'));
-  for (var t = 0; t < tables.length; t++) {
+  function norm(s) {
+    var str = String(s || '');
+    return (str.normalize ? str.normalize('NFC') : str).replace(/\\s+/g, ' ').trim();
+  }
+  function isVis(el) {
+    if (!el) return false;
+    try {
+      var st = window.getComputedStyle(el);
+      if (st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0') return false;
+      var r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    } catch (e) { return false; }
+  }
+
+  var tables = Array.from(document.querySelectorAll('table')).filter(isVis);
+  for (var t = tables.length - 1; t >= 0; t--) {
     var tbl = tables[t];
     var ths = Array.from(tbl.querySelectorAll('thead th, tr:first-child th, tr:first-child td'));
     var checkinIdx = -1;
     for (var c = 0; c < ths.length; c++) {
       var h = norm(ths[c].innerText || ths[c].textContent).toLowerCase();
-      if (h.indexOf('tg checkin') !== -1 || h.indexOf('tg check-in') !== -1 || h.indexOf('check in') !== -1) {
+      if (
+        h.indexOf('thời gian checkin') !== -1 ||
+        h.indexOf('thời gian check-in') !== -1 ||
+        h.indexOf('thời gian check in') !== -1 ||
+        h.indexOf('tg checkin') !== -1 ||
+        h.indexOf('tg check-in') !== -1
+      ) {
         checkinIdx = c;
         break;
       }
     }
     if (checkinIdx === -1) continue;
+
     var rows = Array.from(tbl.querySelectorAll('tbody tr'));
     if (!rows.length) {
-      var allTr = Array.from(tbl.querySelectorAll('tr'));
-      rows = allTr.slice(1);
+      rows = Array.from(tbl.querySelectorAll('tr')).slice(1);
     }
     var values = [];
     for (var r = 0; r < rows.length; r++) {
@@ -126,79 +196,45 @@ _JS_READ_ASSIGN_HISTORY_CHECKIN = """
         }
       }
     }
-    return {found_table: true, checkin_values: values};
+    return {found_table: true, row_count: rows.length, checkin_values: values};
   }
-  return {found_table: false, checkin_values: []};
-})();
-"""
-
-_JS_FIND_GIUC_TIEN_DO_BUTTON = """
-(function() {
-  function norm(s) { return String(s || '').replace(/\\s+/g, ' ').trim(); }
-  var btns = Array.from(document.querySelectorAll('button, a, [role="button"]'));
-  for (var i = 0; i < btns.length; i++) {
-    var el = btns[i];
-    var txt = norm(el.innerText || el.textContent || '');
-    if (txt.toLowerCase().indexOf('giục tiến độ') !== -1) {
-      var r = el.getBoundingClientRect();
-      if (r.width > 0 && r.height > 0) {
-        return {found: true, text: txt};
-      }
-    }
-  }
-  return {found: false, text: ''};
-})();
-"""
-
-_JS_READ_GIUC_TIEN_DO_STATUS = """
-(function() {
-  function norm(s) { return String(s || '').replace(/\\s+/g, ' ').trim(); }
-  var dialogs = Array.from(document.querySelectorAll('[role="dialog"], .mud-dialog, .modal, .ant-modal, .el-dialog'));
-  var scope = dialogs.length ? dialogs[dialogs.length - 1] : document.body;
-  var scopeText = norm((scope && (scope.innerText || scope.textContent)) || '');
-
-  // Tìm select hoặc input gần nhãn "Kết quả xử lý"
-  var selects = Array.from(scope.querySelectorAll('select'));
-  for (var s = 0; s < selects.length; s++) {
-    var sel = selects[s];
-    if (sel.selectedIndex >= 0 && sel.options[sel.selectedIndex]) {
-      var optTxt = norm(sel.options[sel.selectedIndex].text);
-      if (optTxt.toLowerCase().indexOf('xử lý') !== -1) {
-        return {found: true, status: optTxt, raw_text: scopeText.slice(0, 600)};
-      }
-    }
-  }
-
-  var inputs = Array.from(scope.querySelectorAll('input, .mud-select-input, .mud-input-slot, [role="combobox"]'));
-  for (var i = 0; i < inputs.length; i++) {
-    var val = norm(inputs[i].value || inputs[i].innerText || inputs[i].textContent || '');
-    if (val.toLowerCase() === 'đang xử lý' || val.toLowerCase() === 'đã xử lý') {
-      return {found: true, status: val, raw_text: scopeText.slice(0, 600)};
-    }
-  }
-
-  var m = scopeText.match(/Kết quả xử lý\\s*:?\\s*(Đang xử lý|Đã xử lý)/i);
-  if (m && m[1]) {
-    return {found: true, status: norm(m[1]), raw_text: scopeText.slice(0, 600)};
-  }
-  return {found: false, status: '', raw_text: scopeText.slice(0, 600)};
+  return {found_table: false, row_count: 0, checkin_values: []};
 })();
 """
 
 _JS_CLOSE_POPUP_READONLY = """
 (function() {
-  function norm(s) { return String(s || '').replace(/\\s+/g, ' ').trim().toLowerCase(); }
-  var btns = Array.from(document.querySelectorAll('button, a, [role="button"]'));
-  for (var i = btns.length - 1; i >= 0; i--) {
-    var el = btns[i];
-    var txt = norm(el.innerText || el.textContent || el.getAttribute('aria-label') || '');
-    var r = el.getBoundingClientRect();
-    if (r.width <= 0 || r.height <= 0) continue;
-    if (txt === 'đóng' || txt === 'close' || txt === '×' || txt === 'x') {
+  function norm(s) {
+    var str = String(s || '');
+    return (str.normalize ? str.normalize('NFC') : str).replace(/\\s+/g, ' ').trim().toLowerCase();
+  }
+  function isVis(el) {
+    if (!el) return false;
+    try {
+      var st = window.getComputedStyle(el);
+      if (st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0') return false;
+      var r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    } catch (e) { return false; }
+  }
+  var modals = Array.from(document.querySelectorAll('[role="dialog"], .modal, .mud-dialog, .ant-modal, .el-dialog, .dx-popup-normal, .k-window'))
+    .filter(isVis);
+  var scope = modals.length ? modals[modals.length - 1] : document;
+
+  var closeBtns = Array.from(scope.querySelectorAll('button, a, [role="button"], .close, .mud-dialog-close, .ant-modal-close'))
+    .filter(isVis);
+  for (var i = closeBtns.length - 1; i >= 0; i--) {
+    var el = closeBtns[i];
+    var txt = norm(el.innerText || el.textContent || el.getAttribute('aria-label') || el.getAttribute('title') || '');
+    var cls = norm(el.className || '');
+    if (txt === 'đóng' || txt === 'close' || txt === '×' || txt === 'x' || cls.indexOf('close') !== -1) {
       el.click();
       return true;
     }
   }
+  try {
+    document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', keyCode: 27, bubbles: true}));
+  } catch (e) {}
   return false;
 })();
 """
@@ -229,29 +265,18 @@ def is_already_completed(ticket_status: str = "", sheet_ket_qua: str = "") -> bo
     return False
 
 
-def parse_giuc_tien_do_count(button_text: str) -> int:
-    """Trích xuất số lần giục tiến độ từ text nút, ví dụ 'Giục tiến độ (1 lần - Thường)' -> 1."""
-    raw = normalize_nfc(button_text)
-    if not raw or "giục tiến độ" not in raw.lower():
-        return 0
-    m = re.search(r"(\d+)\s*lần", raw, flags=re.IGNORECASE)
-    if m:
-        return int(m.group(1))
-    return 0
-
-
 def evaluate_pbt_xac_minh_conditions(
     ma_phieu: str,
     initial_note_text: str,
     checkin_values: list,
-    giuc_count: int,
-    giuc_status: str = "",
     ticket_status: str = "",
     sheet_ket_qua: str = "",
 ) -> Dict:
     """
-    Hàm thuần túy đánh giá đủ 4 bước (Idempotent + Điều kiện 0, 1, 2) cho PBT Xác Minh Thông Tin.
-    Tách riêng khỏi Selenium để test độc lập cực nhanh và chính xác.
+    Hàm thuần túy đánh giá đủ các điều kiện cho PBT Xác Minh Thông Tin trên màn hình THÔNG TIN BẢO TRÌ:
+    - Idempotent (đã xử lý/hoàn tất -> bỏ qua)
+    - Điều kiện 3a: Tình trạng ban đầu == 'KH không cung cấp rõ tình trạng lỗi hoặc KH có khiếu nại RM'
+    - Điều kiện 3b: Lịch sử nhận/nhả tuyến -> cột 'Thời gian checkin' có giá trị
     """
     shd = normalize_nfc(ma_phieu)
     details = {
@@ -259,8 +284,6 @@ def evaluate_pbt_xac_minh_conditions(
         "sheet_ket_qua": normalize_nfc(sheet_ket_qua),
         "initial_note_text": normalize_nfc(initial_note_text),
         "checkin_values": [normalize_nfc(v) for v in (checkin_values or []) if normalize_nfc(v)],
-        "giuc_count": int(giuc_count or 0),
-        "giuc_status": normalize_nfc(giuc_status),
     }
 
     # 0. Idempotent: phiếu đã hoàn tất trước đó
@@ -271,11 +294,13 @@ def evaluate_pbt_xac_minh_conditions(
             "tac_vu": "XÁC MINH THÔNG TIN",
             "du_dieu_kien": False,
             "da_hoan_tat": True,
+            "ket_qua": "Đã xử lý",
+            "ghi_chu": f"Phiếu đã hoàn tất trước đó (Trạng thái='{details['ticket_status'] or details['sheet_ket_qua']}').",
             "ly_do_neu_khong_du": f"Phiếu đã hoàn tất trước đó (Trạng thái='{details['ticket_status'] or details['sheet_ket_qua']}').",
             "chi_tiet": details,
         }
 
-    # Điều kiện 0: Ghi nhận ban đầu
+    # Điều kiện 3a: Tình trạng ban đầu
     if _norm_ws_lower(REQUIRED_INITIAL_NOTE) not in _norm_ws_lower(initial_note_text):
         return {
             "ma_phieu": shd,
@@ -283,11 +308,13 @@ def evaluate_pbt_xac_minh_conditions(
             "tac_vu": "XÁC MINH THÔNG TIN",
             "du_dieu_kien": False,
             "da_hoan_tat": False,
+            "ket_qua": KET_QUA_KHONG_THANH_CONG,
+            "ghi_chu": GHI_CHU_SAI_TINH_TRANG_BAN_DAU,
             "ly_do_neu_khong_du": ERR_COND0_INITIAL_NOTE,
             "chi_tiet": details,
         }
 
-    # Điều kiện 1: Lịch sử phân công -> TG CHECKIN có giá trị
+    # Điều kiện 3b: Lịch sử nhận/nhả tuyến -> Thời gian checkin có giá trị
     if not details["checkin_values"]:
         return {
             "ma_phieu": shd,
@@ -295,23 +322,11 @@ def evaluate_pbt_xac_minh_conditions(
             "tac_vu": "XÁC MINH THÔNG TIN",
             "du_dieu_kien": False,
             "da_hoan_tat": False,
+            "ket_qua": KET_QUA_KHONG_THANH_CONG,
+            "ghi_chu": GHI_CHU_CHUA_CHECKIN,
             "ly_do_neu_khong_du": ERR_COND1_NOT_CHECKED_IN,
             "chi_tiet": details,
         }
-
-    # Điều kiện 2: Giục tiến độ >= 1 lần -> Kết quả xử lý phải là Đã xử lý (nếu Đang xử lý -> NOK)
-    if details["giuc_count"] >= 1:
-        st_low = _norm_ws_lower(giuc_status)
-        if st_low != "đã xử lý":
-            return {
-                "ma_phieu": shd,
-                "loai": "PBT",
-                "tac_vu": "XÁC MINH THÔNG TIN",
-                "du_dieu_kien": False,
-                "da_hoan_tat": False,
-                "ly_do_neu_khong_du": ERR_COND2_GIUC_TIEN_DO_OPEN,
-                "chi_tiet": details,
-            }
 
     return {
         "ma_phieu": shd,
@@ -319,6 +334,8 @@ def evaluate_pbt_xac_minh_conditions(
         "tac_vu": "XÁC MINH THÔNG TIN",
         "du_dieu_kien": True,
         "da_hoan_tat": False,
+        "ket_qua": "",
+        "ghi_chu": "",
         "ly_do_neu_khong_du": "",
         "chi_tiet": details,
     }
@@ -332,8 +349,10 @@ def validate_ticket_readonly(
     log_cb: Optional[Callable[[str, str], None]] = None,
 ) -> Dict:
     """
-    Module 3 - Kiểm tra điều kiện hoàn tất trực tiếp trên trang phiếu đã mở (CHỈ ĐỌC).
-    Tuyệt đối không bấm 'Thay đổi tình trạng', 'Cập nhật', 'Lưu' hay bất kỳ nút ghi dữ liệu nào.
+    Module 3 - Kiểm tra 2 điều kiện hoàn tất trực tiếp trên trang THÔNG TIN BẢO TRÌ (CHỈ ĐỌC):
+      3a. Cột 'Tình trạng ban đầu' == 'KH không cung cấp rõ tình trạng lỗi hoặc KH có khiếu nại RM'
+      3b. Bấm 'Lịch sử nhận/nhả tuyến' -> kiểm tra cột 'Thời gian checkin' có giá trị -> đóng popup
+    Tuyệt đối không bấm 'Cập nhật' hay thay đổi bất kỳ dữ liệu nào.
     """
     cfg = settings or load_settings()
     if not cfg.enabled:
@@ -345,9 +364,12 @@ def validate_ticket_readonly(
     tac_vu = normalize_nfc(nav_ctx.tac_vu)
     sheet_kq = normalize_nfc((sheet_record or {}).get("ket_qua", ""))
 
-    # Hiện tại chỉ áp dụng bộ điều kiện chi tiết cho PBT - XÁC MINH THÔNG TIN
+    # Hiện tại chỉ áp dụng bộ điều kiện cho PBT - XÁC MINH THÔNG TIN
     if _norm_ws_lower(tac_vu) != "xác minh thông tin" or nav_ctx.loai != "PBT":
-        reason = f"Chưa cấu hình điều kiện hoàn tất cho tác vụ '{tac_vu}' (loại {nav_ctx.loai}). Chỉ áp dụng cho PBT - XÁC MINH THÔNG TIN."
+        reason = (
+            f"Chưa cấu hình điều kiện hoàn tất cho tác vụ '{tac_vu}' (loại {nav_ctx.loai}). "
+            "Chỉ áp dụng cho PBT - Xác Minh Thông Tin."
+        )
         _emit(log_cb, f"Module 3 [{shd}]: Bỏ qua — {reason}", "warning")
         return {
             "ma_phieu": shd,
@@ -355,6 +377,8 @@ def validate_ticket_readonly(
             "tac_vu": tac_vu,
             "du_dieu_kien": False,
             "da_hoan_tat": False,
+            "ket_qua": KET_QUA_KHONG_THANH_CONG,
+            "ghi_chu": reason,
             "ly_do_neu_khong_du": reason,
             "chi_tiet": {"ticket_status": nav_ctx.ticket_status, "sheet_ket_qua": sheet_kq},
         }
@@ -366,82 +390,101 @@ def validate_ticket_readonly(
             ma_phieu=shd,
             initial_note_text="",
             checkin_values=[],
-            giuc_count=0,
-            giuc_status="",
             ticket_status=nav_ctx.ticket_status,
             sheet_ket_qua=sheet_kq,
         )
 
     driver = session.driver
 
-    # Điều kiện 0: Đọc card "Ghi nhận ban đầu"
-    _emit(log_cb, f"Module 3 [{shd}]: Kiểm tra Điều kiện 0 (Ghi nhận ban đầu)...", "info")
-    initial_note_text = str(driver.execute_script(_JS_READ_INITIAL_NOTE) or "")
+    # Bước 3a: Đọc cột "Tình trạng ban đầu"
+    _emit(log_cb, f"Module 3 [{shd}]: Kiểm tra 3a (Tình trạng ban đầu)...", "info")
+    init_res = driver.execute_script(_JS_READ_INITIAL_STATUS_TABLE) or {}
+    initial_note_text = str(init_res.get("text") or "") if isinstance(init_res, dict) else str(init_res)
+    _emit(log_cb, f"Module 3 [{shd}]: Tình trạng ban đầu đọc được = '{initial_note_text[:120]}'", "info")
+
     if _norm_ws_lower(REQUIRED_INITIAL_NOTE) not in _norm_ws_lower(initial_note_text):
-        _emit(log_cb, f"Module 3 [{shd}]: NOK Điều kiện 0.", "warning")
+        _emit(log_cb, f"Module 3 [{shd}]: NOK bước 3a — {GHI_CHU_SAI_TINH_TRANG_BAN_DAU}", "warning")
         return evaluate_pbt_xac_minh_conditions(
             ma_phieu=shd,
             initial_note_text=initial_note_text,
             checkin_values=[],
-            giuc_count=0,
-            giuc_status="",
             ticket_status=nav_ctx.ticket_status,
             sheet_ket_qua=sheet_kq,
         )
 
-    # Điều kiện 1: Bấm "Lịch sử phân công" (chỉ đọc) -> kiểm tra cột "TG CHECKIN" -> đóng popup
-    _emit(log_cb, f"Module 3 [{shd}]: Kiểm tra Điều kiện 1 (Lịch sử phân công -> TG CHECKIN)...", "info")
+    # Bước 3b: Bấm nút "Lịch sử nhận/nhả tuyến" -> kiểm tra cột "Thời gian checkin" -> đóng popup
+    _emit(log_cb, f"Module 3 [{shd}]: Kiểm tra 3b (Lịch sử nhận/nhả tuyến -> Thời gian checkin)...", "info")
     checkin_values = []
-    click_ls = driver.execute_script(_JS_CLICK_BUTTON_BY_TEXT, "lịch sử phân công") or {}
-    if click_ls.get("clicked"):
-        time.sleep(1.5)
+    click_ls = driver.execute_script(_JS_CLICK_BUTTON_BY_TEXT, "lịch sử nhận/nhả tuyến") or {}
+    if not (isinstance(click_ls, dict) and click_ls.get("clicked")):
+        # Fallback nếu label ngắn gọn hơn
+        click_ls = driver.execute_script(_JS_CLICK_BUTTON_BY_TEXT, "lịch sử phân công") or {}
+
+    if isinstance(click_ls, dict) and click_ls.get("clicked"):
+        deadline = time.monotonic() + 6.0
         try:
-            ls_info = driver.execute_script(_JS_READ_ASSIGN_HISTORY_CHECKIN) or {}
-            checkin_values = ls_info.get("checkin_values") or []
+            while time.monotonic() < deadline:
+                time.sleep(0.4)
+                ls_info = driver.execute_script(_JS_READ_ASSIGN_HISTORY_CHECKIN) or {}
+                if isinstance(ls_info, dict) and ls_info.get("found_table"):
+                    checkin_values = ls_info.get("checkin_values") or []
+                    if checkin_values or ls_info.get("row_count", 0) > 0:
+                        break
         finally:
-            driver.execute_script(_JS_CLOSE_POPUP_READONLY)
-            time.sleep(0.5)
-
-    if not checkin_values:
-        _emit(log_cb, f"Module 3 [{shd}]: NOK Điều kiện 1 (chưa có TG CHECKIN).", "warning")
-        return evaluate_pbt_xac_minh_conditions(
-            ma_phieu=shd,
-            initial_note_text=initial_note_text,
-            checkin_values=[],
-            giuc_count=0,
-            giuc_status="",
-            ticket_status=nav_ctx.ticket_status,
-            sheet_ket_qua=sheet_kq,
-        )
-
-    # Điều kiện 2: Kiểm tra nút "Giục tiến độ" (>= 1 lần -> mở popup đọc Kết quả xử lý -> đóng popup)
-    _emit(log_cb, f"Module 3 [{shd}]: Kiểm tra Điều kiện 2 (Giục tiến độ)...", "info")
-    giuc_btn = driver.execute_script(_JS_FIND_GIUC_TIEN_DO_BUTTON) or {}
-    giuc_count = parse_giuc_tien_do_count(giuc_btn.get("text", "")) if giuc_btn.get("found") else 0
-    giuc_status = ""
-
-    if giuc_count >= 1:
-        click_g = driver.execute_script(_JS_CLICK_BUTTON_BY_TEXT, "giục tiến độ") or {}
-        if click_g.get("clicked"):
-            time.sleep(1.5)
             try:
-                g_info = driver.execute_script(_JS_READ_GIUC_TIEN_DO_STATUS) or {}
-                giuc_status = str(g_info.get("status") or "")
-            finally:
                 driver.execute_script(_JS_CLOSE_POPUP_READONLY)
-                time.sleep(0.5)
+                time.sleep(0.4)
+            except Exception:
+                pass
+    else:
+        _emit(log_cb, f"Module 3 [{shd}]: Không tìm thấy nút 'Lịch sử nhận/nhả tuyến'.", "warning")
 
     result = evaluate_pbt_xac_minh_conditions(
         ma_phieu=shd,
         initial_note_text=initial_note_text,
         checkin_values=checkin_values,
-        giuc_count=giuc_count,
-        giuc_status=giuc_status,
         ticket_status=nav_ctx.ticket_status,
         sheet_ket_qua=sheet_kq,
     )
     if result["du_dieu_kien"]:
-        _emit(log_cb, f"Module 3 [{shd}]: ✅ ĐỦ ĐIỀU KIỆN hoàn tất PBT Xác Minh Thông Tin.", "success")
+        _emit(
+            log_cb,
+            f"Module 3 [{shd}]: ĐẠT cả 2 điều kiện (Tình trạng ban đầu khớp + Thời gian checkin={checkin_values[-1]}).",
+            "success",
+        )
     else:
-        _emit(log_cb, f"Module 3 [{shd}]: ⛔ KHÔNG ĐỦ ĐIỀU KIỆN — {result['ly_do_neu_khong_du']}", "warning")
+        _emit(log_cb, f"Module 3 [{shd}]: NOK — {result['ly_do_neu_khong_du']}", "warning")
     return result
+
+
+def _main_cli() -> int:
+    """CLI chạy kiểm tra CHỈ-ĐỌC độc lập cho 1 SHD trên Inside."""
+    import argparse
+    import json
+    import sys
+
+    from .mod1_auth import create_inside_session
+    from .mod2_navigator import navigate_to_ticket
+
+    parser = argparse.ArgumentParser(description="Module 3 - Kiểm tra 2 điều kiện hoàn tất PBT (CHỈ-ĐỌC)")
+    parser.add_argument("--shd", required=True, help="Số hợp đồng cần kiểm tra")
+    parser.add_argument("--tac-vu", default="Xác Minh Thông Tin", help="Giá trị cột Tác Vụ")
+    parser.add_argument("--visible", action="store_true", help="Mở Chrome để quan sát")
+    args = parser.parse_args()
+
+    def _print_log(msg: str, lvl: str = "info") -> None:
+        print(f"[{time.strftime('%H:%M:%S')}] [{lvl.upper()}] {msg}")
+
+    try:
+        with create_inside_session(headless=not args.visible, keep_open=True, log_cb=_print_log) as sess:
+            ctx = navigate_to_ticket(sess, shd=args.shd, tac_vu=args.tac_vu, log_cb=_print_log)
+            res = validate_ticket_readonly(sess, ctx, log_cb=_print_log)
+            print(json.dumps(res, ensure_ascii=False, indent=2))
+        return 0
+    except Exception as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main_cli())

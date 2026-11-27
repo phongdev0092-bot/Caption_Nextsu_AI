@@ -1,26 +1,23 @@
 """
-Module 4 - Thực thi Hoàn Tất PBT (Xác Minh Thông Tin) trên giao diện mới FOX-ERP.
+Module 4 - Thực thi đóng ca PBT (Xác Minh Thông Tin) trực tiếp trên trang THÔNG TIN BẢO TRÌ (Inside).
 
 An toàn mặc định:
-- DRY-RUN mặc định BẬT (dry_run=True): chỉ chạy kiểm tra điều kiện và mô phỏng bước 4,
-  tuyệt đối KHÔNG bấm 'Thay đổi tình trạng', 'Cập nhật' hay 'Xác nhận'.
+- DRY-RUN mặc định BẬT (dry_run=True): chỉ chạy kiểm tra điều kiện (Module 3) và mô phỏng bước 4-5,
+  tuyệt đối KHÔNG bấm 'Thêm' hay 'Cập nhật' làm thay đổi dữ liệu.
 - Idempotent: phiếu đã 'Đã xử lý' / 'Đã hoàn tất' sẽ bỏ qua an toàn.
 - Chạy thật (dry_run=False) chỉ thực thi khi Module 3 trả về du_dieu_kien=True:
-  1. Bấm 'Thay đổi tình trạng' -> chọn 'Đã xử lý' -> mở popup 'Xác nhận chuyển tình trạng "Đã xử lý"'.
-  2. Card 'Thông tin bảo trì' (Điều kiện 3):
-     Nếu 'Nguyên nhân chưa cài đặt Hi FPT' hoặc 'Nguyên nhân chưa nghiệm thu Mỹ Bảo' đang là 'Không chọn':
-     -> bấm cây bút ✏️ -> chọn:
-        - Nguyên nhân chưa cài đặt Hi FPT   >> Không gặp chủ hợp đồng
-        - Nguyên nhân chưa nghiệm thu Mỹ Bảo >> Không kết nối được wifi khách hàng
-     -> bấm 'Cập nhật' trong card 'Thông tin bảo trì'.
-  3. Card 'Thông tin dịch vụ':
-     -> bấm cây bút ✏️ -> mở sub-popup 'Thông tin dịch vụ'
-     -> chọn dropdown đầu tiên 'Internet' -> bấm '+ Thêm'
-     -> nếu 'Phần tử lỗi' trống/Không chọn -> chọn 'Khách hàng'
-     -> chọn 'Nguyên nhân lỗi' = 'Đến nhà khách hàng kiểm tra KH yêu cầu hủy hợp đồng'
-     -> bấm 'Cập nhật' trong sub-popup 'Thông tin dịch vụ'.
-  4. Bấm nút 'Xác nhận' màu xanh ở đáy popup 'Xác nhận chuyển tình trạng "Đã xử lý"'.
-  5. Kiểm tra xác nhận lại trạng thái phiếu trên giao diện đã chuyển sang 'Đã xử lý'.
+  Bước 4: Bấm nút 'Xem thêm' để mở rộng phần Thông tin bảo trì / Nguyên nhân lỗi / Cập nhật kết quả xử lý.
+    4a. 'Nguyên nhân chưa nghiệm thu Mỹ Bảo' -> chọn 'Không kết nối được hệ thống Mỹ bảo'.
+    4b. Trong khối 'Nguyên nhân lỗi': chọn Dịch vụ = 'Internet' -> bấm nút 'Thêm'.
+    4c. Tại dòng mới trong bảng 'Nguyên nhân lỗi', chọn lần lượt 4 cột:
+        - Tình trạng ban đầu: 'KH không cung cấp rõ tình trạng lỗi hoặc KH có khiếu nại RM'
+        - Phần tử lỗi:        'Khách hàng'
+        - Nguyên nhân lỗi:    'Đến nhà khách hàng kiểm tra KH yêu cầu hủy hợp đồng'
+        - Hướng xử lý:        'Tạo SR để DVKH hỗ trợ, đóng CL'
+  Bước 5: Trong khối 'Cập nhật kết quả xử lý của phiếu':
+    - 'Kết quả xử lý' (đang là 'Đang xử lý') -> chọn 'Đã xử lý'
+    - Bấm nút 'Cập nhật' của khối này.
+  Sau đó xác minh lại trạng thái trên trang đã chuyển sang 'Đã xử lý'.
 """
 
 from dataclasses import asdict, dataclass, field
@@ -30,15 +27,16 @@ from typing import Callable, Dict, List, Optional
 from .config import AutoHoanTatSettings, load_settings
 from .mod1_auth import FeatureDisabledError, InsideSession
 from .mod2_navigator import NavigationContext, _read_footer_ticket_status
-from .mod3_validator import is_already_completed
+from .mod3_validator import KET_QUA_KHONG_THANH_CONG, REQUIRED_INITIAL_NOTE, is_already_completed
 from .sheet_reader import normalize_nfc
 
-HI_FPT_TARGET = "Không gặp chủ hợp đồng"
-MY_BAO_TARGET = "Không kết nối được wifi khách hàng"
+MY_BAO_TARGET = "Không kết nối được hệ thống Mỹ bảo"
 DICH_VU_TARGET = "Internet"
+TINH_TRANG_BAN_DAU_TARGET = REQUIRED_INITIAL_NOTE
 PHAN_TU_LOI_TARGET = "Khách hàng"
 NGUYEN_NHAN_LOI_TARGET = "Đến nhà khách hàng kiểm tra KH yêu cầu hủy hợp đồng"
-HUONG_XU_LY_FALLBACK_PREFIX = "Tạo SR để DVKH hỗ trợ"
+HUONG_XU_LY_TARGET = "Tạo SR để DVKH hỗ trợ, đóng CL"
+KET_QUA_XU_LY_TARGET = "Đã xử lý"
 
 STATUS_SUCCESS = "SUCCESS"
 STATUS_DRY_RUN_READY = "DRY_RUN_READY"
@@ -55,6 +53,7 @@ class ExecutionResult:
     mode: str  # "DRY_RUN" | "REAL"
     status: str  # SUCCESS | DRY_RUN_READY | NOT_ELIGIBLE | SKIPPED_ALREADY_DONE | ERROR
     ket_qua: str
+    ghi_chu: str = ""
     steps_performed: List[str] = field(default_factory=list)
     post_status: str = ""
     elapsed_ms: int = 0
@@ -71,229 +70,305 @@ def _emit(log_cb: Optional[Callable[[str, str], None]], msg: str, level: str = "
             pass
 
 
-_JS_CLICK_BUTTON_BY_TEXT = """
-(function(targetText, withinModalOnly) {
-  function norm(s) { return String(s || '').replace(/\\s+/g, ' ').trim().toLowerCase(); }
-  function isVis(el) {
-    if (!el) return false;
-    var st = window.getComputedStyle(el);
-    if (st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0') return false;
-    var r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0;
-  }
-  var root = document;
-  if (withinModalOnly) {
-    var modals = Array.from(document.querySelectorAll('[role="dialog"], .modal, .mud-dialog, .ant-modal, .el-dialog'))
-      .filter(isVis);
-    if (modals.length > 0) root = modals[modals.length - 1];
-  }
-  var want = norm(targetText);
-  var btns = Array.from(root.querySelectorAll('button, [role="button"], [role="menuitem"], li, a, .dropdown-item'))
-    .filter(isVis);
-  // Ưu tiên khớp chính xác trước, sau đó mới khớp contains
-  for (var i = 0; i < btns.length; i++) {
-    var t = norm(btns[i].innerText || btns[i].textContent);
-    if (t === want) {
-      btns[i].scrollIntoView({block: 'center'});
-      btns[i].click();
-      return { clicked: true, text: t };
-    }
-  }
-  for (var j = 0; j < btns.length; j++) {
-    var t2 = norm(btns[j].innerText || btns[j].textContent);
-    if (t2 && t2.indexOf(want) !== -1 && t2.length <= want.length + 20) {
-      btns[j].scrollIntoView({block: 'center'});
-      btns[j].click();
-      return { clicked: true, text: t2 };
-    }
-  }
-  return { clicked: false, text: '' };
-})(arguments[0], arguments[1]);
-"""
-
-_JS_CHECK_POPUP_VISIBLE = """
-(function(titleKeyword) {
-  function norm(s) { return String(s || '').replace(/\\s+/g, ' ').trim().toLowerCase(); }
-  function isVis(el) {
-    if (!el) return false;
-    var st = window.getComputedStyle(el);
-    if (st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0') return false;
-    var r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0;
-  }
-  var want = norm(titleKeyword);
-  var modals = Array.from(document.querySelectorAll('[role="dialog"], .modal, .mud-dialog, .ant-modal, .el-dialog, div'))
-    .filter(function(el) {
-      if (!isVis(el)) return false;
-      var t = norm(el.innerText || el.textContent);
-      return t.indexOf(want) !== -1 && t.length < 6000;
-    });
-  return modals.length > 0;
-})(arguments[0]);
-"""
-
-_JS_READ_BAO_TRI_CARD = """
+_JS_CLICK_XEM_THEM_IF_NEEDED = """
 (function() {
-  function norm(s) { return String(s || '').replace(/\\s+/g, ' ').trim(); }
+  function norm(s) {
+    var str = String(s || '');
+    return (str.normalize ? str.normalize('NFC') : str).replace(/\\s+/g, ' ').trim().toLowerCase();
+  }
   function isVis(el) {
     if (!el) return false;
-    var st = window.getComputedStyle(el);
-    if (st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0') return false;
-    var r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0;
+    try {
+      var st = window.getComputedStyle(el);
+      if (st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0') return false;
+      var r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    } catch (e) { return false; }
   }
-  var modals = Array.from(document.querySelectorAll('[role="dialog"], .modal, .mud-dialog, .ant-modal, .el-dialog'))
-    .filter(isVis);
-  var root = modals.length > 0 ? modals[modals.length - 1] : document;
-  var txt = norm(root.innerText || root.textContent);
-  var hiMatch = txt.match(/Nguyên nhân chưa cài đặt Hi FPT\\s*:?\\s*([^\\n]+)/i);
-  var mbMatch = txt.match(/Nguyên nhân chưa nghiệm thu Mỹ Bảo\\s*:?\\s*([^\\n]+)/i);
-  var hiVal = hiMatch ? norm(hiMatch[1]).split(/Nguyên nhân|Mối nối|Độ ưu tiên/i)[0].trim() : '';
-  var mbVal = mbMatch ? norm(mbMatch[1]).split(/Nguyên nhân|Mối nối|Độ ưu tiên/i)[0].trim() : '';
-  return { hi_fpt: hiVal, my_bao: mbVal, raw: txt.slice(0, 1000) };
+
+  // Nếu mục 'Nguyên nhân chưa nghiệm thu Mỹ Bảo' hoặc 'Cập nhật kết quả xử lý của phiếu' đã hiển thị -> đã mở rộng sẵn
+  var bodyTxt = norm((document.body && (document.body.innerText || document.body.textContent)) || '');
+  if (bodyTxt.indexOf('nguyên nhân chưa nghiệm thu mỹ bảo') !== -1 &&
+      bodyTxt.indexOf('cập nhật kết quả xử lý của phiếu') !== -1) {
+    return { already_expanded: true, clicked: false };
+  }
+
+  var els = Array.from(document.querySelectorAll('button, a, span, div, [role="button"]')).filter(isVis);
+  for (var i = 0; i < els.length; i++) {
+    var t = norm(els[i].innerText || els[i].textContent);
+    if (t === 'xem thêm' || (t.indexOf('xem thêm') !== -1 && t.length <= 20)) {
+      els[i].scrollIntoView({block: 'center'});
+      els[i].click();
+      return { already_expanded: false, clicked: true, text: t };
+    }
+  }
+  return { already_expanded: false, clicked: false };
 })();
 """
 
-_JS_CLICK_CARD_PENCIL = """
-(function(cardTitle) {
-  function norm(s) { return String(s || '').replace(/\\s+/g, ' ').trim().toLowerCase(); }
+_JS_SELECT_ROW_DROPDOWN_BY_LABEL = """
+(function(labelText, optionText, sectionHint) {
+  function norm(s) {
+    var str = String(s || '');
+    return (str.normalize ? str.normalize('NFC') : str).replace(/\\s+/g, ' ').trim().toLowerCase();
+  }
   function isVis(el) {
     if (!el) return false;
-    var st = window.getComputedStyle(el);
-    if (st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0') return false;
-    var r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0;
+    try {
+      var st = window.getComputedStyle(el);
+      if (st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0') return false;
+      var r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    } catch (e) { return false; }
   }
-  var modals = Array.from(document.querySelectorAll('[role="dialog"], .modal, .mud-dialog, .ant-modal, .el-dialog'))
-    .filter(isVis);
-  var root = modals.length > 0 ? modals[modals.length - 1] : document;
-  var want = norm(cardTitle);
-
-  var headers = Array.from(root.querySelectorAll('div, header, section, h3, h4, h5, span')).filter(function(el) {
-    if (!isVis(el)) return false;
-    var t = norm(el.innerText || el.textContent);
-    return t === want || (t.indexOf(want) !== -1 && t.length <= want.length + 12);
-  });
-
-  for (var i = 0; i < headers.length; i++) {
-    var container = headers[i].parentElement;
-    for (var depth = 0; depth < 4 && container; depth++) {
-      var pencil = container.querySelector('button svg, [role="button"] svg, i[class*="edit"], i[class*="pencil"], button[title*="Sửa"], button[aria-label*="Sửa"], .fa-pencil, .fa-edit, svg[class*="pencil"], svg[class*="edit"]');
-      if (pencil && isVis(pencil)) {
-        var target = pencil.closest('button, [role="button"], a') || pencil;
-        target.scrollIntoView({block: 'center'});
-        target.click();
-        return { clicked: true, card: cardTitle };
-      }
-      container = container.parentElement;
-    }
+  function fireOpen(el) {
+    el.scrollIntoView({block: 'center'});
+    try { el.focus(); } catch (e) {}
+    ['mousedown', 'mouseup', 'click'].forEach(function(ev) {
+      el.dispatchEvent(new MouseEvent(ev, {bubbles: true, cancelable: true, view: window}));
+    });
   }
-  return { clicked: false, card: cardTitle };
-})(arguments[0]);
-"""
 
-_JS_SELECT_DROPDOWN_BY_LABEL = """
-(function(labelText, optionText) {
-  function norm(s) { return String(s || '').replace(/\\s+/g, ' ').trim().toLowerCase(); }
-  function isVis(el) {
-    if (!el) return false;
-    var st = window.getComputedStyle(el);
-    if (st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0') return false;
-    var r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0;
-  }
-  var modals = Array.from(document.querySelectorAll('[role="dialog"], .modal, .mud-dialog, .ant-modal, .el-dialog'))
-    .filter(isVis);
-  var root = modals.length > 0 ? modals[modals.length - 1] : document;
   var wantLabel = norm(labelText);
   var wantOpt = norm(optionText);
+  var wantSec = norm(sectionHint || '');
 
-  var labels = Array.from(root.querySelectorAll('label, div, span')).filter(function(el) {
+  function findScope() {
+    if (!wantSec) return document;
+    var headers = Array.from(document.querySelectorAll('div, section, h3, h4, h5, p, span, tr, th, td')).filter(function(el) {
+      if (!isVis(el)) return false;
+      var t = norm(el.innerText || el.textContent);
+      return t === wantSec || (t.indexOf(wantSec) !== -1 && t.length <= wantSec.length + 25);
+    });
+    for (var i = 0; i < headers.length; i++) {
+      var cur = headers[i];
+      for (var d = 0; d < 5 && cur && cur.parentElement; d++) {
+        cur = cur.parentElement;
+        var ct = norm(cur.innerText || cur.textContent);
+        if (ct.indexOf(wantLabel) !== -1 && ct.length < 5000) {
+          return cur;
+        }
+      }
+    }
+    return document;
+  }
+
+  var root = findScope();
+
+  // 1. Tìm ô td/label/div chứa đúng nhãn labelText rồi lấy ô kế tiếp hoặc container cha
+  var nodes = Array.from(root.querySelectorAll('td, th, label, div, span')).filter(function(el) {
     if (!isVis(el)) return false;
     var t = norm(el.innerText || el.textContent);
-    return t === wantLabel || (t.indexOf(wantLabel) !== -1 && t.length <= wantLabel.length + 15);
+    return t === wantLabel || (t.indexOf(wantLabel) !== -1 && t.length <= wantLabel.length + 18);
   });
 
-  for (var i = 0; i < labels.length; i++) {
-    var box = labels[i].parentElement;
-    for (var d = 0; d < 3 && box; d++) {
+  for (var i = 0; i < nodes.length; i++) {
+    var candidates = [];
+    if (nodes[i].nextElementSibling) candidates.push(nodes[i].nextElementSibling);
+    if (nodes[i].parentElement) candidates.push(nodes[i].parentElement);
+    if (nodes[i].parentElement && nodes[i].parentElement.parentElement) candidates.push(nodes[i].parentElement.parentElement);
+
+    for (var c = 0; c < candidates.length; c++) {
+      var box = candidates[c];
+      if (!box) continue;
+
       var sel = box.querySelector('select');
       if (sel && isVis(sel)) {
         var opts = Array.from(sel.options || []);
         for (var k = 0; k < opts.length; k++) {
-          if (norm(opts[k].text).indexOf(wantOpt) !== -1) {
+          var ot = norm(opts[k].text);
+          if (ot === wantOpt || ot.indexOf(wantOpt) !== -1) {
             sel.value = opts[k].value;
-            sel.dispatchEvent(new Event('change', { bubbles: true }));
+            sel.dispatchEvent(new Event('input', {bubbles: true}));
+            sel.dispatchEvent(new Event('change', {bubbles: true}));
             return { ok: true, mode: 'native_select', selected: opts[k].text };
           }
         }
       }
-      var custom = box.querySelector('[role="combobox"], .ant-select-selector, .mud-select-input, input[readonly], button[aria-haspopup]');
+
+      var custom = box.querySelector(
+        '[role="combobox"], .ant-select-selector, .el-select, .vs__dropdown-toggle, .select2-selection, .mud-select-input, .mud-input-control, .multiselect, input[readonly], button[aria-haspopup], .form-select'
+      );
       if (custom && isVis(custom)) {
-        custom.click();
-        return { ok: true, mode: 'opened_custom_dropdown', selected: '' };
+        var curTxt = norm(custom.innerText || custom.textContent || custom.value || '').replace(/\\s*[×x]\\s*$/i, '').trim();
+        if (curTxt === wantOpt || (wantOpt.length > 4 && curTxt.indexOf(wantOpt) !== -1)) {
+          return { ok: true, mode: 'already_selected', selected: curTxt };
+        }
+        fireOpen(custom);
+        return { ok: true, mode: 'opened_custom_dropdown', current: curTxt };
       }
-      box = box.parentElement;
+
+      var inp = box.querySelector('input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
+      if (inp && isVis(inp)) {
+        var iv = norm(inp.value || '');
+        if (iv === wantOpt || (wantOpt.length > 4 && iv.indexOf(wantOpt) !== -1)) {
+          return { ok: true, mode: 'already_selected', selected: iv };
+        }
+        fireOpen(inp);
+        return { ok: true, mode: 'opened_custom_dropdown', current: iv };
+      }
     }
   }
   return { ok: false, mode: 'not_found', selected: '' };
-})(arguments[0], arguments[1]);
+})(arguments[0], arguments[1], arguments[2]);
 """
 
 _JS_CLICK_DROPDOWN_OPTION = """
 (function(optionText) {
-  function norm(s) { return String(s || '').replace(/\\s+/g, ' ').trim().toLowerCase(); }
+  function norm(s) {
+    var str = String(s || '');
+    return (str.normalize ? str.normalize('NFC') : str).replace(/\\s+/g, ' ').trim().toLowerCase();
+  }
   function isVis(el) {
     if (!el) return false;
-    var st = window.getComputedStyle(el);
-    if (st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0') return false;
-    var r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0;
+    try {
+      var st = window.getComputedStyle(el);
+      if (st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0') return false;
+      var r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    } catch (e) { return false; }
   }
   var want = norm(optionText);
-  var items = Array.from(document.querySelectorAll('[role="option"], .ant-select-item-option, .mud-list-item, li, .dropdown-item'))
-    .filter(isVis);
-  for (var i = 0; i < items.length; i++) {
+  var selector = [
+    '[role="option"]',
+    '.ant-select-item-option',
+    '.ant-select-item-option-content',
+    '.el-select-dropdown__item',
+    '.vs__dropdown-option',
+    '.select2-results__option',
+    '.mud-list-item',
+    '.multiselect__option',
+    '.dropdown-item',
+    'ul li',
+    'div[class*="option"]'
+  ].join(', ');
+  var items = Array.from(document.querySelectorAll(selector)).filter(isVis);
+
+  // Ưu tiên khớp chính xác trước
+  for (var i = items.length - 1; i >= 0; i--) {
     var t = norm(items[i].innerText || items[i].textContent);
-    if (t === want || (t && t.indexOf(want) !== -1)) {
+    if (t === want) {
       items[i].scrollIntoView({block: 'center'});
       items[i].click();
       return { clicked: true, text: t };
     }
   }
+  // Tiếp theo là khớp contains (ưu tiên phần tử ngắn nhất để tránh click nhầm container cha)
+  var best = null;
+  var bestLen = 99999;
+  for (var j = items.length - 1; j >= 0; j--) {
+    var t2 = norm(items[j].innerText || items[j].textContent);
+    if (t2 && t2.indexOf(want) !== -1 && t2.length < bestLen && t2.length <= want.length + 35) {
+      best = items[j];
+      bestLen = t2.length;
+    }
+  }
+  if (best) {
+    best.scrollIntoView({block: 'center'});
+    best.click();
+    return { clicked: true, text: norm(best.innerText || best.textContent) };
+  }
   return { clicked: false, text: '' };
 })(arguments[0]);
 """
 
-_JS_SELECT_TABLE_CELL_DROPDOWN = """
-(function(colHeaderText, optionText) {
-  function norm(s) { return String(s || '').replace(/\\s+/g, ' ').trim().toLowerCase(); }
+_JS_CLICK_BUTTON_IN_SECTION = """
+(function(sectionTitle, buttonText) {
+  function norm(s) {
+    var str = String(s || '');
+    return (str.normalize ? str.normalize('NFC') : str).replace(/\\s+/g, ' ').trim().toLowerCase();
+  }
   function isVis(el) {
     if (!el) return false;
-    var st = window.getComputedStyle(el);
-    if (st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0') return false;
-    var r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0;
+    try {
+      var st = window.getComputedStyle(el);
+      if (st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0') return false;
+      var r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    } catch (e) { return false; }
   }
-  var modals = Array.from(document.querySelectorAll('[role="dialog"], .modal, .mud-dialog, .ant-modal, .el-dialog'))
-    .filter(isVis);
-  var root = modals.length > 0 ? modals[modals.length - 1] : document;
+
+  var wantSec = norm(sectionTitle);
+  var wantBtn = norm(buttonText);
+
+  var headers = Array.from(document.querySelectorAll('div, section, h3, h4, h5, p, span, tr, th, td')).filter(function(el) {
+    if (!isVis(el)) return false;
+    var t = norm(el.innerText || el.textContent);
+    return t === wantSec || (t.indexOf(wantSec) !== -1 && t.length <= wantSec.length + 25);
+  });
+
+  for (var i = 0; i < headers.length; i++) {
+    var cur = headers[i];
+    for (var d = 0; d < 5 && cur && cur.parentElement; d++) {
+      cur = cur.parentElement;
+      var ct = norm(cur.innerText || cur.textContent);
+      if (ct.length > 6000) break;
+      var btns = Array.from(cur.querySelectorAll('button, input[type="button"], input[type="submit"], a, [role="button"]')).filter(isVis);
+      for (var b = 0; b < btns.length; b++) {
+        var bt = norm(btns[b].innerText || btns[b].textContent || btns[b].value || '');
+        if (bt === wantBtn || (bt && bt.indexOf(wantBtn) !== -1 && bt.length <= wantBtn.length + 12)) {
+          btns[b].scrollIntoView({block: 'center'});
+          btns[b].click();
+          return { clicked: true, text: bt, section: sectionTitle };
+        }
+      }
+    }
+  }
+  return { clicked: false, text: '', section: sectionTitle };
+})(arguments[0], arguments[1]);
+"""
+
+_JS_SELECT_ERROR_REASON_TABLE_CELL = """
+(function(colHeaderText, optionText) {
+  function norm(s) {
+    var str = String(s || '');
+    return (str.normalize ? str.normalize('NFC') : str).replace(/\\s+/g, ' ').trim().toLowerCase();
+  }
+  function isVis(el) {
+    if (!el) return false;
+    try {
+      var st = window.getComputedStyle(el);
+      if (st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0') return false;
+      var r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    } catch (e) { return false; }
+  }
+  function fireOpen(el) {
+    el.scrollIntoView({block: 'center'});
+    try { el.focus(); } catch (e) {}
+    ['mousedown', 'mouseup', 'click'].forEach(function(ev) {
+      el.dispatchEvent(new MouseEvent(ev, {bubbles: true, cancelable: true, view: window}));
+    });
+  }
+
   var wantCol = norm(colHeaderText);
   var wantOpt = norm(optionText);
 
-  var tables = Array.from(root.querySelectorAll('table')).filter(isVis);
-  for (var t = 0; t < tables.length; t++) {
-    var ths = Array.from(tables[t].querySelectorAll('thead th, tr:first-child th, tr:first-child td'));
+  // Tìm đúng bảng 'Nguyên nhân lỗi' có đầy đủ cột 'Phần tử lỗi' / 'Hướng xử lý'
+  var tables = Array.from(document.querySelectorAll('table')).filter(isVis);
+  for (var t = tables.length - 1; t >= 0; t--) {
+    var tbl = tables[t];
+    var ths = Array.from(tbl.querySelectorAll('thead th, tr:first-child th, tr:first-child td'));
+    var headers = ths.map(function(h) { return norm(h.innerText || h.textContent); });
+    if (!headers.some(function(h) { return h.indexOf('phần tử lỗi') !== -1 || h.indexOf('hướng xử lý') !== -1; })) {
+      continue;
+    }
     var colIdx = -1;
-    for (var c = 0; c < ths.length; c++) {
-      if (norm(ths[c].innerText || ths[c].textContent).indexOf(wantCol) !== -1) {
+    for (var c = 0; c < headers.length; c++) {
+      if (headers[c] === wantCol || headers[c].indexOf(wantCol) !== -1) {
         colIdx = c;
         break;
       }
     }
     if (colIdx === -1) continue;
-    var rows = Array.from(tables[t].querySelectorAll('tbody tr')).filter(isVis);
-    if (rows.length === 0) continue;
+
+    var rows = Array.from(tbl.querySelectorAll('tbody tr')).filter(isVis);
+    if (!rows.length) {
+      rows = Array.from(tbl.querySelectorAll('tr')).slice(1).filter(isVis);
+    }
+    if (!rows.length) {
+      return { ok: false, mode: 'no_rows_yet', current: '' };
+    }
     var lastRow = rows[rows.length - 1];
     var cells = Array.from(lastRow.querySelectorAll('td'));
     if (colIdx >= cells.length) continue;
@@ -303,192 +378,191 @@ _JS_SELECT_TABLE_CELL_DROPDOWN = """
     if (sel) {
       var opts = Array.from(sel.options || []);
       for (var k = 0; k < opts.length; k++) {
-        if (norm(opts[k].text).indexOf(wantOpt) !== -1) {
+        var ot = norm(opts[k].text);
+        if (ot === wantOpt || ot.indexOf(wantOpt) !== -1) {
           sel.value = opts[k].value;
-          sel.dispatchEvent(new Event('change', { bubbles: true }));
+          sel.dispatchEvent(new Event('input', {bubbles: true}));
+          sel.dispatchEvent(new Event('change', {bubbles: true}));
           return { ok: true, mode: 'native_select', selected: opts[k].text };
         }
       }
     }
-    var trigger = cell.querySelector('[role="combobox"], .ant-select-selector, .mud-select-input, input, button, div[class*="select"]');
+
+    var trigger = cell.querySelector(
+      '[role="combobox"], .ant-select-selector, .el-select, .vs__dropdown-toggle, .select2-selection, .mud-select-input, .multiselect, input, button, div[class*="select"]'
+    );
     if (trigger && isVis(trigger)) {
-      trigger.click();
-      return { ok: true, mode: 'opened_custom_dropdown', current: norm(cell.innerText || cell.textContent) };
+      var curTxt = norm(cell.innerText || cell.textContent || trigger.value || '');
+      if (curTxt === wantOpt || (wantOpt.length > 6 && curTxt.indexOf(wantOpt) !== -1)) {
+        return { ok: true, mode: 'already_selected', selected: curTxt };
+      }
+      fireOpen(trigger);
+      return { ok: true, mode: 'opened_custom_dropdown', current: curTxt };
     }
   }
   return { ok: false, mode: 'not_found', current: '' };
 })(arguments[0], arguments[1]);
 """
 
-_JS_SELECT_TOP_SERVICE_DROPDOWN = """
-(function(serviceText) {
-  function norm(s) { return String(s || '').replace(/\\s+/g, ' ').trim().toLowerCase(); }
+_JS_ACCEPT_CONFIRM_MODAL_IF_ANY = """
+(function() {
+  function norm(s) {
+    var str = String(s || '');
+    return (str.normalize ? str.normalize('NFC') : str).replace(/\\s+/g, ' ').trim().toLowerCase();
+  }
   function isVis(el) {
     if (!el) return false;
-    var st = window.getComputedStyle(el);
-    if (st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0') return false;
-    var r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0;
+    try {
+      var st = window.getComputedStyle(el);
+      if (st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0') return false;
+      var r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    } catch (e) { return false; }
   }
-  var modals = Array.from(document.querySelectorAll('[role="dialog"], .modal, .mud-dialog, .ant-modal, .el-dialog'))
+  var modals = Array.from(document.querySelectorAll('[role="dialog"], .modal, .mud-dialog, .ant-modal, .swal2-popup, .el-message-box'))
     .filter(isVis);
-  var root = modals.length > 0 ? modals[modals.length - 1] : document;
-  var want = norm(serviceText);
-
-  var sel = root.querySelector('select');
-  if (sel && isVis(sel)) {
-    var opts = Array.from(sel.options || []);
-    for (var k = 0; k < opts.length; k++) {
-      if (norm(opts[k].text) === want || norm(opts[k].text).indexOf(want) !== -1) {
-        sel.value = opts[k].value;
-        sel.dispatchEvent(new Event('change', { bubbles: true }));
-        return { ok: true, mode: 'native_select', selected: opts[k].text };
-      }
+  if (!modals.length) return false;
+  var top = modals[modals.length - 1];
+  var btns = Array.from(top.querySelectorAll('button, [role="button"]')).filter(isVis);
+  for (var i = 0; i < btns.length; i++) {
+    var t = norm(btns[i].innerText || btns[i].textContent);
+    if (t === 'đồng ý' || t === 'xác nhận' || t === 'ok' || t === 'có' || t === 'yes') {
+      btns[i].click();
+      return true;
     }
   }
-  var custom = root.querySelector('[role="combobox"], .ant-select-selector, .mud-select-input, button[aria-haspopup]');
-  if (custom && isVis(custom)) {
-    var cur = norm(custom.innerText || custom.textContent);
-    if (cur === want) return { ok: true, mode: 'already_selected', selected: cur };
-    custom.click();
-    return { ok: true, mode: 'opened_custom_dropdown', selected: cur };
+  return false;
+})();
+"""
+
+_JS_READ_RESULT_SELECT_OR_TOAST = """
+(function() {
+  function norm(s) {
+    var str = String(s || '');
+    return (str.normalize ? str.normalize('NFC') : str).replace(/\\s+/g, ' ').trim();
   }
-  return { ok: false, mode: 'not_found', selected: '' };
-})(arguments[0]);
+  var body = norm((document.body && (document.body.innerText || document.body.textContent)) || '');
+  var low = body.toLowerCase();
+  var hasSuccessToast = (
+    low.indexOf('cập nhật thành công') !== -1 ||
+    low.indexOf('thành công') !== -1
+  );
+  return { has_success_toast: hasSuccessToast };
+})();
 """
 
 
-def _wait_for_popup(driver, keyword: str, timeout_sec: float = 8.0) -> bool:
-    deadline = time.monotonic() + max(0.5, float(timeout_sec))
-    while time.monotonic() < deadline:
-        try:
-            if driver.execute_script(_JS_CHECK_POPUP_VISIBLE, keyword):
-                return True
-        except Exception:
-            pass
-        time.sleep(0.25)
-    return False
-
-
-def _select_labeled_dropdown(driver, label_text: str, option_text: str) -> bool:
-    res = driver.execute_script(_JS_SELECT_DROPDOWN_BY_LABEL, label_text, option_text) or {}
+def _select_labeled_dropdown(driver, label_text: str, option_text: str, section_hint: str = "") -> bool:
+    res = driver.execute_script(_JS_SELECT_ROW_DROPDOWN_BY_LABEL, label_text, option_text, section_hint) or {}
     if not isinstance(res, dict) or not res.get("ok"):
         return False
-    if res.get("mode") == "native_select":
+    if res.get("mode") in ("native_select", "already_selected"):
         return True
-    time.sleep(0.35)
+    time.sleep(0.45)
     pick = driver.execute_script(_JS_CLICK_DROPDOWN_OPTION, option_text) or {}
     return bool(isinstance(pick, dict) and pick.get("clicked"))
 
 
-def _select_table_cell_dropdown(driver, col_header: str, option_text: str) -> bool:
-    res = driver.execute_script(_JS_SELECT_TABLE_CELL_DROPDOWN, col_header, option_text) or {}
+def _select_error_table_cell(driver, col_header: str, option_text: str) -> bool:
+    res = driver.execute_script(_JS_SELECT_ERROR_REASON_TABLE_CELL, col_header, option_text) or {}
     if not isinstance(res, dict) or not res.get("ok"):
         return False
-    if res.get("mode") == "native_select":
+    if res.get("mode") in ("native_select", "already_selected"):
         return True
-    time.sleep(0.35)
+    time.sleep(0.45)
     pick = driver.execute_script(_JS_CLICK_DROPDOWN_OPTION, option_text) or {}
     return bool(isinstance(pick, dict) and pick.get("clicked"))
 
 
-def _update_thong_tin_bao_tri_if_needed(
-    driver,
-    steps: List[str],
-    log_cb: Optional[Callable[[str, str], None]] = None,
-) -> None:
-    """
-    Điều kiện 3 trong popup 'Xác nhận chuyển tình trạng "Đã xử lý"':
-    Kiểm tra card 'Thông tin bảo trì':
-    - Nguyên nhân chưa cài đặt Hi FPT   (nếu 'Không chọn' -> 'Không gặp chủ hợp đồng')
-    - Nguyên nhân chưa nghiệm thu Mỹ Bảo (nếu 'Không chọn' -> 'Không kết nối được wifi khách hàng')
-    Nếu có trường là 'Không chọn' -> bấm cây bút ✏️ -> chọn giá trị -> bấm 'Cập nhật'.
-    """
-    card_info = driver.execute_script(_JS_READ_BAO_TRI_CARD) or {}
-    hi_val = normalize_nfc(card_info.get("hi_fpt") or "").lower()
-    mb_val = normalize_nfc(card_info.get("my_bao") or "").lower()
-
-    need_hi = (not hi_val) or ("không chọn" in hi_val)
-    need_mb = (not mb_val) or ("không chọn" in mb_val)
-
-    if not need_hi and not need_mb:
-        steps.append("Thông tin bảo trì: đã có đủ nguyên nhân Hi FPT & Mỹ Bảo (không cần sửa).")
+def _step4_expand_xem_them(driver, steps: List[str], log_cb: Optional[Callable[[str, str], None]] = None) -> None:
+    """Bước 4: Bấm nút 'Xem thêm' để hiển thị phần Thông tin bảo trì / Nguyên nhân lỗi / Cập nhật kết quả xử lý."""
+    res = driver.execute_script(_JS_CLICK_XEM_THEM_IF_NEEDED) or {}
+    if isinstance(res, dict) and res.get("already_expanded"):
+        steps.append("Bước 4: Phần 'Xem thêm' đã mở rộng sẵn.")
         return
-
-    _emit(log_cb, "Module 4: Sửa card 'Thông tin bảo trì' (Hi FPT / Mỹ Bảo đang là 'Không chọn')...", "info")
-    pencil = driver.execute_script(_JS_CLICK_CARD_PENCIL, "Thông tin bảo trì") or {}
-    if not (isinstance(pencil, dict) and pencil.get("clicked")):
-        raise RuntimeError("Không tìm thấy biểu tượng cây bút (✏️) của card 'Thông tin bảo trì'.")
-    time.sleep(0.4)
-
-    if need_hi:
-        if not _select_labeled_dropdown(driver, "Nguyên nhân chưa cài đặt Hi FPT", HI_FPT_TARGET):
-            raise RuntimeError(f"Không chọn được 'Nguyên nhân chưa cài đặt Hi FPT' = '{HI_FPT_TARGET}'.")
-        steps.append(f"Đã chọn Nguyên nhân chưa cài đặt Hi FPT = '{HI_FPT_TARGET}'.")
-
-    if need_mb:
-        if not _select_labeled_dropdown(driver, "Nguyên nhân chưa nghiệm thu Mỹ Bảo", MY_BAO_TARGET):
-            raise RuntimeError(f"Không chọn được 'Nguyên nhân chưa nghiệm thu Mỹ Bảo' = '{MY_BAO_TARGET}'.")
-        steps.append(f"Đã chọn Nguyên nhân chưa nghiệm thu Mỹ Bảo = '{MY_BAO_TARGET}'.")
-
-    upd = driver.execute_script(_JS_CLICK_BUTTON_BY_TEXT, "Cập nhật", True) or {}
-    if not (isinstance(upd, dict) and upd.get("clicked")):
-        raise RuntimeError("Không bấm được nút 'Cập nhật' trong card 'Thông tin bảo trì'.")
-    time.sleep(0.8)
-    steps.append("Đã bấm 'Cập nhật' card Thông tin bảo trì.")
+    if isinstance(res, dict) and res.get("clicked"):
+        _emit(log_cb, "Module 4: Đã bấm nút 'Xem thêm' để mở rộng thông tin bảo trì.", "info")
+        time.sleep(0.8)
+        steps.append("Bước 4: Đã bấm 'Xem thêm'.")
+        return
+    raise RuntimeError("Không tìm thấy nút 'Xem thêm' để mở rộng phần Thông tin bảo trì.")
 
 
-def _update_thong_tin_dich_vu(
-    driver,
-    steps: List[str],
-    log_cb: Optional[Callable[[str, str], None]] = None,
-) -> None:
+def _step4a_my_bao(driver, steps: List[str], log_cb: Optional[Callable[[str, str], None]] = None) -> None:
+    """Bước 4a: Nguyên nhân chưa nghiệm thu Mỹ Bảo -> 'Không kết nối được hệ thống Mỹ bảo'."""
+    _emit(log_cb, f"Module 4a: Chọn 'Nguyên nhân chưa nghiệm thu Mỹ Bảo' = '{MY_BAO_TARGET}'...", "info")
+    if not _select_labeled_dropdown(driver, "Nguyên nhân chưa nghiệm thu Mỹ Bảo", MY_BAO_TARGET, "Thông tin bảo trì"):
+        raise RuntimeError(f"Không chọn được 'Nguyên nhân chưa nghiệm thu Mỹ Bảo' = '{MY_BAO_TARGET}'.")
+    time.sleep(0.35)
+    steps.append(f"Bước 4a: Đã chọn Nguyên nhân chưa nghiệm thu Mỹ Bảo = '{MY_BAO_TARGET}'.")
+
+
+def _step4bc_nguyen_nhan_loi(driver, steps: List[str], log_cb: Optional[Callable[[str, str], None]] = None) -> None:
     """
-    Bước 4 (Card 'Thông tin dịch vụ'):
-    - Bấm cây bút ✏️ ở card 'Thông tin dịch vụ' -> mở sub-popup 'Thông tin dịch vụ'.
-    - Chọn dropdown đầu tiên 'Internet' -> bấm '+ Thêm'.
-    - Chọn Phần tử lỗi = 'Khách hàng' (nếu cần), Nguyên nhân lỗi = 'Đến nhà khách hàng kiểm tra KH yêu cầu hủy hợp đồng'.
-    - Bấm 'Cập nhật' trong sub-popup 'Thông tin dịch vụ'.
+    Bước 4b & 4c:
+    - Trong khối 'Nguyên nhân lỗi': chọn Dịch vụ = 'Internet' -> bấm nút 'Thêm'.
+    - Chọn lần lượt 4 cột của dòng mới thêm:
+      1. Tình trạng ban đầu = 'KH không cung cấp rõ tình trạng lỗi hoặc KH có khiếu nại RM'
+      2. Phần tử lỗi        = 'Khách hàng'
+      3. Nguyên nhân lỗi    = 'Đến nhà khách hàng kiểm tra KH yêu cầu hủy hợp đồng'
+      4. Hướng xử lý        = 'Tạo SR để DVKH hỗ trợ, đóng CL'
     """
-    _emit(log_cb, "Module 4: Mở sub-popup 'Thông tin dịch vụ' để thêm nguyên nhân lỗi...", "info")
-    pencil = driver.execute_script(_JS_CLICK_CARD_PENCIL, "Thông tin dịch vụ") or {}
-    if not (isinstance(pencil, dict) and pencil.get("clicked")):
-        raise RuntimeError("Không tìm thấy biểu tượng cây bút (✏️) của card 'Thông tin dịch vụ'.")
-
-    if not _wait_for_popup(driver, "Thông tin dịch vụ", timeout_sec=6.0):
-        raise RuntimeError("Sub-popup 'Thông tin dịch vụ' không hiển thị sau khi bấm cây bút.")
+    _emit(log_cb, "Module 4b: Trong khối 'Nguyên nhân lỗi' chọn Dịch vụ 'Internet' và bấm 'Thêm'...", "info")
+    if not _select_labeled_dropdown(driver, "Dịch vụ", DICH_VU_TARGET, "Nguyên nhân lỗi"):
+        raise RuntimeError(f"Không chọn được Dịch vụ = '{DICH_VU_TARGET}' trong khối 'Nguyên nhân lỗi'.")
     time.sleep(0.3)
 
-    # Chọn dropdown đầu tiên 'Internet'
-    svc_res = driver.execute_script(_JS_SELECT_TOP_SERVICE_DROPDOWN, DICH_VU_TARGET) or {}
-    if isinstance(svc_res, dict) and svc_res.get("mode") == "opened_custom_dropdown":
-        time.sleep(0.3)
-        driver.execute_script(_JS_CLICK_DROPDOWN_OPTION, DICH_VU_TARGET)
-    steps.append(f"Đã chọn dịch vụ '{DICH_VU_TARGET}'.")
-
-    # Bấm nút '+ Thêm'
-    add_res = driver.execute_script(_JS_CLICK_BUTTON_BY_TEXT, "Thêm", True) or {}
+    add_res = driver.execute_script(_JS_CLICK_BUTTON_IN_SECTION, "Nguyên nhân lỗi", "Thêm") or {}
     if not (isinstance(add_res, dict) and add_res.get("clicked")):
-        raise RuntimeError("Không bấm được nút '+ Thêm' trong sub-popup 'Thông tin dịch vụ'.")
-    time.sleep(0.5)
-    steps.append("Đã bấm '+ Thêm' dòng dịch vụ Internet.")
+        raise RuntimeError("Không bấm được nút 'Thêm' trong khối 'Nguyên nhân lỗi'.")
+    time.sleep(0.7)
+    steps.append("Bước 4b: Đã chọn Dịch vụ = 'Internet' và bấm 'Thêm' trong khối Nguyên nhân lỗi.")
 
-    # Chọn Phần tử lỗi = Khách hàng (nếu chưa tự chọn)
-    _select_table_cell_dropdown(driver, "PHẦN TỬ LỖI", PHAN_TU_LOI_TARGET)
-    time.sleep(0.3)
+    _emit(log_cb, "Module 4c: Điền 4 cột Tình trạng ban đầu / Phần tử lỗi / Nguyên nhân lỗi / Hướng xử lý...", "info")
+    ordered_cols = [
+        ("Tình trạng ban đầu", TINH_TRANG_BAN_DAU_TARGET),
+        ("Phần tử lỗi", PHAN_TU_LOI_TARGET),
+        ("Nguyên nhân lỗi", NGUYEN_NHAN_LOI_TARGET),
+        ("Hướng xử lý", HUONG_XU_LY_TARGET),
+    ]
+    for col_name, target_val in ordered_cols:
+        if not _select_error_table_cell(driver, col_name, target_val):
+            raise RuntimeError(f"Không chọn được cột '{col_name}' = '{target_val}' trong bảng Nguyên nhân lỗi.")
+        time.sleep(0.5)
+        steps.append(f"Bước 4c: Đã chọn {col_name} = '{target_val}'.")
 
-    # Chọn Nguyên nhân lỗi = Đến nhà khách hàng kiểm tra KH yêu cầu hủy hợp đồng
-    if not _select_table_cell_dropdown(driver, "NGUYÊN NHÂN LỖI", NGUYEN_NHAN_LOI_TARGET):
-        raise RuntimeError(f"Không chọn được 'Nguyên nhân lỗi' = '{NGUYEN_NHAN_LOI_TARGET}'.")
-    time.sleep(0.3)
-    steps.append(f"Đã chọn Nguyên nhân lỗi = '{NGUYEN_NHAN_LOI_TARGET}'.")
 
-    # Bấm 'Cập nhật' của sub-popup 'Thông tin dịch vụ'
-    upd = driver.execute_script(_JS_CLICK_BUTTON_BY_TEXT, "Cập nhật", True) or {}
+def _step5_cap_nhat_ket_qua(driver, steps: List[str], log_cb: Optional[Callable[[str, str], None]] = None) -> None:
+    """Bước 5: Trong khối 'Cập nhật kết quả xử lý của phiếu' chỉnh 'Kết quả xử lý' -> 'Đã xử lý' và bấm 'Cập nhật'."""
+    _emit(log_cb, "Module 5: Chỉnh 'Kết quả xử lý' sang 'Đã xử lý' và bấm 'Cập nhật'...", "info")
+    if not _select_labeled_dropdown(
+        driver,
+        "Kết quả xử lý",
+        KET_QUA_XU_LY_TARGET,
+        "Cập nhật kết quả xử lý của phiếu",
+    ):
+        raise RuntimeError(f"Không chọn được 'Kết quả xử lý' = '{KET_QUA_XU_LY_TARGET}'.")
+    time.sleep(0.35)
+    steps.append(f"Bước 5: Đã chọn Kết quả xử lý = '{KET_QUA_XU_LY_TARGET}'.")
+
+    upd = driver.execute_script(_JS_CLICK_BUTTON_IN_SECTION, "Cập nhật kết quả xử lý của phiếu", "Cập nhật") or {}
     if not (isinstance(upd, dict) and upd.get("clicked")):
-        raise RuntimeError("Không bấm được nút 'Cập nhật' trong sub-popup 'Thông tin dịch vụ'.")
-    time.sleep(0.8)
-    steps.append("Đã bấm 'Cập nhật' sub-popup Thông tin dịch vụ.")
+        raise RuntimeError("Không bấm được nút 'Cập nhật' trong khối 'Cập nhật kết quả xử lý của phiếu'.")
+    time.sleep(0.6)
+
+    # Xử lý alert/confirm trình duyệt hoặc modal xác nhận nếu có
+    try:
+        alert = driver.switch_to.alert
+        if alert:
+            alert.accept()
+            time.sleep(0.4)
+    except Exception:
+        pass
+    try:
+        driver.execute_script(_JS_ACCEPT_CONFIRM_MODAL_IF_ANY)
+    except Exception:
+        pass
+    steps.append("Bước 5: Đã bấm nút 'Cập nhật' hoàn tất phiếu.")
 
 
 def execute_complete_ticket(
@@ -500,7 +574,7 @@ def execute_complete_ticket(
     log_cb: Optional[Callable[[str, str], None]] = None,
 ) -> ExecutionResult:
     """
-    Thực thi hoàn tất 1 phiếu PBT (XÁC MINH THÔNG TIN) dựa trên kết quả kiểm tra của Module 3.
+    Thực thi hoàn tất 1 phiếu PBT (Xác Minh Thông Tin) dựa trên kết quả kiểm tra của Module 3.
     Mặc định chạy ở chế độ DRY-RUN (không thay đổi dữ liệu).
     """
     t0 = time.monotonic()
@@ -516,6 +590,8 @@ def execute_complete_ticket(
     loai = str(validation.get("loai") or nav_ctx.loai or "")
     da_hoan_tat = bool(validation.get("da_hoan_tat"))
     du_dieu_kien = bool(validation.get("du_dieu_kien"))
+    val_ket_qua = str(validation.get("ket_qua") or "")
+    val_ghi_chu = str(validation.get("ghi_chu") or "")
     ly_do = str(validation.get("ly_do_neu_khong_du") or "")
 
     if da_hoan_tat:
@@ -525,7 +601,8 @@ def execute_complete_ticket(
             loai=loai,
             mode=mode_str,
             status=STATUS_SKIPPED_ALREADY_DONE,
-            ket_qua=ly_do or "Phiếu đã hoàn tất trước đó (bỏ qua).",
+            ket_qua="Đã xử lý",
+            ghi_chu=val_ghi_chu or ly_do or "Phiếu đã hoàn tất trước đó (bỏ qua).",
             steps_performed=["Bỏ qua vì phiếu đã hoàn tất trước đó (idempotent)."],
             post_status=nav_ctx.ticket_status,
             elapsed_ms=int((time.monotonic() - t0) * 1000),
@@ -538,7 +615,8 @@ def execute_complete_ticket(
             loai=loai,
             mode=mode_str,
             status=STATUS_NOT_ELIGIBLE,
-            ket_qua=ly_do,
+            ket_qua=val_ket_qua or KET_QUA_KHONG_THANH_CONG,
+            ghi_chu=val_ghi_chu or ly_do,
             steps_performed=["Dừng tại Module 3: không đủ điều kiện hoàn tất."],
             post_status=nav_ctx.ticket_status,
             elapsed_ms=int((time.monotonic() - t0) * 1000),
@@ -546,10 +624,15 @@ def execute_complete_ticket(
 
     if is_dry_run:
         planned = [
-            "[DRY-RUN] Sẽ bấm 'Thay đổi tình trạng' -> 'Đã xử lý'.",
-            f"[DRY-RUN] Sẽ kiểm tra card 'Thông tin bảo trì' -> đặt Hi FPT='{HI_FPT_TARGET}', Mỹ Bảo='{MY_BAO_TARGET}' nếu đang 'Không chọn' -> bấm 'Cập nhật'.",
-            f"[DRY-RUN] Sẽ mở 'Thông tin dịch vụ' -> chọn '{DICH_VU_TARGET}' -> '+ Thêm' -> Nguyên nhân lỗi='{NGUYEN_NHAN_LOI_TARGET}' -> bấm 'Cập nhật'.",
-            "[DRY-RUN] Sẽ bấm nút 'Xác nhận' để chuyển tình trạng phiếu sang 'Đã xử lý'.",
+            "[DRY-RUN] Bước 4: Sẽ bấm nút 'Xem thêm'.",
+            f"[DRY-RUN] Bước 4a: Sẽ chọn 'Nguyên nhân chưa nghiệm thu Mỹ Bảo' = '{MY_BAO_TARGET}'.",
+            f"[DRY-RUN] Bước 4b: Sẽ chọn Dịch vụ = '{DICH_VU_TARGET}' trong khối 'Nguyên nhân lỗi' -> bấm 'Thêm'.",
+            (
+                f"[DRY-RUN] Bước 4c: Sẽ chọn lần lượt Tình trạng ban đầu='{TINH_TRANG_BAN_DAU_TARGET}' / "
+                f"Phần tử lỗi='{PHAN_TU_LOI_TARGET}' / Nguyên nhân lỗi='{NGUYEN_NHAN_LOI_TARGET}' / "
+                f"Hướng xử lý='{HUONG_XU_LY_TARGET}'."
+            ),
+            f"[DRY-RUN] Bước 5: Sẽ chỉnh 'Kết quả xử lý' sang '{KET_QUA_XU_LY_TARGET}' và bấm nút 'Cập nhật'.",
         ]
         _emit(
             log_cb,
@@ -562,7 +645,8 @@ def execute_complete_ticket(
             loai=loai,
             mode=mode_str,
             status=STATUS_DRY_RUN_READY,
-            ket_qua="DRY-RUN: Đủ điều kiện hoàn tất (chưa thực thi ghi dữ liệu).",
+            ket_qua="DRY-RUN: Đủ điều kiện hoàn tất",
+            ghi_chu="Đã đạt đủ 2 điều kiện 3a & 3b (chưa bấm Cập nhật vì đang bật DRY-RUN).",
             steps_performed=planned,
             post_status=nav_ctx.ticket_status,
             elapsed_ms=int((time.monotonic() - t0) * 1000),
@@ -574,51 +658,38 @@ def execute_complete_ticket(
     steps: List[str] = []
 
     try:
-        _emit(log_cb, f"Module 4 [REAL]: Bấm 'Thay đổi tình trạng' -> 'Đã xử lý' cho HĐ {ma_phieu}...", "info")
-        btn_change = driver.execute_script(_JS_CLICK_BUTTON_BY_TEXT, "Thay đổi tình trạng", False) or {}
-        if not (isinstance(btn_change, dict) and btn_change.get("clicked")):
-            raise RuntimeError("Không tìm thấy hoặc không bấm được nút 'Thay đổi tình trạng'.")
-        time.sleep(0.4)
+        _step4_expand_xem_them(driver, steps, log_cb=log_cb)
+        _step4a_my_bao(driver, steps, log_cb=log_cb)
+        _step4bc_nguyen_nhan_loi(driver, steps, log_cb=log_cb)
+        _step5_cap_nhat_ket_qua(driver, steps, log_cb=log_cb)
 
-        opt_done = driver.execute_script(_JS_CLICK_BUTTON_BY_TEXT, "Đã xử lý", False) or {}
-        if not (isinstance(opt_done, dict) and opt_done.get("clicked")):
-            raise RuntimeError("Không chọn được mục 'Đã xử lý' trong menu 'Thay đổi tình trạng'.")
-        steps.append("Đã bấm 'Thay đổi tình trạng' -> 'Đã xử lý'.")
-
-        if not _wait_for_popup(driver, "Xác nhận chuyển tình trạng", timeout_sec=8.0):
-            raise RuntimeError("Popup 'Xác nhận chuyển tình trạng \"Đã xử lý\"' không hiển thị.")
-
-        # Điều kiện 3: Card Thông tin bảo trì
-        _update_thong_tin_bao_tri_if_needed(driver, steps, log_cb=log_cb)
-
-        # Bước 4: Card Thông tin dịch vụ
-        _update_thong_tin_dich_vu(driver, steps, log_cb=log_cb)
-
-        # Nút Xác nhận cuối cùng
-        _emit(log_cb, f"Module 4 [REAL]: Bấm nút 'Xác nhận' hoàn tất cho HĐ {ma_phieu}...", "info")
-        confirm = driver.execute_script(_JS_CLICK_BUTTON_BY_TEXT, "Xác nhận", True) or {}
-        if not (isinstance(confirm, dict) and confirm.get("clicked")):
-            raise RuntimeError("Không bấm được nút 'Xác nhận' ở đáy popup.")
-        steps.append("Đã bấm nút 'Xác nhận' chuyển tình trạng 'Đã xử lý'.")
-
-        # Xác nhận lại trạng thái trên giao diện sau khi bấm Xác nhận
+        # Xác minh lại trạng thái trên giao diện sau khi bấm Cập nhật
         post_status = ""
+        toast_ok = False
         deadline = time.monotonic() + 10.0
         while time.monotonic() < deadline:
             time.sleep(0.5)
             post_status = _read_footer_ticket_status(driver)
             if is_already_completed(post_status):
                 break
+            try:
+                toast_info = driver.execute_script(_JS_READ_RESULT_SELECT_OR_TOAST) or {}
+                if isinstance(toast_info, dict) and toast_info.get("has_success_toast"):
+                    toast_ok = True
+                    break
+            except Exception:
+                pass
 
-        if not is_already_completed(post_status):
+        if not is_already_completed(post_status) and not toast_ok:
             return ExecutionResult(
                 ma_phieu=ma_phieu,
                 tac_vu=tac_vu,
                 loai=loai,
                 mode=mode_str,
                 status=STATUS_ERROR,
-                ket_qua=(
-                    f"Đã bấm 'Xác nhận' nhưng chưa xác minh được trạng thái 'Đã xử lý' trên Inside "
+                ket_qua=KET_QUA_KHONG_THANH_CONG,
+                ghi_chu=(
+                    f"Đã bấm 'Cập nhật' nhưng chưa xác minh được trạng thái 'Đã xử lý' trên Inside "
                     f"(trạng thái hiện tại: '{post_status or 'Chưa rõ'}')."
                 ),
                 steps_performed=steps,
@@ -626,10 +697,10 @@ def execute_complete_ticket(
                 elapsed_ms=int((time.monotonic() - t0) * 1000),
             )
 
-        steps.append(f"Xác minh sau hoàn tất thành công: Tình trạng phiếu = '{post_status}'.")
+        steps.append(f"Xác minh sau hoàn tất thành công: Tình trạng phiếu = '{post_status or 'Đã xử lý'}'.")
         _emit(
             log_cb,
-            f"Module 4 [REAL]: Hoàn tất thành công HĐ {ma_phieu} (Trạng thái: {post_status}).",
+            f"Module 4 [REAL]: Hoàn tất thành công HĐ {ma_phieu} (Trạng thái: {post_status or 'Đã xử lý'}).",
             "success",
         )
         return ExecutionResult(
@@ -638,9 +709,10 @@ def execute_complete_ticket(
             loai=loai,
             mode=mode_str,
             status=STATUS_SUCCESS,
-            ket_qua="Thành công: Đã chuyển tình trạng phiếu sang Đã xử lý.",
+            ket_qua="Đã xử lý",
+            ghi_chu="Hoàn tất thành công trên Inside.",
             steps_performed=steps,
-            post_status=post_status,
+            post_status=post_status or "Đã xử lý",
             elapsed_ms=int((time.monotonic() - t0) * 1000),
         )
     except Exception as exc:
@@ -651,7 +723,8 @@ def execute_complete_ticket(
             loai=loai,
             mode=mode_str,
             status=STATUS_ERROR,
-            ket_qua=f"Lỗi thực thi: {exc}",
+            ket_qua=KET_QUA_KHONG_THANH_CONG,
+            ghi_chu=f"Lỗi thực thi: {exc}",
             steps_performed=steps,
             post_status=_read_footer_ticket_status(driver),
             elapsed_ms=int((time.monotonic() - t0) * 1000),

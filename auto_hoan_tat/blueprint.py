@@ -6,19 +6,40 @@ Nếu xóa thư mục auto_hoan_tat/, server.py vẫn hoạt động bình thư�
 """
 
 import os
+import sys
 import threading
 import time
 from typing import Any, Callable, Dict, List, Optional
 
 from flask import Blueprint, jsonify, render_template, request, send_file, send_from_directory
 
-from .config import AutoHoanTatSettings, load_settings
+from .config import AutoHoanTatSettings, RESOURCE_DIR, load_settings, save_settings
 from .orchestrator import run_batch
-from .sheet_reader import fetch_sheet_data, normalize_nfc
+from .sheet_reader import fetch_sheet_data, is_pending_hoan_tat, normalize_nfc
 
-_PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
-_PROJECT_ROOT = os.path.dirname(_PACKAGE_DIR)
+_PACKAGE_DIR = RESOURCE_DIR
+_PROJECT_ROOT = (
+    getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
+    if getattr(sys, "frozen", False)
+    else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
 _SHARED_STATIC_DIR = os.path.join(_PROJECT_ROOT, "static")
+
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+
+AUTO_ATTEMPT_TTL_SEC = 300.0
+
+
+def _is_other_inside_task_busy() -> bool:
+    """Kiểm tra nhanh trong cùng tiến trình xem core_login có tác vụ Inside nào đang chiếm profile không."""
+    try:
+        import core_login  # noqa: E402
+
+        owner = getattr(core_login, "_ACTIVE_INSIDE_TASK", None)
+        return bool(owner)
+    except Exception:
+        return False
 
 
 class _RunState:
@@ -26,8 +47,10 @@ class _RunState:
         self.lock = threading.Lock()
         self.running: bool = False
         self.mode: str = "DRY_RUN"
+        self.trigger_source: str = "MANUAL"
         self.started_at: str = ""
         self.finished_at: str = ""
+        self.last_auto_scan: str = ""
         self.total: int = 0
         self.processed: int = 0
         self.current_shd: str = ""
@@ -38,6 +61,7 @@ class _RunState:
         self.csv_export_path: str = ""
         self.audit_log_path: str = ""
         self.error: str = ""
+        self.auto_attempts: Dict[str, float] = {}
 
     def append_log(self, msg: str, level: str = "info") -> None:
         with self.lock:
@@ -51,13 +75,18 @@ class _RunState:
             if len(self.logs) > 400:
                 self.logs = self.logs[-400:]
 
-    def snapshot(self) -> Dict[str, Any]:
+    def snapshot(self, cfg: AutoHoanTatSettings) -> Dict[str, Any]:
         with self.lock:
             return {
                 "running": self.running,
                 "mode": self.mode,
+                "trigger_source": self.trigger_source,
                 "started_at": self.started_at,
                 "finished_at": self.finished_at,
+                "last_auto_scan": self.last_auto_scan,
+                "auto_enabled": cfg.auto_enabled,
+                "dry_run_default": cfg.dry_run_default,
+                "webhook_configured": bool((cfg.webhook_url or "").strip()),
                 "total": self.total,
                 "processed": self.processed,
                 "current_shd": self.current_shd,
@@ -75,6 +104,7 @@ def create_blueprint(
     sheet_fetcher: Callable = fetch_sheet_data,
     batch_runner: Callable = run_batch,
     api_prefix: str = "/auto-hoan-tat",
+    start_bg_scanner: bool = True,
 ) -> Blueprint:
     bp = Blueprint(
         "auto_hoan_tat",
@@ -91,129 +121,19 @@ def create_blueprint(
     def _get_cfg() -> AutoHoanTatSettings:
         return settings or load_settings()
 
-    @bp.app_context_processor
-    def _inject_mounted_flag():
-        return {"auto_hoan_tat_mounted": True}
-
-    @bp.route("/shared-static/<path:filename>")
-    def shared_static(filename: str):
-        return send_from_directory(_SHARED_STATIC_DIR, filename)
-
-    @bp.route("/")
-    def index():
+    def _launch_batch(
+        target_rows: List[Dict[str, Any]],
+        dry_run: bool,
+        visible: bool,
+        trigger_source: str = "MANUAL",
+    ) -> Optional[str]:
         cfg = _get_cfg()
-        embed = str(request.args.get("embed", "0")).strip().lower() in ("1", "true", "yes")
-        return render_template(
-            "hoan_tat_ptc_pbt.html",
-            enabled=cfg.enabled,
-            sheet_id=cfg.sheet_id,
-            sheet_gid=cfg.sheet_gid,
-            port=cfg.standalone_port,
-            embed=embed,
-            api_base=norm_prefix,
-        )
-
-    @bp.route("/api/config")
-    def api_config():
-        cfg = _get_cfg()
-        return jsonify(
-            {
-                "enabled": cfg.enabled,
-                "sheet_id": cfg.sheet_id,
-                "sheet_gid": cfg.sheet_gid,
-                "dry_run_default": cfg.dry_run_default,
-                "rate_limit_sec": cfg.rate_limit_sec,
-                "max_consecutive_errors": cfg.max_consecutive_errors,
-                "standalone_port": cfg.standalone_port,
-                "ptc_values": list(cfg.ptc_values),
-                "pbt_values": list(cfg.pbt_values),
-            }
-        )
-
-    @bp.route("/api/sheet")
-    def api_sheet():
-        cfg = _get_cfg()
-        data = sheet_fetcher(settings=cfg)
-        if data.get("status") != "ok":
-            return jsonify(data), 502
-
-        records = data.get("records") or []
-        cached_rows["records"] = records
-        cached_rows["fetched_at"] = time.strftime("%H:%M:%S %d/%m/%Y")
-
-        counts = {
-            "total": len(records),
-            "pbt": sum(1 for r in records if r.get("loai") == "PBT"),
-            "ptc": sum(1 for r in records if r.get("loai") == "PTC"),
-            "invalid": sum(1 for r in records if not r.get("loai")),
-        }
-        return jsonify(
-            {
-                "status": "ok",
-                "fetched_at": cached_rows["fetched_at"],
-                "columns": data.get("columns") or [],
-                "counts": counts,
-                "records": [{k: v for k, v in r.items() if k != "raw"} for r in records],
-            }
-        )
-
-    @bp.route("/api/status")
-    def api_status():
-        return jsonify(state.snapshot())
-
-    @bp.route("/api/logs/clear", methods=["POST"])
-    def api_clear_logs():
-        with state.lock:
-            state.logs = []
-        return jsonify({"status": "ok"})
-
-    @bp.route("/api/stop", methods=["POST"])
-    def api_stop():
-        with state.lock:
-            if not state.running or state.stop_event is None:
-                return jsonify({"status": "idle", "message": "Không có tác vụ nào đang chạy."})
-            state.stop_event.set()
-        state.append_log("Đã gửi yêu cầu DỪNG — hệ thống sẽ dừng an toàn sau phiếu hiện tại.", "warn")
-        return jsonify({"status": "stopping", "message": "Đang dừng tác vụ..."})
-
-    @bp.route("/api/run", methods=["POST"])
-    def api_run():
-        cfg = _get_cfg()
-        if not cfg.enabled:
-            return (
-                jsonify({"status": "error", "message": "Chức năng 'Auto Hoàn Tất PTC/PBT' đang TẮT (enabled=false)."}),
-                403,
-            )
-
-        payload = request.get_json(silent=True) or {}
-        dry_run = bool(payload.get("dry_run", True))
-        visible = bool(payload.get("visible", False))
-        selected_shds = payload.get("shds")
-        rows_override = payload.get("rows")
-
-        if isinstance(rows_override, list) and rows_override:
-            target_rows = rows_override
-        else:
-            all_rows = cached_rows.get("records") or []
-            if not all_rows:
-                fetched = sheet_fetcher(settings=cfg)
-                if fetched.get("status") == "ok":
-                    all_rows = fetched.get("records") or []
-                    cached_rows["records"] = all_rows
-            if isinstance(selected_shds, list) and selected_shds:
-                want = {normalize_nfc(s).upper() for s in selected_shds if normalize_nfc(s)}
-                target_rows = [r for r in all_rows if normalize_nfc(r.get("shd") or "").upper() in want]
-            else:
-                target_rows = list(all_rows)
-
-        if not target_rows:
-            return jsonify({"status": "error", "message": "Không có phiếu nào để chạy. Hãy tải lại Google Sheet trước."}), 400
-
         with state.lock:
             if state.running:
-                return jsonify({"status": "error", "message": "Đang có tác vụ Auto Hoàn Tất đang chạy."}), 409
+                return "Đang có tác vụ Auto Hoàn Tất đang chạy."
             state.running = True
             state.mode = "DRY_RUN" if dry_run else "REAL"
+            state.trigger_source = trigger_source
             state.started_at = time.strftime("%H:%M:%S %d/%m/%Y")
             state.finished_at = ""
             state.total = len(target_rows)
@@ -227,8 +147,9 @@ def create_blueprint(
             state.error = ""
             stop_ev = state.stop_event
 
+        prefix_tag = "🤖 [AUTO NỀN]" if trigger_source == "AUTO" else "▶ [CHẠY TAY]"
         state.append_log(
-            f"Khởi chạy {len(target_rows)} phiếu | Chế độ: {'DRY-RUN (Mô phỏng)' if dry_run else 'CHẠY THẬT'}",
+            f"{prefix_tag} Khởi chạy {len(target_rows)} phiếu | Chế độ: {'DRY-RUN (Mô phỏng)' if dry_run else 'CHẠY THẬT'}",
             "info",
         )
 
@@ -278,6 +199,226 @@ def create_blueprint(
 
         t = threading.Thread(target=_worker, daemon=True, name="auto-hoan-tat-worker")
         t.start()
+        return None
+
+    def _run_auto_scan_once() -> None:
+        cfg = _get_cfg()
+        with state.lock:
+            state.last_auto_scan = time.strftime("%H:%M:%S")
+            if state.running:
+                return
+        if not cfg.enabled or not cfg.auto_enabled:
+            return
+        if _is_other_inside_task_busy():
+            return
+
+        data = sheet_fetcher(settings=cfg)
+        if data.get("status") != "ok":
+            return
+
+        records = data.get("records") or []
+        cached_rows["records"] = records
+        cached_rows["fetched_at"] = time.strftime("%H:%M:%S %d/%m/%Y")
+
+        now = time.time()
+        with state.lock:
+            state.auto_attempts = {
+                k: ts for k, ts in state.auto_attempts.items() if now - ts < AUTO_ATTEMPT_TTL_SEC
+            }
+            tried = dict(state.auto_attempts)
+
+        pending = []
+        for r in records:
+            if not is_pending_hoan_tat(r):
+                continue
+            key = f"{normalize_nfc(r.get('shd') or '').upper()}_{normalize_nfc(r.get('row_id') or '')}"
+            if key in tried:
+                continue
+            pending.append((key, r))
+
+        if not pending:
+            return
+
+        with state.lock:
+            for key, _ in pending:
+                state.auto_attempts[key] = now
+
+        _launch_batch(
+            target_rows=[r for _, r in pending],
+            dry_run=cfg.dry_run_default,
+            visible=False,
+            trigger_source="AUTO",
+        )
+
+    def _auto_scanner_loop() -> None:
+        time.sleep(5.0)
+        while True:
+            try:
+                _run_auto_scan_once()
+            except Exception as exc:
+                state.append_log(f"Lỗi chu kỳ quét Auto Hoàn Tất nền: {exc}", "warning")
+            cfg = _get_cfg()
+            time.sleep(max(5, int(cfg.auto_scan_interval_sec)))
+
+    if start_bg_scanner and os.environ.get("TESTING") != "1" and settings is None:
+        bg_thread = threading.Thread(target=_auto_scanner_loop, daemon=True, name="auto-hoan-tat-scanner")
+        bg_thread.start()
+
+    @bp.app_context_processor
+    def _inject_mounted_flag():
+        return {"auto_hoan_tat_mounted": True}
+
+    @bp.route("/shared-static/<path:filename>")
+    def shared_static(filename: str):
+        return send_from_directory(_SHARED_STATIC_DIR, filename)
+
+    @bp.route("/")
+    def index():
+        cfg = _get_cfg()
+        embed = str(request.args.get("embed", "0")).strip().lower() in ("1", "true", "yes")
+        return render_template(
+            "hoan_tat_ptc_pbt.html",
+            enabled=cfg.enabled,
+            sheet_id=cfg.sheet_id,
+            sheet_gid=cfg.sheet_gid,
+            port=cfg.standalone_port,
+            embed=embed,
+            api_base=norm_prefix,
+        )
+
+    @bp.route("/api/config")
+    def api_config():
+        cfg = _get_cfg()
+        return jsonify(
+            {
+                "enabled": cfg.enabled,
+                "sheet_id": cfg.sheet_id,
+                "sheet_gid": cfg.sheet_gid,
+                "dry_run_default": cfg.dry_run_default,
+                "auto_enabled": cfg.auto_enabled,
+                "auto_scan_interval_sec": cfg.auto_scan_interval_sec,
+                "webhook_url": cfg.webhook_url,
+                "rate_limit_sec": cfg.rate_limit_sec,
+                "max_consecutive_errors": cfg.max_consecutive_errors,
+                "standalone_port": cfg.standalone_port,
+                "ptc_values": list(cfg.ptc_values),
+                "pbt_values": list(cfg.pbt_values),
+            }
+        )
+
+    @bp.route("/api/settings", methods=["POST"])
+    def api_save_settings():
+        payload = request.get_json(silent=True) or {}
+        if settings is not None:
+            if "auto_enabled" in payload:
+                settings.auto_enabled = bool(payload["auto_enabled"])
+            if "dry_run_default" in payload:
+                settings.dry_run_default = bool(payload["dry_run_default"])
+            if "webhook_url" in payload:
+                settings.webhook_url = str(payload["webhook_url"] or "").strip()
+            cfg = settings
+        else:
+            cfg = save_settings(payload)
+
+        state.append_log(
+            f"Đã cập nhật cấu hình: Tự Động={'BẬT' if cfg.auto_enabled else 'TẮT'} | "
+            f"Chế độ mặc định={'DRY-RUN' if cfg.dry_run_default else 'CHẠY THẬT'} | "
+            f"Webhook={'Đã cấu hình' if cfg.webhook_url else 'Chưa cấu hình'}.",
+            "info",
+        )
+        return jsonify(
+            {
+                "status": "ok",
+                "auto_enabled": cfg.auto_enabled,
+                "dry_run_default": cfg.dry_run_default,
+                "webhook_url": cfg.webhook_url,
+            }
+        )
+
+    @bp.route("/api/sheet")
+    def api_sheet():
+        cfg = _get_cfg()
+        data = sheet_fetcher(settings=cfg)
+        if data.get("status") != "ok":
+            return jsonify(data), 502
+
+        records = data.get("records") or []
+        cached_rows["records"] = records
+        cached_rows["fetched_at"] = time.strftime("%H:%M:%S %d/%m/%Y")
+
+        counts = {
+            "total": len(records),
+            "pbt": sum(1 for r in records if r.get("loai") == "PBT"),
+            "ptc": sum(1 for r in records if r.get("loai") == "PTC"),
+            "invalid": sum(1 for r in records if not r.get("loai")),
+            "pending_auto": sum(1 for r in records if is_pending_hoan_tat(r)),
+        }
+        return jsonify(
+            {
+                "status": "ok",
+                "fetched_at": cached_rows["fetched_at"],
+                "columns": data.get("columns") or [],
+                "counts": counts,
+                "records": [{k: v for k, v in r.items() if k != "raw"} for r in records],
+            }
+        )
+
+    @bp.route("/api/status")
+    def api_status():
+        return jsonify(state.snapshot(_get_cfg()))
+
+    @bp.route("/api/logs/clear", methods=["POST"])
+    def api_clear_logs():
+        with state.lock:
+            state.logs = []
+        return jsonify({"status": "ok"})
+
+    @bp.route("/api/stop", methods=["POST"])
+    def api_stop():
+        with state.lock:
+            if not state.running or state.stop_event is None:
+                return jsonify({"status": "idle", "message": "Không có tác vụ nào đang chạy."})
+            state.stop_event.set()
+        state.append_log("Đã gửi yêu cầu DỪNG — hệ thống sẽ dừng an toàn sau phiếu hiện tại.", "warn")
+        return jsonify({"status": "stopping", "message": "Đang dừng tác vụ..."})
+
+    @bp.route("/api/run", methods=["POST"])
+    def api_run():
+        cfg = _get_cfg()
+        if not cfg.enabled:
+            return (
+                jsonify({"status": "error", "message": "Chức năng 'Auto Hoàn Tất PTC/PBT' đang TẮT (enabled=false)."}),
+                403,
+            )
+
+        payload = request.get_json(silent=True) or {}
+        dry_run = bool(payload.get("dry_run", True))
+        visible = bool(payload.get("visible", False))
+        selected_shds = payload.get("shds")
+        rows_override = payload.get("rows")
+
+        if isinstance(rows_override, list) and rows_override:
+            target_rows = rows_override
+        else:
+            all_rows = cached_rows.get("records") or []
+            if not all_rows:
+                fetched = sheet_fetcher(settings=cfg)
+                if fetched.get("status") == "ok":
+                    all_rows = fetched.get("records") or []
+                    cached_rows["records"] = all_rows
+            if isinstance(selected_shds, list) and selected_shds:
+                want = {normalize_nfc(s).upper() for s in selected_shds if normalize_nfc(s)}
+                target_rows = [r for r in all_rows if normalize_nfc(r.get("shd") or "").upper() in want]
+            else:
+                target_rows = list(all_rows)
+
+        if not target_rows:
+            return jsonify({"status": "error", "message": "Không có phiếu nào để chạy. Hãy tải lại Google Sheet trước."}), 400
+
+        err = _launch_batch(target_rows=target_rows, dry_run=dry_run, visible=visible, trigger_source="MANUAL")
+        if err:
+            return jsonify({"status": "error", "message": err}), 409
+
         return jsonify({"status": "started", "mode": state.mode, "total": len(target_rows)})
 
     @bp.route("/api/export-csv")
